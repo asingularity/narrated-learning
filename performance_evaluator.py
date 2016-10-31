@@ -1,5 +1,4 @@
 
-
-class RobotModel(object):
+class PerformanceEvaluator(object):
     def __init__(self):
         pass

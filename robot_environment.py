@@ -1,5 +1,5 @@
 
 
-class RobotModel(object):
+class RobotEnvironment(object):
     def __init__(self):
         pass
