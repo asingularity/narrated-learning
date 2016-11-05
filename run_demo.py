@@ -27,6 +27,23 @@ def get_sensors_params():
 
 def get_environment_params():
     params = {
+        'width': 40,
+        'height': 40,
+        'init_robot_x': 25,
+        'init_robot_y': 25,
+        'init_robot_theta': 45,
+        'walls': [
+            {'x_start': 2,
+             'y_start': 5,
+             'length': 10,
+             'color': 0.2,
+             'orientation': 'vertical'},
+            {'x_start': 10,
+             'y_start': 15,
+             'length': 15,
+             'color': 0.4,
+             'orientation': 'horizontal'}
+        ]
     }
     return params
 
@@ -39,7 +56,9 @@ def get_evaluator_params():
 
 def get_visualizer_params():
     params = {
-        'fps_display_interval': 3
+        'fps_display_interval': 3,
+        'image_display_frames': 5000,
+        'scale_topdown_factor': 10
     }
     return params
 
