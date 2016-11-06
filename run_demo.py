@@ -15,12 +15,15 @@ def get_brain_params():
 
 def get_model_params():
     params = {
+        'max_angular_velocity': 0.1
     }
     return params
 
 
 def get_sensors_params():
     params = {
+        'num_rays': 20,
+        'fov_degrees': 100
     }
     return params
 
@@ -34,14 +37,24 @@ def get_environment_params():
         'init_robot_theta': 45,
         'walls': [
             {'x_start': 2,
-             'y_start': 5,
-             'length': 10,
+             'y_start': 11,
+             'length': 21,
              'color': 0.2,
+             'orientation': 'vertical'},
+            {'x_start': 5,
+             'y_start': 22,
+             'length': 11,
+             'color': 0.6,
              'orientation': 'vertical'},
             {'x_start': 10,
              'y_start': 15,
              'length': 15,
              'color': 0.4,
+             'orientation': 'horizontal'},
+            {'x_start': 32,
+             'y_start': 32,
+             'length': 7,
+             'color': 0.7,
              'orientation': 'horizontal'}
         ]
     }
@@ -57,8 +70,9 @@ def get_evaluator_params():
 def get_visualizer_params():
     params = {
         'fps_display_interval': 3,
-        'image_display_frames': 5000,
-        'scale_topdown_factor': 10
+        'image_display_frames': 500,
+        'scale_topdown_factor': 10,
+        'scale_camera_factor': 20
     }
     return params
 

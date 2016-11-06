@@ -1,7 +1,7 @@
 import numpy as np
 import os
 import cv2
-from math import sqrt, atan2, atan
+from math import sqrt, atan2, atan, pi
 
 
 class RobotEnvironment(object):
@@ -25,7 +25,9 @@ class RobotEnvironment(object):
         self.env_map = env_map
 
         # TODO store nonzero elements of env_map explicitly:
-
+        self.nonzero_map_y = np.nonzero(env_map)[0]
+        self.nonzero_map_x = np.nonzero(env_map)[1]
+        self.nonzero_map_color = env_map[np.nonzero(env_map)]
 
         self.theta, self.delta_theta, self.dist = self._load_or_precompute_angles_dist(rows=self.H, cols=self.W)
 
@@ -37,24 +39,76 @@ class RobotEnvironment(object):
         theta = np.zeros((rows, cols, rows, cols))
         delta_theta = np.zeros((rows, cols, rows, cols))
 
+        debug_min_theta = np.inf
+        debug_max_theta = -np.inf
+
         for r1 in range(rows):
             print 'processing: ', r1, ' of ', rows
             for c1 in range(cols):
                 for r2 in range(rows):
                     for c2 in range(cols):
-                        # (r1, c1) is robot position
-                        dist[r1, c1, r2, c2] = sqrt(pow(r1 - r2, 2) + pow(c1 - c2, 2))
-                        theta[r1, c1, r2, c2] = atan2(r2 - r1, c2 - c1)
-                        delta_theta[r1, c1, r2, c2] = atan(0.5 / dist[r1, c1, r2, c2])
-                        # angle is theta +/- delta_theta
+                        if r1 == r2 and c1 == c2:
+                            dist[r1, c1, r2, c2] = np.inf
+                        else:
 
+                            theta_temp = atan2(r2 - r1, c2 - c1)
+
+                            while theta_temp > 2 * pi:
+                                theta_temp -= 2 * pi
+                            while theta_temp < 0:
+                                theta_temp += 2 * pi
+
+                            if theta_temp < debug_min_theta:
+                                debug_min_theta = theta_temp
+                            if theta_temp > debug_max_theta:
+                                debug_max_theta = theta_temp
+
+                            # (r1, c1) is robot position
+                            dist[r1, c1, r2, c2] = sqrt(pow(r1 - r2, 2) + pow(c1 - c2, 2))
+                            theta[r1, c1, r2, c2] = theta_temp
+                            delta_theta[r1, c1, r2, c2] = atan(0.5 / dist[r1, c1, r2, c2])
+                            # angle is theta +/- delta_theta
+
+        print ('min theta: ' + str(debug_min_theta) + ', max theta: ' + str(debug_max_theta))
         return theta, delta_theta, dist
 
     def step_environment(self, robot_model):
         delta_velocity, delta_theta = robot_model.get_delta_configuration()
 
+        self.r_theta += delta_theta
+
+        while self.r_theta > 2 * pi:
+            self.r_theta -= 2 * pi
+        while self.r_theta < 0:
+            self.r_theta += 2 * pi
+
+        # TODO update self.r_y, self.r_x, self.r_theta with deltas above
+
+    def get_nonzero_tiles(self):
+        dist_from_robot = self.dist[self.r_y, self.r_x, :, :]
+        theta_from_robot = self.theta[self.r_y, self.r_x, :, :]
+        delta_theta_from_robot = self.delta_theta[self.r_y, self.r_x, :, :]
+
+        nonzero_dist = dist_from_robot[self.nonzero_map_y, self.nonzero_map_x]
+        nonzero_theta = theta_from_robot[self.nonzero_map_y, self.nonzero_map_x]
+        nonzero_delta_theta = delta_theta_from_robot[self.nonzero_map_y, self.nonzero_map_x]
+
+        return {
+            'nonzero_dist': nonzero_dist,
+            'nonzero_theta': nonzero_theta,
+            'nonzero_delta_theta': nonzero_delta_theta,
+            'nonzero_color': self.nonzero_map_color
+        }
+
+    def get_robot_info(self):
+        return {
+            'robot_x': self.r_x,
+            'robot_y': self.r_y,
+            'robot_theta': self.r_theta
+        }
+
     def get_topdown_info(self):
-        # TODO return info necessary for image. also needs to return rays.
+        # TODO return info necessary for image. also needs to get rays (from robot sensor)
 
         return self.env_map.copy(), self.r_x, self.r_y, self.r_theta
 
