@@ -55,7 +55,17 @@ def get_environment_params():
              'y_start': 32,
              'length': 7,
              'color': 0.7,
-             'orientation': 'horizontal'}
+             'orientation': 'horizontal'},
+            {'x_start': 22,
+             'y_start': 15,
+             'length': 7,
+             'color': 0.7,
+             'orientation': 'vertical'},
+            {'x_start': 38,
+             'y_start': 20,
+             'length': 7,
+             'color': 0.7,
+             'orientation': 'vertical'},
         ]
     }
     return params

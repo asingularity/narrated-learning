@@ -38,10 +38,16 @@ class RobotSensors(object):
         #   then pick color of minimum distance tile
         relative_ray_radians = robot_theta + self.ray_radians
 
+        more_than_360 = np.nonzero(relative_ray_radians >= 2 * pi)
+        less_than_0 = np.nonzero(relative_ray_radians < 0.0)
+        relative_ray_radians[more_than_360] -= 2 * pi
+        relative_ray_radians[less_than_0] += 2 * pi
+
         for k in range(relative_ray_radians.shape[0]):
             ray_theta = relative_ray_radians[k]
 
-            # TODO does this check need circular checking?
+            # TODO fix discontinuity issue!
+            #matching_tile_indices = np.nonzero(np.logical_or(np.logical_and(ray_theta > theta - d_theta, ray_theta < theta + d_theta), np.logical_and(ray_theta + 180. > theta + 180. - d_theta, ray_theta + 180. < theta + 180. + d_theta)))[0]
             matching_tile_indices = np.nonzero(np.logical_and(ray_theta > theta - d_theta, ray_theta < theta + d_theta))[0]
             if matching_tile_indices.shape[0] > 0:
                 matching_tile_colors = color[matching_tile_indices]

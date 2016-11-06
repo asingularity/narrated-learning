@@ -73,6 +73,7 @@ class RobotEnvironment(object):
         return theta, delta_theta, dist
 
     def step_environment(self, robot_model):
+
         delta_velocity, delta_theta = robot_model.get_delta_configuration()
 
         self.r_theta += delta_theta
@@ -82,7 +83,7 @@ class RobotEnvironment(object):
         while self.r_theta < 0:
             self.r_theta += 2 * pi
 
-        # TODO update self.r_y, self.r_x, self.r_theta with deltas above
+        # TODO update self.r_y, self.r_x with deltas above - is it acceleration? force?
 
     def get_nonzero_tiles(self):
         dist_from_robot = self.dist[self.r_y, self.r_x, :, :]
