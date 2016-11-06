@@ -1,5 +1,6 @@
 import time
 import sys
+from math import sin, cos
 import cv2
 import numpy as np
 import logging
@@ -29,6 +30,7 @@ class Visualizer(object):
         rays = robot_sensors.get_rays()
         ray_radians = rays['ray_radians']
         ray_colors = rays['ray_colors']
+        ray_lengths = rays['ray_lengths']
 
         im[robot_y, robot_x] = 1.0
 
@@ -36,11 +38,27 @@ class Visualizer(object):
 
         # TODO rays should be drawn on resized image? so always width 1
 
+        for k in range(ray_colors.shape[0]):
+
+            pt2_x = robot_x + ray_lengths[k] * cos(ray_radians[k])
+            pt2_y = robot_y + ray_lengths[k] * sin(ray_radians[k])
+            ray_color = ray_colors[k]
+            if ray_color == 0:
+                ray_color = 0.2
+
+            cv2.line(resized_image,
+                     pt1=(int(robot_x * self.scale_topdown_factor), int(robot_y * self.scale_topdown_factor)),
+                     pt2=(int(pt2_x * self.scale_topdown_factor), int(pt2_y * self.scale_topdown_factor)),
+                     color=ray_color,
+                     thickness=1)
+
         cv2.imshow('env_map', resized_image)
 
         camera_image = np.zeros((1, ray_colors.shape[0]))
         camera_image[0, :] = ray_colors[:]
         resized_camera = cv2.resize(src=camera_image, dsize=(0, 0), fx=self.scale_camera_factor, fy=self.scale_camera_factor, interpolation=cv2.INTER_NEAREST)
+
+
 
         cv2.imshow('camera', resized_camera)
         cv2.waitKey(1)

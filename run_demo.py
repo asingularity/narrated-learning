@@ -15,14 +15,14 @@ def get_brain_params():
 
 def get_model_params():
     params = {
-        'max_angular_velocity': 0.1
+        'max_angular_velocity': 0.001
     }
     return params
 
 
 def get_sensors_params():
     params = {
-        'num_rays': 20,
+        'num_rays': 40,
         'fov_degrees': 100
     }
     return params
@@ -70,7 +70,7 @@ def get_evaluator_params():
 def get_visualizer_params():
     params = {
         'fps_display_interval': 3,
-        'image_display_frames': 500,
+        'image_display_frames': 1,
         'scale_topdown_factor': 10,
         'scale_camera_factor': 20
     }
