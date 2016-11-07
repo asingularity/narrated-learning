@@ -46,8 +46,8 @@ class RobotSensors(object):
         for k in range(relative_ray_radians.shape[0]):
             ray_theta = relative_ray_radians[k]
 
-            # TODO fix discontinuity issue!
-            #matching_tile_indices = np.nonzero(np.logical_or(np.logical_and(ray_theta > theta - d_theta, ray_theta < theta + d_theta), np.logical_and(ray_theta + 180. > theta + 180. - d_theta, ray_theta + 180. < theta + 180. + d_theta)))[0]
+            # TODO fix discontinuity issue! This fixes it but at large computational cost:
+            #matching_tile_indices = np.nonzero(np.logical_or(np.logical_and(ray_theta > theta - d_theta, ray_theta < theta + d_theta), np.logical_and(ray_theta > theta - d_theta + 2 * pi, ray_theta < theta + d_theta + 2 * pi)))[0]
             matching_tile_indices = np.nonzero(np.logical_and(ray_theta > theta - d_theta, ray_theta < theta + d_theta))[0]
             if matching_tile_indices.shape[0] > 0:
                 matching_tile_colors = color[matching_tile_indices]
