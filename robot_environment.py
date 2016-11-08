@@ -13,8 +13,8 @@ class RobotEnvironment(object):
         self.r_y = params['init_robot_y']
         self.r_theta = params['init_robot_theta']
 
-        self.round_x = round(self.r_x)
-        self.round_y = round(self.r_y)
+        self.round_x = int(round(self.r_x))
+        self.round_y = int(round(self.r_y))
 
         env_map = np.zeros((self.H, self.W))
         walls = params['walls']
@@ -90,8 +90,8 @@ class RobotEnvironment(object):
         self.r_x += linear_speed * cos(self.r_theta)
         self.r_y += linear_speed * sin(self.r_theta)
 
-        self.round_x = round(self.r_x)
-        self.round_y = round(self.r_y)
+        self.round_x = int(round(self.r_x))
+        self.round_y = int(round(self.r_y))
 
         if self.round_x > self.W - 1:
             self.round_x = self.W - 1

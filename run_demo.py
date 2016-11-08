@@ -81,7 +81,7 @@ def get_evaluator_params():
 def get_visualizer_params():
     params = {
         'fps_display_interval': 3,
-        'image_display_frames': 1,
+        'image_display_frames': 1000,
         'waitKey_time': 5,
         'scale_topdown_factor': 10,
         'scale_camera_factor': 20,
