@@ -15,7 +15,8 @@ def get_brain_params():
 
 def get_model_params():
     params = {
-        'max_angular_velocity': 0.001
+        'max_angular_velocity': 0.2,
+        'linear_velocity': 0.05
     }
     return params
 
@@ -39,7 +40,7 @@ def get_environment_params():
             {'x_start': 2,
              'y_start': 11,
              'length': 21,
-             'color': 0.2,
+             'color': 0.3,
              'orientation': 'vertical'},
             {'x_start': 5,
              'y_start': 22,
@@ -80,9 +81,11 @@ def get_evaluator_params():
 def get_visualizer_params():
     params = {
         'fps_display_interval': 3,
-        'image_display_frames': 1000,
+        'image_display_frames': 1,
+        'waitKey_time': 5,
         'scale_topdown_factor': 10,
-        'scale_camera_factor': 20
+        'scale_camera_factor': 20,
+        'no_wall_ray_color': 0.1
     }
     return params
 

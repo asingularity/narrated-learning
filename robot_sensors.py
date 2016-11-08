@@ -29,9 +29,7 @@ class RobotSensors(object):
         d_theta = nonzero_tiles['nonzero_delta_theta']
         color = nonzero_tiles['nonzero_color']
 
-        robot_info = robot_environment.get_robot_info()
-        robot_x = robot_info['robot_x']
-        robot_y = robot_info['robot_y']
+        robot_info = robot_environment.get_robot_theta()
         robot_theta = robot_info['robot_theta']
 
         # for each ray, find which tiles are within theta for it

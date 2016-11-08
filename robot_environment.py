@@ -1,7 +1,7 @@
 import numpy as np
 import os
 import cv2
-from math import sqrt, atan2, atan, pi
+from math import sqrt, atan2, atan, pi, sin, cos
 
 
 class RobotEnvironment(object):
@@ -12,6 +12,9 @@ class RobotEnvironment(object):
         self.r_x = params['init_robot_x']
         self.r_y = params['init_robot_y']
         self.r_theta = params['init_robot_theta']
+
+        self.round_x = round(self.r_x)
+        self.round_y = round(self.r_y)
 
         env_map = np.zeros((self.H, self.W))
         walls = params['walls']
@@ -74,21 +77,41 @@ class RobotEnvironment(object):
 
     def step_environment(self, robot_model):
 
-        delta_velocity, delta_theta = robot_model.get_delta_configuration()
+        linear_speed, angular_speed = robot_model.get_delta_configuration()
 
-        self.r_theta += delta_theta
+        self.r_theta += angular_speed
 
         while self.r_theta > 2 * pi:
             self.r_theta -= 2 * pi
         while self.r_theta < 0:
             self.r_theta += 2 * pi
 
-        # TODO update self.r_y, self.r_x with deltas above - is it acceleration? force?
+        # TODO what to do when it hits a tile? send message back to robot_model?
+        self.r_x += linear_speed * cos(self.r_theta)
+        self.r_y += linear_speed * sin(self.r_theta)
+
+        self.round_x = round(self.r_x)
+        self.round_y = round(self.r_y)
+
+        if self.round_x > self.W - 1:
+            self.round_x = self.W - 1
+            self.r_x = self.round_x
+        if self.round_x < 0:
+            self.round_x = 0
+            self.r_x = self.round_x
+        if self.round_y > self.H - 1:
+            self.round_y = self.H - 1
+            self.r_y = self.round_y
+        if self.round_y < 0:
+            self.round_y = 0
+            self.r_y = self.round_y
 
     def get_nonzero_tiles(self):
-        dist_from_robot = self.dist[self.r_y, self.r_x, :, :]
-        theta_from_robot = self.theta[self.r_y, self.r_x, :, :]
-        delta_theta_from_robot = self.delta_theta[self.r_y, self.r_x, :, :]
+        round_x = self.round_x
+        round_y = self.round_y
+        dist_from_robot = self.dist[round_y, round_x, :, :]
+        theta_from_robot = self.theta[round_y, round_x, :, :]
+        delta_theta_from_robot = self.delta_theta[round_y, round_x, :, :]
 
         nonzero_dist = dist_from_robot[self.nonzero_map_y, self.nonzero_map_x]
         nonzero_theta = theta_from_robot[self.nonzero_map_y, self.nonzero_map_x]
@@ -101,17 +124,20 @@ class RobotEnvironment(object):
             'nonzero_color': self.nonzero_map_color
         }
 
-    def get_robot_info(self):
+    def get_robot_theta(self):
         return {
-            'robot_x': self.r_x,
-            'robot_y': self.r_y,
             'robot_theta': self.r_theta
         }
 
     def get_topdown_info(self):
-        # TODO return info necessary for image. also needs to get rays (from robot sensor)
-
-        return self.env_map.copy(), self.r_x, self.r_y, self.r_theta
+        return {
+            'env_map_copy': self.env_map.copy(),
+            'robot_x': self.r_x,
+            'robot_y': self.r_y,
+            'round_robot_x': self.round_x,
+            'round_robot_y': self.round_y,
+            'robot_theta': self.r_theta
+        }
 
     def get_camera_image(self):
         return 0

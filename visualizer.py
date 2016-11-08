@@ -16,6 +16,8 @@ class Visualizer(object):
         self.scale_topdown_factor = params['scale_topdown_factor']
         self.scale_camera_factor = params['scale_camera_factor']
         self.image_display_frames = params['image_display_frames']
+        self.waitKey_time = params['waitKey_time']
+        self.no_wall_ray_color = params['no_wall_ray_color']
 
     def _display_fps(self):
         if time.time() - self.last_FPS_time > self.fps_display_interval:
@@ -26,13 +28,21 @@ class Visualizer(object):
         self.fps_frames += 1
 
     def _display_graphic_map(self, robot_environment, robot_sensors):
-        im, robot_x, robot_y, robot_theta = robot_environment.get_topdown_info()
+        topdown_info = robot_environment.get_topdown_info()
+
+        im = topdown_info['env_map_copy']
+        robot_x = topdown_info['robot_x']
+        robot_y = topdown_info['robot_y']
+        round_x = topdown_info['round_robot_x']
+        round_y = topdown_info['round_robot_y']
+        robot_theta = topdown_info['robot_theta']
+
         rays = robot_sensors.get_rays()
         ray_radians = rays['ray_radians']
         ray_colors = rays['ray_colors']
         ray_lengths = rays['ray_lengths']
 
-        im[robot_y, robot_x] = 1.0
+        im[round_y, round_x] = 1.0
 
         resized_image = cv2.resize(src=im, dsize=(0, 0), fx=self.scale_topdown_factor, fy=self.scale_topdown_factor, interpolation=cv2.INTER_NEAREST)
 
@@ -44,7 +54,7 @@ class Visualizer(object):
             pt2_y = robot_y + ray_lengths[k] * sin(ray_radians[k])
             ray_color = ray_colors[k]
             if ray_color == 0:
-                ray_color = 0.2
+                ray_color = self.no_wall_ray_color
 
             cv2.line(resized_image,
                      pt1=(int(robot_x * self.scale_topdown_factor), int(robot_y * self.scale_topdown_factor)),
@@ -58,10 +68,8 @@ class Visualizer(object):
         camera_image[0, :] = ray_colors[:]
         resized_camera = cv2.resize(src=camera_image, dsize=(0, 0), fx=self.scale_camera_factor, fy=self.scale_camera_factor, interpolation=cv2.INTER_NEAREST)
 
-
-
         cv2.imshow('camera', resized_camera)
-        cv2.waitKey(1)
+        cv2.waitKey(self.waitKey_time)
 
     def visualize(self, robot_sensors, robot_brain, robot_model, robot_environment):
         if self.frames % self.image_display_frames == 0:
