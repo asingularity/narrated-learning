@@ -1,4 +1,5 @@
 
+
 from robot_brain import RobotBrain
 from robot_model import RobotModel
 from robot_sensors import RobotSensors
@@ -90,13 +91,25 @@ def get_visualizer_params():
     return params
 
 
-def demo():
-    robot_brain = RobotBrain(get_brain_params())
-    robot_model = RobotModel(get_model_params())
-    robot_sensors = RobotSensors(get_sensors_params())
-    robot_environment = RobotEnvironment(get_environment_params())
-    perf_eval = PerformanceEvaluator(get_evaluator_params())
-    visualizer = Visualizer(get_visualizer_params())
+def init_demo():
+    return {
+        'robot_brain': RobotBrain(get_brain_params()),
+        'robot_model': RobotModel(get_model_params()),
+        'robot_sensors': RobotSensors(get_sensors_params()),
+        'robot_environment': RobotEnvironment(get_environment_params()),
+        'perf_eval': PerformanceEvaluator(get_evaluator_params()),
+        'visualizer': Visualizer(get_visualizer_params())
+    }
+
+
+# @profile
+def run_demo(demo_components):
+    robot_brain = demo_components['robot_brain']
+    robot_model = demo_components['robot_model']
+    robot_sensors = demo_components['robot_sensors']
+    robot_environment = demo_components['robot_environment']
+    perf_eval = demo_components['perf_eval']
+    visualizer = demo_components['visualizer']
 
     while not perf_eval.finished():
         robot_sensors.read_input(robot_environment)
@@ -111,6 +124,12 @@ def demo():
                              robot_brain,
                              robot_model,
                              robot_environment)
+
+
+def demo():
+    demo_components = init_demo()
+    run_demo(demo_components)
+
 
 if __name__ == '__main__':
     demo()
