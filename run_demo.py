@@ -32,6 +32,7 @@ def get_sensors_params():
 
 def get_environment_params():
     params = {
+        'use_keyboard_input': True,
         'width': 40,
         'height': 40,
         'init_robot_x': 25,
@@ -82,7 +83,7 @@ def get_evaluator_params():
 def get_visualizer_params():
     params = {
         'fps_display_interval': 3,
-        'image_display_frames': 1000,
+        'image_display_frames': 1,
         'waitKey_time': 5,
         'scale_topdown_factor': 10,
         'scale_camera_factor': 20,
@@ -115,7 +116,7 @@ def run_demo(demo_components):
         robot_sensors.read_input(robot_environment)
         robot_brain.process_input(robot_sensors)
         robot_model.act_upon_processing(robot_brain)
-        robot_environment.step_environment(robot_model)
+        robot_environment.step_environment(robot_model, visualizer)
         perf_eval.evaluate(robot_sensors,
                            robot_brain,
                            robot_model,

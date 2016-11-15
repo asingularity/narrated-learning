@@ -2,6 +2,7 @@ import numpy as np
 import os
 import cv2
 from math import sqrt, atan2, atan, pi, sin, cos
+import time
 
 
 class RobotEnvironment(object):
@@ -12,6 +13,8 @@ class RobotEnvironment(object):
         self.r_x = params['init_robot_x']
         self.r_y = params['init_robot_y']
         self.r_theta = params['init_robot_theta']
+
+        self.use_keyboard_input = params['use_keyboard_input']
 
         self.round_x = int(round(self.r_x))
         self.round_y = int(round(self.r_y))
@@ -27,12 +30,14 @@ class RobotEnvironment(object):
                 assert False, 'invalid orientation: ' + str(wall['orientation'])
         self.env_map = env_map
 
-        # TODO store nonzero elements of env_map explicitly:
+        # store nonzero elements of env_map explicitly:
         self.nonzero_map_y = np.nonzero(env_map)[0]
         self.nonzero_map_x = np.nonzero(env_map)[1]
         self.nonzero_map_color = env_map[np.nonzero(env_map)]
 
         self.theta, self.delta_theta, self.dist = self._load_or_precompute_angles_dist(rows=self.H, cols=self.W)
+
+        self.nonzero_tiles = self._get_nonzero_tiles()
 
     def _load_or_precompute_angles_dist(self, rows, cols):
         # TODO: save/load from file
@@ -51,7 +56,8 @@ class RobotEnvironment(object):
                 for r2 in range(rows):
                     for c2 in range(cols):
                         if r1 == r2 and c1 == c2:
-                            dist[r1, c1, r2, c2] = np.inf
+                            # TODO setting to inf is right for display... but wrong for proximity/collision check
+                            dist[r1, c1, r2, c2] = 0.0  # np.inf
                         else:
 
                             theta_temp = atan2(r2 - r1, c2 - c1)
@@ -75,9 +81,12 @@ class RobotEnvironment(object):
         print ('min theta: ' + str(debug_min_theta) + ', max theta: ' + str(debug_max_theta))
         return theta, delta_theta, dist
 
-    def step_environment(self, robot_model):
-
-        linear_speed, angular_speed = robot_model.get_delta_configuration()
+    def step_environment(self, robot_model, visualizer):
+        # visualizer is an input for reading keyboard input
+        if self.use_keyboard_input:
+            linear_speed, angular_speed = visualizer.get_linear_angular_speed()
+        else:
+            linear_speed, angular_speed = robot_model.get_delta_configuration()
 
         self.r_theta += angular_speed
 
@@ -86,12 +95,11 @@ class RobotEnvironment(object):
         while self.r_theta < 0:
             self.r_theta += 2 * pi
 
-        # TODO what to do when it hits a tile? send message back to robot_model?
         self.r_x += linear_speed * cos(self.r_theta)
         self.r_y += linear_speed * sin(self.r_theta)
 
-        self.round_x = int(round(self.r_x))
-        self.round_y = int(round(self.r_y))
+        self.round_x = int(self.r_x)
+        self.round_y = int(self.r_y)
 
         if self.round_x > self.W - 1:
             self.round_x = self.W - 1
@@ -106,7 +114,37 @@ class RobotEnvironment(object):
             self.round_y = 0
             self.r_y = self.round_y
 
-    def get_nonzero_tiles(self):
+        self.nonzero_tiles = self._get_nonzero_tiles()
+
+        # TODO need to handle collisions with wall tiles (everything distance 1 away- allow escape if distance 0)
+        # TODO should be a separate function
+        # TODO fix distance measurement between tiles in initialization - issues with rounding and where robot is
+
+        nz_dist = self.nonzero_tiles['nonzero_dist']
+        close_nnz_tile_indices = np.nonzero(nz_dist <= 1)[0]
+        if close_nnz_tile_indices.shape[0] > 0:
+            #print close_nnz_tile_indices
+            #print nz_dist[close_nnz_tile_indices]
+            r_x = self.round_x
+            r_y = self.round_y
+            m_x = self.nonzero_map_x[close_nnz_tile_indices]
+            m_y = self.nonzero_map_y[close_nnz_tile_indices]
+            # TODO prevent movement in direction of nonzero tile
+
+            if len(m_x) > 1:
+                print 'should never enter a wall!'
+                print 'robot_x, robot_y', self.r_x, self.r_y
+                print 'round_x, round_y', r_x, r_y
+                print 'm_x, m_y', m_x, m_y
+                print 'm_dist', nz_dist[close_nnz_tile_indices]
+                #assert False
+            else:
+                if not r_x == m_x:
+                    self.r_x = round(self.r_x)
+                if not r_y == m_y:
+                    self.r_y = round(self.r_y)
+
+    def _get_nonzero_tiles(self):
         round_x = self.round_x
         round_y = self.round_y
         dist_from_robot = self.dist[round_y, round_x, :, :]
@@ -123,6 +161,9 @@ class RobotEnvironment(object):
             'nonzero_delta_theta': nonzero_delta_theta,
             'nonzero_color': self.nonzero_map_color
         }
+
+    def get_nonzero_tiles(self):
+        return self.nonzero_tiles
 
     def get_robot_theta(self):
         return {

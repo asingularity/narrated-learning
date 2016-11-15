@@ -18,6 +18,11 @@ class Visualizer(object):
         self.image_display_frames = params['image_display_frames']
         self.waitKey_time = params['waitKey_time']
         self.no_wall_ray_color = params['no_wall_ray_color']
+        self.linear_speed_from_key = 0.0
+        self.angular_speed_from_key = 0.0
+
+    def get_linear_angular_speed(self):
+        return self.linear_speed_from_key, self.angular_speed_from_key
 
     def _display_fps(self):
         if time.time() - self.last_FPS_time > self.fps_display_interval:
@@ -69,7 +74,26 @@ class Visualizer(object):
         resized_camera = cv2.resize(src=camera_image, dsize=(0, 0), fx=self.scale_camera_factor, fy=self.scale_camera_factor, interpolation=cv2.INTER_NEAREST)
 
         cv2.imshow('camera', resized_camera)
-        cv2.waitKey(self.waitKey_time)
+        k = cv2.waitKey(self.waitKey_time)
+
+        FWD = 119
+        BACK = 115
+        LEFT = 97
+        RIGHT = 100
+
+        if k == -1:
+            self.linear_speed_from_key = 0.0
+            self.angular_speed_from_key = 0.0
+        else:
+            #print 'KEY PRESSED: ' + str(k)
+            if k == FWD:
+                self.linear_speed_from_key = 0.5
+            if k == BACK:
+                self.linear_speed_from_key = -0.5
+            if k == LEFT:
+                self.angular_speed_from_key = -0.2
+            if k == RIGHT:
+                self.angular_speed_from_key = 0.2
 
     def visualize(self, robot_sensors, robot_brain, robot_model, robot_environment):
         if self.frames % self.image_display_frames == 0:
