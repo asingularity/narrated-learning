@@ -90,6 +90,10 @@ class RobotEnvironment(object):
         else:
             linear_speed, angular_speed = robot_model.get_delta_configuration()
 
+
+        # TODO new logic:
+        #   do collision detection on current x, y, and also velocity x, y
+
         self.r_theta += angular_speed
 
         while self.r_theta > 2 * pi:
@@ -120,42 +124,29 @@ class RobotEnvironment(object):
 
         self.nonzero_tiles = self._get_nonzero_tiles()
 
-        # TODO need to handle collisions with wall tiles (everything distance 1 away- allow escape if distance 0)
-        # TODO should be a separate function
-        # TODO fix distance measurement between tiles in initialization - issues with rounding and where robot is
-
         nz_dist = self.nonzero_tiles['nonzero_dist']
-        #close_nnz_tile_indices = np.nonzero(nz_dist <= sqrt(2))[0]
         close_nnz_tile_indices = np.nonzero((nz_dist <= 1 + 1e-9))[0]
         if not (self.r_x == self.last_r_x and self.r_y == self.last_r_y):
             if close_nnz_tile_indices.shape[0] > 0:
-                # print close_nnz_tile_indices
-                # print nz_dist[close_nnz_tile_indices]
-                # r_x = self.round_x
-                # r_y = self.round_y
                 m_x_neighbors = self.nonzero_map_x[close_nnz_tile_indices]
                 m_y_neighbors = self.nonzero_map_y[close_nnz_tile_indices]
-                # TODO prevent movement in direction of nonzero tile
-
-                print 'robot_x, robot_y', self.r_x, self.r_y
-                print 'round_x, round_y', self.round_x, self.round_y
-                print 'm_x, m_y', m_x_neighbors, m_y_neighbors
-                print 'm_dist', nz_dist[close_nnz_tile_indices]
 
                 for m_x, m_y in zip(m_x_neighbors.tolist(), m_y_neighbors.tolist()):
                     if not self.round_x == m_x:
-                        self.r_x = int(self.r_x)
                         if self.round_x > m_x:
-                            self.r_x += 0.5  # TODO +/- depends on direction to wall
+                            if self.r_x < self.last_r_x:
+                                self.r_x = int(self.r_x) + 0.5
                         if self.round_x < m_x:
-                            self.r_x += 0.5  # TODO +/- depends on direction to wall
+                            if self.r_x > self.last_r_x:
+                                self.r_x = int(self.r_x) + 0.5
                         self.round_x = int(self.r_x)
                     if not self.round_y == m_y:
-                        self.r_y = int(self.r_y)
                         if self.round_y > m_y:
-                            self.r_y += 0.5  # TODO +/- depends on direction to wall
+                            if self.r_y < self.last_r_y:
+                                self.r_y = int(self.r_y) + 0.5
                         if self.round_y < m_y:
-                            self.r_y += 0.5  # TODO +/- depends on direction to wall
+                            if self.r_y > self.last_r_y:
+                                self.r_y = int(self.r_y) + 0.5
                         self.round_y = int(self.r_y)
             else:
                 print 'None'
