@@ -12,6 +12,8 @@ class RobotEnvironment(object):
 
         self.r_x = params['init_robot_x']
         self.r_y = params['init_robot_y']
+        self.last_r_x = self.r_x
+        self.last_r_y = self.r_y
         self.r_theta = params['init_robot_theta']
 
         self.use_keyboard_input = params['use_keyboard_input']
@@ -95,6 +97,8 @@ class RobotEnvironment(object):
         while self.r_theta < 0:
             self.r_theta += 2 * pi
 
+        self.last_r_x = self.r_x
+        self.last_r_y = self.r_y
         self.r_x += linear_speed * cos(self.r_theta)
         self.r_y += linear_speed * sin(self.r_theta)
 
@@ -121,28 +125,40 @@ class RobotEnvironment(object):
         # TODO fix distance measurement between tiles in initialization - issues with rounding and where robot is
 
         nz_dist = self.nonzero_tiles['nonzero_dist']
-        close_nnz_tile_indices = np.nonzero(nz_dist <= 1)[0]
-        if close_nnz_tile_indices.shape[0] > 0:
-            #print close_nnz_tile_indices
-            #print nz_dist[close_nnz_tile_indices]
-            r_x = self.round_x
-            r_y = self.round_y
-            m_x = self.nonzero_map_x[close_nnz_tile_indices]
-            m_y = self.nonzero_map_y[close_nnz_tile_indices]
-            # TODO prevent movement in direction of nonzero tile
+        #close_nnz_tile_indices = np.nonzero(nz_dist <= sqrt(2))[0]
+        close_nnz_tile_indices = np.nonzero((nz_dist <= 1 + 1e-9))[0]
+        if not (self.r_x == self.last_r_x and self.r_y == self.last_r_y):
+            if close_nnz_tile_indices.shape[0] > 0:
+                # print close_nnz_tile_indices
+                # print nz_dist[close_nnz_tile_indices]
+                # r_x = self.round_x
+                # r_y = self.round_y
+                m_x_neighbors = self.nonzero_map_x[close_nnz_tile_indices]
+                m_y_neighbors = self.nonzero_map_y[close_nnz_tile_indices]
+                # TODO prevent movement in direction of nonzero tile
 
-            if len(m_x) > 1:
-                print 'should never enter a wall!'
                 print 'robot_x, robot_y', self.r_x, self.r_y
-                print 'round_x, round_y', r_x, r_y
-                print 'm_x, m_y', m_x, m_y
+                print 'round_x, round_y', self.round_x, self.round_y
+                print 'm_x, m_y', m_x_neighbors, m_y_neighbors
                 print 'm_dist', nz_dist[close_nnz_tile_indices]
-                #assert False
+
+                for m_x, m_y in zip(m_x_neighbors.tolist(), m_y_neighbors.tolist()):
+                    if not self.round_x == m_x:
+                        self.r_x = int(self.r_x)
+                        if self.round_x > m_x:
+                            self.r_x += 0.5  # TODO +/- depends on direction to wall
+                        if self.round_x < m_x:
+                            self.r_x += 0.5  # TODO +/- depends on direction to wall
+                        self.round_x = int(self.r_x)
+                    if not self.round_y == m_y:
+                        self.r_y = int(self.r_y)
+                        if self.round_y > m_y:
+                            self.r_y += 0.5  # TODO +/- depends on direction to wall
+                        if self.round_y < m_y:
+                            self.r_y += 0.5  # TODO +/- depends on direction to wall
+                        self.round_y = int(self.r_y)
             else:
-                if not r_x == m_x:
-                    self.r_x = round(self.r_x)
-                if not r_y == m_y:
-                    self.r_y = round(self.r_y)
+                print 'None'
 
     def _get_nonzero_tiles(self):
         round_x = self.round_x

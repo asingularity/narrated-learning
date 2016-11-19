@@ -87,9 +87,9 @@ class Visualizer(object):
         else:
             #print 'KEY PRESSED: ' + str(k)
             if k == FWD:
-                self.linear_speed_from_key = 0.5
+                self.linear_speed_from_key = 0.25
             if k == BACK:
-                self.linear_speed_from_key = -0.5
+                self.linear_speed_from_key = -0.25
             if k == LEFT:
                 self.angular_speed_from_key = -0.2
             if k == RIGHT:
