@@ -149,7 +149,7 @@ class RobotEnvironment(object):
                                 self.r_y = int(self.r_y) + 0.5
                         self.round_y = int(self.r_y)
             else:
-                print 'None'
+                pass
 
     def _get_nonzero_tiles(self):
         round_x = self.round_x

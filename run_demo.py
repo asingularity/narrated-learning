@@ -32,7 +32,7 @@ def get_sensors_params():
 
 def get_environment_params():
     params = {
-        'use_keyboard_input': True,
+        'use_keyboard_input': False,
         'width': 40,
         'height': 40,
         'init_robot_x': 25,
@@ -69,6 +69,11 @@ def get_environment_params():
              'length': 7,
              'color': 0.7,
              'orientation': 'vertical'},
+            {'x_start': 28,
+             'y_start': 14,
+             'length': 12,
+             'color': 0.7,
+             'orientation': 'vertical'},
         ]
     }
     return params
@@ -83,8 +88,8 @@ def get_evaluator_params():
 def get_visualizer_params():
     params = {
         'fps_display_interval': 3,
-        'image_display_frames': 1,
-        'waitKey_time': 5,
+        'image_display_frames': 4000,
+        'waitKey_time': 1,
         'scale_topdown_factor': 10,
         'scale_camera_factor': 20,
         'no_wall_ray_color': 0.1
@@ -103,7 +108,7 @@ def init_demo():
     }
 
 
-# @profile
+#@profile
 def run_demo(demo_components):
     robot_brain = demo_components['robot_brain']
     robot_model = demo_components['robot_model']
