@@ -3,6 +3,9 @@ import sys
 from math import sin, cos
 import cv2
 import numpy as np
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
 import logging
 logging.basicConfig(level=logging.INFO)
 
@@ -16,10 +19,15 @@ class Visualizer(object):
         self.scale_topdown_factor = params['scale_topdown_factor']
         self.scale_camera_factor = params['scale_camera_factor']
         self.image_display_frames = params['image_display_frames']
+        self.plot_brain_error_frames =params['plot_brain_error_frames']
         self.waitKey_time = params['waitKey_time']
         self.no_wall_ray_color = params['no_wall_ray_color']
+        self.plots_folder = params['plots_folder']
         self.linear_speed_from_key = 0.0
         self.angular_speed_from_key = 0.0
+
+        self.fig = plt.figure(figsize=(10, 10))
+        self.ax = self.fig.add_subplot(1, 1, 0)
 
     def get_linear_angular_speed(self):
         return self.linear_speed_from_key, self.angular_speed_from_key
@@ -95,9 +103,24 @@ class Visualizer(object):
             if k == RIGHT:
                 self.angular_speed_from_key = 0.2
 
+    def _plot_brain_errors(self, robot_brain):
+        error_names, error_histories = robot_brain.get_error_names_histories()
+        print self.frames
+        for k in range(len(error_names)):
+            error_name = error_names[k]
+            error_history = error_histories[k]
+            print error_name
+            print error_history.shape
+            self.ax.cla()
+            self.ax.plot(error_history)
+            self.fig.savefig(self.plots_folder + '/' + error_name + '.png', dpi=100)
+
     def visualize(self, robot_sensors, robot_brain, robot_model, robot_environment):
         if self.frames % self.image_display_frames == 0:
             self._display_graphic_map(robot_environment, robot_sensors)
+
+        if self.frames % self.plot_brain_error_frames == 0:
+            self._plot_brain_errors(robot_brain)
 
         self._display_fps()
 

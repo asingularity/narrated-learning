@@ -8,12 +8,6 @@ from performance_evaluator import PerformanceEvaluator
 from visualizer import Visualizer
 
 
-def get_brain_params():
-    params = {
-    }
-    return params
-
-
 def get_model_params():
     params = {
         'max_angular_velocity': 0.2,
@@ -30,6 +24,15 @@ def get_sensors_params():
     return params
 
 
+def get_brain_params():
+    params = {
+        'autoenc_heirarchy_compression': [0.5, 0.5, 0.5],
+        'error_average_steps': 2000,
+        'sensors_params': get_sensors_params()
+    }
+    return params
+
+
 def get_environment_params():
     params = {
         'use_keyboard_input': False,
@@ -42,32 +45,32 @@ def get_environment_params():
             {'x_start': 2,
              'y_start': 11,
              'length': 21,
-             'color': 0.3,
+             'color': 0.1,
              'orientation': 'vertical'},
             {'x_start': 5,
              'y_start': 22,
              'length': 11,
-             'color': 0.6,
+             'color': 0.2,
              'orientation': 'vertical'},
             {'x_start': 10,
              'y_start': 15,
              'length': 15,
-             'color': 0.4,
+             'color': 0.3,
              'orientation': 'horizontal'},
             {'x_start': 32,
              'y_start': 32,
              'length': 7,
-             'color': 0.7,
+             'color': 0.4,
              'orientation': 'horizontal'},
             {'x_start': 22,
              'y_start': 15,
              'length': 7,
-             'color': 0.7,
+             'color': 0.5,
              'orientation': 'vertical'},
             {'x_start': 38,
              'y_start': 20,
              'length': 7,
-             'color': 0.7,
+             'color': 0.6,
              'orientation': 'vertical'},
             {'x_start': 28,
              'y_start': 14,
@@ -88,11 +91,13 @@ def get_evaluator_params():
 def get_visualizer_params():
     params = {
         'fps_display_interval': 3,
-        'image_display_frames': 4000,
+        'image_display_frames': 2000,
+        'plot_brain_error_frames': 25000,
         'waitKey_time': 1,
         'scale_topdown_factor': 10,
         'scale_camera_factor': 20,
-        'no_wall_ray_color': 0.1
+        'no_wall_ray_color': 0.1,
+        'plots_folder': '/home/petre/projects/NL/plots/'
     }
     return params
 
