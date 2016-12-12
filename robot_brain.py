@@ -1,9 +1,9 @@
-
+import pickle
 from PVM.PVM_framework import MLP
 import numpy as np
 
 
-def _get_mlp(num_inputs, num_hidden, num_outputs):
+def _get_mlp(num_inputs, num_hidden, num_outputs, learning_rate):
     state = {}
     state['layers'] = [
         {'activation': np.zeros((num_inputs + 1,)), 'error': np.zeros((num_inputs + 1,)), 'delta': np.zeros((num_inputs + 1,))},
@@ -15,7 +15,7 @@ def _get_mlp(num_inputs, num_hidden, num_outputs):
         MLP.initialize_weights(np.zeros((num_hidden + 1, num_outputs)), False)
     ]
     state['beta'] = np.array([1.0])
-    state['learning_rate'] = np.array([0.01])
+    state['learning_rate'] = np.array([learning_rate])
     state['momentum'] = np.array([0.5])
     state['mse'] = np.array([0.0])
 
@@ -29,6 +29,10 @@ class RobotBrain(object):
         autoenc_heirarchy_compression = params['autoenc_heirarchy_compression']
         error_average_steps = params['error_average_steps']
         max_history_length = 10000000
+        self.save_steps = params['save_steps']
+        self.learning_rate = params['learning_rate']
+        self.save_folder = params['save_folder']
+        self.learning_disable_step = params['learning_disable_step']
 
         layer_index = 0
         layer_num_inputs = num_sensory_inputs
@@ -47,7 +51,8 @@ class RobotBrain(object):
             print 'layer ', layer_index, '[' + str(layer_num_inputs) + '] -> [' + str(layer_num_hidden) + '] -> [' + str(layer_num_outputs) + ']'
             self.autoenc_networks.append(_get_mlp(num_inputs=layer_num_inputs,
                                                   num_hidden=layer_num_hidden,
-                                                  num_outputs=layer_num_outputs))
+                                                  num_outputs=layer_num_outputs,
+                                                  learning_rate=self.learning_rate))
 
             layer_index += 1
             layer_num_inputs = layer_num_hidden
@@ -57,6 +62,7 @@ class RobotBrain(object):
         self.averaged_autoenc_error_histories = np.zeros((len(autoenc_heirarchy_compression), max_history_length))
 
         self.last_sensory_input = None
+        self.steps = 0
 
     def get_error_names_histories(self):
         error_names = []
@@ -88,10 +94,20 @@ class RobotBrain(object):
                 mean_error = np.mean(self.autoenc_error_histories[net_index][e_step - e_ave:e_step])
                 self.averaged_autoenc_error_histories[net_index][e_step] = mean_error
 
-            net.train(net_input, net_input)
+            if self.steps < self.learning_disable_step:
+                net.train(net_input, net_input)
+
             net_index += 1
             net_input = net.layers[1]['activation'][:-1]
+
+        if self.steps % self.save_steps == 0:
+            print 'saving autoencoders...'
+            f = open(self.save_folder + '/autoencoders.pkl', 'w')
+            pickle.dump(self.autoenc_networks, f)
+            f.close()
+            print 'done saving autoencoders.'
 
         self.autoenc_error_history_step += 1
         #self.last_sensory_input = current_sensor_input
 
+        self.steps += 1

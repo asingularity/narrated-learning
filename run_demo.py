@@ -27,8 +27,12 @@ def get_sensors_params():
 def get_brain_params():
     params = {
         'autoenc_heirarchy_compression': [0.5, 0.5, 0.5],
-        'error_average_steps': 2000,
-        'sensors_params': get_sensors_params()
+        'error_average_steps': 4000,
+        'save_steps': 100000,
+        'learning_rate': 0.0001,
+        'learning_disable_step': 2000000,
+        'sensors_params': get_sensors_params(),
+        'save_folder': '/home/petre/projects/NL/plots/'
     }
     return params
 
