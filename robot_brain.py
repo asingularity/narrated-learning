@@ -60,6 +60,7 @@ class RobotBrain(object):
             self.autoenc_error_histories.append(np.zeros(max_history_length))
 
         self.averaged_autoenc_error_histories = np.zeros((len(autoenc_heirarchy_compression), max_history_length))
+        self.autoenc_images = np.zeros((len(autoenc_heirarchy_compression), num_sensory_inputs))
 
         self.last_sensory_input = None
         self.steps = 0
@@ -72,6 +73,9 @@ class RobotBrain(object):
 
         return error_names, error_histories
 
+    def get_autoenc_images(self):
+        return self.autoenc_images
+
     def process_input(self, robot_sensors):
         rays = robot_sensors.get_rays()
         ray_radians = rays['ray_radians']
@@ -81,11 +85,16 @@ class RobotBrain(object):
         net_input = ray_colors.copy()
         net_index = 0
 
+        #print '************************'
         for net in self.autoenc_networks:
+
+            #if net_index == 2:
+            #    print 'net_input begin: ' + str(net_input)
+
+            # TODO why did copy here not fix it???
             net_output = net.evaluate(net_input)
             error = net_output - net_input
             error = np.mean(np.fabs(error))
-            #np.mean(np.sqrt(np.multiply(error, error)))
 
             e_step = self.autoenc_error_history_step
             self.autoenc_error_histories[net_index][e_step] = error
@@ -94,11 +103,33 @@ class RobotBrain(object):
                 mean_error = np.mean(self.autoenc_error_histories[net_index][e_step - e_ave:e_step])
                 self.averaged_autoenc_error_histories[net_index][e_step] = mean_error
 
+            # evaluate hidden -> out
+            # technically we could skip one redundant compute per layer (initial hidden->output is given above)
+
+            #if net_index == 2:
+            #    print 'net_input before: ' + str(net_input)
+
+            if True:
+                # TODO added copy here but that didn't solve it
+                hidden = net.layers[1]['activation'][:-1].copy()
+
+                for tmp_layer in range(net_index, -1, -1):  # [2, 1, 0] for net_index = 2
+                    tmp_output = self.autoenc_networks[tmp_layer].evaluate_from_hidden(hidden)
+                    hidden = tmp_output
+
+                # display tmp_output
+                #print net_index, tmp_output.shape
+                self.autoenc_images[net_index, :] = tmp_output[:]
+
+            #if net_index == 2:
+            #    print 'net_input after: ' + str(net_input)
+
             if self.steps < self.learning_disable_step:
                 net.train(net_input, net_input)
 
             net_index += 1
-            net_input = net.layers[1]['activation'][:-1]
+            # THIS WAS WHERE COPY WAS NECESSARY TO AVOID BUG
+            net_input = net.layers[1]['activation'][:-1].copy()
 
         if self.steps % self.save_steps == 0:
             print 'saving autoencoders...'

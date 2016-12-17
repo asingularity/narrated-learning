@@ -40,7 +40,7 @@ class Visualizer(object):
             self.last_FPS_time = time.time()
         self.fps_frames += 1
 
-    def _display_graphic_map(self, robot_environment, robot_sensors):
+    def _display_graphic_map(self, robot_environment, robot_sensors, robot_brain):
         topdown_info = robot_environment.get_topdown_info()
 
         im = topdown_info['env_map_copy']
@@ -54,6 +54,10 @@ class Visualizer(object):
         ray_radians = rays['ray_radians']
         ray_colors = rays['ray_colors']
         ray_lengths = rays['ray_lengths']
+
+        autoenc_images = robot_brain.get_autoenc_images()
+        resized_autoenc = cv2.resize(src=autoenc_images, dsize=(0, 0), fx=self.scale_camera_factor, fy=self.scale_camera_factor, interpolation=cv2.INTER_NEAREST)
+        cv2.imshow('autoenc', resized_autoenc)
 
         im[round_y, round_x] = 1.0
 
@@ -117,7 +121,7 @@ class Visualizer(object):
 
     def visualize(self, robot_sensors, robot_brain, robot_model, robot_environment):
         if self.frames % self.image_display_frames == 0:
-            self._display_graphic_map(robot_environment, robot_sensors)
+            self._display_graphic_map(robot_environment, robot_sensors, robot_brain)
 
         if self.frames % self.plot_brain_error_frames == 0:
             self._plot_brain_errors(robot_brain)
