@@ -28,7 +28,7 @@ class RobotBrain(object):
         num_sensory_inputs = sensors_params['num_rays']
         autoenc_heirarchy_compression = params['autoenc_heirarchy_compression']
         error_average_steps = params['error_average_steps']
-        max_history_length = 10000000
+        max_history_length = 100000000
         self.save_steps = params['save_steps']
         self.learning_rate = params['learning_rate']
         self.save_folder = params['save_folder']
