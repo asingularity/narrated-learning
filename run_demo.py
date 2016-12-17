@@ -29,7 +29,7 @@ def get_brain_params():
         'autoenc_heirarchy_compression': [0.5, 0.5, 0.5],
         'error_average_steps': 4000,
         'save_steps': 100000,
-        'learning_rate': 0.0001,
+        'learning_rate': 0.01,
         'learning_disable_step': 2000000,
         'sensors_params': get_sensors_params(),
         'save_folder': '/home/petre/projects/NL/plots/'
@@ -81,6 +81,11 @@ def get_environment_params():
              'length': 12,
              'color': 0.7,
              'orientation': 'vertical'},
+            {'x_start': 24,
+             'y_start': 6,
+             'length': 12,
+             'color': 0.8,
+             'orientation': 'horizontal'},
         ]
     }
     return params
@@ -95,7 +100,7 @@ def get_evaluator_params():
 def get_visualizer_params():
     params = {
         'fps_display_interval': 3,
-        'image_display_frames': 2000,
+        'image_display_frames': 1000,
         'plot_brain_error_frames': 25000,
         'waitKey_time': 1,
         'scale_topdown_factor': 10,
