@@ -27,10 +27,17 @@ def get_sensors_params():
 def get_brain_params():
     params = {
         'autoenc_heirarchy_compression': [0.5, 0.5, 0.5],
+        'autoenc_learning_rate': 0.01,
+        'autoenc_learning_disable_step': 2000000,
+        'predict_nets_time_steps': [1, 2, 4],
+        'predict_nets_input_compression_levels':   [0, 1, 2],
+        'predict_nets_context_compression_levels': [1, 2, 3],
+        'predict_nets_output_compression_levels':  [0, 1, 2],
+        'predict_nets_learning_rate': 0.01,
+        'predict_nets_hidden_dim': 100,
+        'predict_nets_disable_step': 2000000,
         'error_average_steps': 4000,
         'save_steps': 100000,
-        'learning_rate': 0.01,
-        'learning_disable_step': 2000000,
         'sensors_params': get_sensors_params(),
         'save_folder': '/home/petre/projects/NL/plots/'
     }

@@ -108,16 +108,27 @@ class Visualizer(object):
                 self.angular_speed_from_key = 0.2
 
     def _plot_brain_errors(self, robot_brain):
-        error_names, error_histories = robot_brain.get_error_names_histories()
+        error_names_autoenc, error_histories_autoenc, error_names_predictor, error_histories_predictor = robot_brain.get_error_names_histories()
         print self.frames
-        for k in range(len(error_names)):
-            error_name = error_names[k]
-            error_history = error_histories[k]
+
+        for k in range(len(error_names_autoenc)):
+            error_name = error_names_autoenc[k]
+            error_history = error_histories_autoenc[k, :]
             print error_name
             print error_history.shape
             self.ax.cla()
             self.ax.plot(error_history)
             self.fig.savefig(self.plots_folder + '/' + error_name + '.png', dpi=100)
+
+        for k in range(len(error_names_predictor)):
+            error_name = error_names_predictor[k]
+            error_history = error_histories_predictor[k, :]
+            print error_name
+            print error_history.shape
+            self.ax.cla()
+            self.ax.plot(error_history)
+            self.fig.savefig(self.plots_folder + '/' + error_name + '.png', dpi=100)
+
 
     def visualize(self, robot_sensors, robot_brain, robot_model, robot_environment):
         if self.frames % self.image_display_frames == 0:
