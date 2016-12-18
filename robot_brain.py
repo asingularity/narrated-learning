@@ -136,11 +136,11 @@ class RobotBrain(object):
         ray_lengths = rays['ray_lengths']
 
         for m_index in range(len(self.predictor_training_histories)):
-            self.predictor_training_histories[m_index] = np.roll(self.predictor_training_histories[m_index], 1, 0)
+            self.predictor_training_histories[m_index] = np.roll(self.predictor_training_histories[m_index], -1, 0)
 
         net_input = ray_colors.copy()
         net_index = 0
-        self.predictor_training_histories[0][0, :] = net_input[:]
+        self.predictor_training_histories[0][-1, :] = net_input[:]
 
         for net in self.autoenc_networks:
             net_output = net.evaluate(net_input)
@@ -170,7 +170,7 @@ class RobotBrain(object):
 
             # copy necessary here
             net_input = net.layers[1]['activation'][:-1].copy()
-            self.predictor_training_histories[net_index + 1][0, :] = net_input[:]
+            self.predictor_training_histories[net_index + 1][-1, :] = net_input[:]
             net_index += 1
 
         self.autoenc_error_history_step += 1
