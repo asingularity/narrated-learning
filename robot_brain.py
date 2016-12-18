@@ -68,22 +68,17 @@ class RobotBrain(object):
 
         # ***** prediction nets *****
 
-        # 'predict_nets_time_steps': [1, 2, 4],
-        # 'predict_nets_input_compression_levels':   [0, 1, 2],
-        # 'predict_nets_context_compression_levels': [1, 2, 3],
-        # 'predict_nets_output_compression_levels':  [0, 1, 2],
-
-        self.predict_nets_time_steps = params['predict_nets_time_steps']
+        self.predict_time_steps = params['predict_time_steps']
         self.predict_nets_input_compression_levels = params['predict_nets_input_compression_levels']
         self.predict_nets_context_compression_levels = params['predict_nets_context_compression_levels']
         self.predict_nets_output_compression_levels = params['predict_nets_output_compression_levels']
         self.predict_nets_learning_rate = params['predict_nets_learning_rate']
-        self.predictor_learning_disable_step = params['predict_nets_disable_step']
+        self.predictor_learning_disable_step = params['predict_nets_learning_disable_step']
 
-        num_nets = len(params['predict_nets_time_steps'])
+        num_nets = len(self.predict_nets_input_compression_levels)
         self.predictor_networks = []
 
-        self.predictor_training_history_length = np.sum(np.array(self.predict_nets_time_steps))
+        self.predictor_training_history_length = np.sum(np.array(self.predict_time_steps))
         self.predictor_training_histories = []
         for dim in compression_levels_dimensions:
             self.predictor_training_histories.append(np.zeros((self.predictor_training_history_length, dim)))
@@ -182,14 +177,15 @@ class RobotBrain(object):
 
         net_index = 0
         for net in self.predictor_networks:
-            dt = self.predict_nets_time_steps[net_index]
+            dt = self.predict_time_steps[net_index]
+            dt_context = self.predict_time_steps[net_index + 1]
             c_index_input = self.predict_nets_input_compression_levels[net_index]
             c_index_context = self.predict_nets_context_compression_levels[net_index]
             c_index_output = self.predict_nets_output_compression_levels[net_index]
 
             net_input = np.concatenate((self.predictor_training_histories[c_index_input][0, :],
-                                        self.predictor_training_histories[c_index_context][dt, :]))
-            net_output = self.predictor_training_histories[c_index_output][0, :]
+                                        self.predictor_training_histories[c_index_context][dt + dt_context, :]))
+            net_output = self.predictor_training_histories[c_index_output][dt, :]
 
             # TODO evaluate first, store error
             net_output_eval = net.evaluate(net_input)
