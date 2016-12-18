@@ -46,6 +46,7 @@ class RobotBrain(object):
 
         # ***** autoenc nets *****
         compression_levels_dimensions = [num_sensory_inputs]
+        self.compression_levels_dimensions = compression_levels_dimensions
 
         for ratio in autoenc_heirarchy_compression:
             layer_num_hidden = int(ratio * layer_num_inputs)
@@ -77,6 +78,7 @@ class RobotBrain(object):
 
         num_nets = len(self.predict_nets_input_compression_levels)
         self.predictor_networks = []
+        self.no_context_predictor_networks = []
 
         self.predictor_training_history_length = np.sum(np.array(self.predict_time_steps))
         self.predictor_training_histories = []
@@ -85,6 +87,8 @@ class RobotBrain(object):
 
         self.predictor_error_histories = []
         self.predictor_error_history_step = 0
+        self.no_context_predictor_error_histories = []
+        self.no_context_predictor_error_history_step = 0
 
         for n in range(num_nets):
             c_index_input = self.predict_nets_input_compression_levels[n]
@@ -105,9 +109,16 @@ class RobotBrain(object):
                                                     num_outputs=dim_output,
                                                     learning_rate=self.predict_nets_learning_rate))
 
+            self.no_context_predictor_networks.append(_get_mlp(num_inputs=dim_input + dim_context,
+                                                               num_hidden=dim_hidden,
+                                                               num_outputs=dim_output,
+                                                               learning_rate=self.predict_nets_learning_rate))
+
             self.predictor_error_histories.append(np.zeros(max_history_length))
+            self.no_context_predictor_error_histories.append(np.zeros(max_history_length))
 
         self.averaged_predictor_error_histories = np.zeros((len(autoenc_heirarchy_compression), max_history_length))
+        self.averaged_no_context_predictor_error_histories = np.zeros((len(autoenc_heirarchy_compression), max_history_length))
 
         # ***** other *****
 
@@ -115,16 +126,25 @@ class RobotBrain(object):
         self.steps = 0
 
     def get_error_names_histories(self):
+
         error_names_autoenc = []
         for net_index in range(len(self.autoenc_networks)):
             error_names_autoenc.append('autoenc_' + str(net_index))
         error_histories_autoenc = self.averaged_autoenc_error_histories[:, self.error_histories_average_steps:self.autoenc_error_history_step]
+
         error_names_predictor = []
         for net_index in range(len(self.predictor_networks)):
             error_names_predictor.append('predictor_' + str(net_index))
         error_histories_predictor = self.averaged_predictor_error_histories[:, self.error_histories_average_steps:self.predictor_error_history_step]
 
-        return error_names_autoenc, error_histories_autoenc, error_names_predictor, error_histories_predictor
+        error_names_no_context_predictor = []
+        for net_index in range(len(self.predictor_networks)):
+            error_names_no_context_predictor.append('no_context_predictor_' + str(net_index))
+        error_histories_no_context_predictor = self.averaged_no_context_predictor_error_histories[:, self.error_histories_average_steps:self.no_context_predictor_error_history_step]
+
+        return error_names_autoenc, error_histories_autoenc, \
+               error_names_predictor, error_histories_predictor,\
+               error_names_no_context_predictor, error_histories_no_context_predictor
 
     def get_autoenc_images(self):
         return self.autoenc_images
@@ -187,7 +207,6 @@ class RobotBrain(object):
                                         self.predictor_training_histories[c_index_context][dt + dt_context, :]))
             net_output = self.predictor_training_histories[c_index_output][dt, :]
 
-            # TODO evaluate first, store error
             net_output_eval = net.evaluate(net_input)
             error = net_output - net_output_eval
             error = np.mean(np.fabs(error))
@@ -205,6 +224,39 @@ class RobotBrain(object):
             net_index += 1
 
         self.predictor_error_history_step += 1
+
+        # NO CONTEXT:
+
+        net_index = 0
+        for net in self.no_context_predictor_networks:
+            dt = self.predict_time_steps[net_index]
+            dt_context = self.predict_time_steps[net_index + 1]
+            c_index_input = self.predict_nets_input_compression_levels[net_index]
+            c_index_context = self.predict_nets_context_compression_levels[net_index]
+            c_index_output = self.predict_nets_output_compression_levels[net_index]
+
+            net_input = np.concatenate((self.predictor_training_histories[c_index_input][0, :],
+                                        0.5 * np.ones(self.compression_levels_dimensions[c_index_context])))
+            net_output = self.predictor_training_histories[c_index_output][dt, :]
+
+            net_output_eval = net.evaluate(net_input)
+            error = net_output - net_output_eval
+            error = np.mean(np.fabs(error))
+
+            e_step = self.no_context_predictor_error_history_step
+            self.no_context_predictor_error_histories[net_index][e_step] = error
+            if e_step > self.error_histories_average_steps:
+                e_ave = self.error_histories_average_steps
+                mean_error = np.mean(self.no_context_predictor_error_histories[net_index][e_step - e_ave:e_step])
+                self.averaged_no_context_predictor_error_histories[net_index][e_step] = mean_error
+
+            if self.steps < self.predictor_learning_disable_step:
+                net.train(net_input, net_output)
+
+            net_index += 1
+
+        self.no_context_predictor_error_history_step += 1
+
 
         if self.steps % self.save_steps == 0:
             print 'saving autoencoders...'
