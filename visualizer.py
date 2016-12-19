@@ -126,17 +126,12 @@ class Visualizer(object):
             print error_name
             print error_history.shape
             self.ax.cla()
-            self.ax.plot(error_history)
-            self.fig.savefig(self.plots_folder + '/' + error_name + '.png', dpi=100)
+            self.ax.plot(error_history, 'b-')
 
-        for k in range(len(error_names_no_context_predictor)):
-            error_name = error_names_no_context_predictor[k]
-            error_history = error_histories_no_context_predictor[k, :]
-            print error_name
-            print error_history.shape
-            self.ax.cla()
-            self.ax.plot(error_history)
-            self.fig.savefig(self.plots_folder + '/' + error_name + '.png', dpi=100)
+            error_name_nc = error_names_no_context_predictor[k]
+            error_history_nc = error_histories_no_context_predictor[k, :]
+            self.ax.plot(error_history_nc, 'r-')
+            self.fig.savefig(self.plots_folder + '/' + error_name + '_' + error_name_nc + '.png', dpi=100)
 
     def visualize(self, robot_sensors, robot_brain, robot_model, robot_environment):
         if self.frames % self.image_display_frames == 0:
