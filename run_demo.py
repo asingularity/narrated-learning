@@ -39,7 +39,9 @@ def get_brain_params():
         'error_average_steps': 4000,
         'save_steps': 100000,
         'sensors_params': get_sensors_params(),
-        'save_folder': '/home/petre/projects/NL/plots/'
+        'save_folder': '/home/petre/projects/NL/plots/',
+        'load_autoenc_from_file': True,
+        'load_autoenc_filename': '/home/petre/projects/NL/saved/autoencoders_b5ba0ea741e3f4c73d28f3723797f788e489c8a1.pkl'
     }
     return params
 

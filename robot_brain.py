@@ -32,7 +32,6 @@ class RobotBrain(object):
         self.save_steps = params['save_steps']
         self.autoenc_learning_rate = params['autoenc_learning_rate']
         self.save_folder = params['save_folder']
-        self.autoenc_learning_disable_step = params['autoenc_learning_disable_step']
 
         layer_index = 0
         layer_num_inputs = num_sensory_inputs
@@ -54,10 +53,12 @@ class RobotBrain(object):
             compression_levels_dimensions.append(layer_num_hidden)
 
             print 'autoenc layer ', layer_index, '[' + str(layer_num_inputs) + '] -> [' + str(layer_num_hidden) + '] -> [' + str(layer_num_outputs) + ']'
-            self.autoenc_networks.append(_get_mlp(num_inputs=layer_num_inputs,
-                                                  num_hidden=layer_num_hidden,
-                                                  num_outputs=layer_num_outputs,
-                                                  learning_rate=self.autoenc_learning_rate))
+
+            if not params['load_autoenc_from_file']:
+                self.autoenc_networks.append(_get_mlp(num_inputs=layer_num_inputs,
+                                                      num_hidden=layer_num_hidden,
+                                                      num_outputs=layer_num_outputs,
+                                                      learning_rate=self.autoenc_learning_rate))
 
             layer_index += 1
             layer_num_inputs = layer_num_hidden
@@ -66,6 +67,14 @@ class RobotBrain(object):
 
         self.averaged_autoenc_error_histories = np.zeros((len(autoenc_heirarchy_compression), max_history_length))
         self.autoenc_images = np.zeros((len(autoenc_heirarchy_compression), num_sensory_inputs))
+
+        if params['load_autoenc_from_file']:
+            self.autoenc_learning_disable_step = -1
+            f = open(params['load_autoenc_filename'], 'r')
+            self.autoenc_networks = pickle.load(f)
+            f.close()
+        else:
+            self.autoenc_learning_disable_step = params['autoenc_learning_disable_step']
 
         # ***** prediction nets *****
 
@@ -100,6 +109,7 @@ class RobotBrain(object):
             dim_output = compression_levels_dimensions[c_index_output]
 
             dim_hidden = params['predict_nets_hidden_dim']
+            #dim_hidden = int(0.5 * dim_input)
 
             # 0 [40], 1 [20] -> 0 [40]
             print 'predictor layer ', layer_index, '[' + str(dim_input) + '], [' + str(dim_context) + '] -> (' + str(dim_hidden) + ') -> [' + str(dim_output) + ']'
