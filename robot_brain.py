@@ -67,6 +67,7 @@ class RobotBrain(object):
 
         self.averaged_autoenc_error_histories = np.zeros((len(autoenc_heirarchy_compression), max_history_length))
         self.autoenc_images = np.zeros((len(autoenc_heirarchy_compression), num_sensory_inputs))
+        self.ctx_predictor_debug_images = np.zeros((5, num_sensory_inputs))
 
         if params['load_autoenc_from_file']:
             self.autoenc_learning_disable_step = -1
@@ -159,6 +160,9 @@ class RobotBrain(object):
     def get_autoenc_images(self):
         return self.autoenc_images
 
+    def get_predictor_images(self):
+        return self.ctx_predictor_debug_images
+
     def process_input(self, robot_sensors):
         rays = robot_sensors.get_rays()
         ray_radians = rays['ray_radians']
@@ -231,6 +235,12 @@ class RobotBrain(object):
             if self.steps < self.predictor_learning_disable_step:
                 net.train(net_input, net_output)
 
+            if net_index == 0:
+                self.ctx_predictor_debug_images[0, :] = self.predictor_training_histories[c_index_input][0, :]
+                self.ctx_predictor_debug_images[1, :] = self.predictor_training_histories[c_index_input][dt + dt_context, :]
+                self.ctx_predictor_debug_images[2, :] = net_output[:]
+                self.ctx_predictor_debug_images[3, :] = net_output_eval[:]
+
             net_index += 1
 
         self.predictor_error_history_step += 1
@@ -262,6 +272,9 @@ class RobotBrain(object):
 
             if self.steps < self.predictor_learning_disable_step:
                 net.train(net_input, net_output)
+
+            if net_index == 0:
+                self.ctx_predictor_debug_images[4, :] = net_output_eval[:]
 
             net_index += 1
 

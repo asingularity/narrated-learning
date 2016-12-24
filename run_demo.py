@@ -33,15 +33,15 @@ def get_brain_params():
         'predict_nets_input_compression_levels':   [0, 1, 2],
         'predict_nets_context_compression_levels': [1, 2, 3],
         'predict_nets_output_compression_levels':  [0, 1, 2],
-        'predict_nets_learning_rate': 0.01,
-        'predict_nets_hidden_dim': 100,
-        'predict_nets_learning_disable_step': 2000000,
-        'error_average_steps': 4000,
+        'predict_nets_learning_rate': 0.001,
+        'predict_nets_hidden_dim': 400,
+        'predict_nets_learning_disable_step': 4000000,
+        'error_average_steps': 50000,
         'save_steps': 100000,
         'sensors_params': get_sensors_params(),
-        'save_folder': '/home/petre/projects/NL/plots/',
+        'save_folder': '/home/redpanda/projects/NL/plots/',
         'load_autoenc_from_file': True,
-        'load_autoenc_filename': '/home/petre/projects/NL/saved/autoencoders_b5ba0ea741e3f4c73d28f3723797f788e489c8a1.pkl'
+        'load_autoenc_filename': '/home/redpanda/projects/NL/saved/autoencoders_b5ba0ea741e3f4c73d28f3723797f788e489c8a1.pkl'
     }
     return params
 
@@ -109,13 +109,13 @@ def get_evaluator_params():
 def get_visualizer_params():
     params = {
         'fps_display_interval': 3,
-        'image_display_frames': 1000,
+        'image_display_frames': 500,
         'plot_brain_error_frames': 25000,
         'waitKey_time': 1,
         'scale_topdown_factor': 10,
         'scale_camera_factor': 20,
         'no_wall_ray_color': 0.1,
-        'plots_folder': '/home/petre/projects/NL/plots/'
+        'plots_folder': '/home/redpanda/projects/NL/plots/'
     }
     return params
 

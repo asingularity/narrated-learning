@@ -59,6 +59,11 @@ class Visualizer(object):
         resized_autoenc = cv2.resize(src=autoenc_images, dsize=(0, 0), fx=self.scale_camera_factor, fy=self.scale_camera_factor, interpolation=cv2.INTER_NEAREST)
         cv2.imshow('autoenc', resized_autoenc)
 
+        predictor_debug_images = robot_brain.get_predictor_images()
+        resized_predictor_debug_images = cv2.resize(src=predictor_debug_images, dsize=(0, 0), fx=self.scale_camera_factor,
+                                     fy=self.scale_camera_factor, interpolation=cv2.INTER_NEAREST)
+        cv2.imshow('ctx_predictor_debug_images', resized_predictor_debug_images)
+
         im[round_y, round_x] = 1.0
 
         resized_image = cv2.resize(src=im, dsize=(0, 0), fx=self.scale_topdown_factor, fy=self.scale_topdown_factor, interpolation=cv2.INTER_NEAREST)
