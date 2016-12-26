@@ -1,7 +1,8 @@
 
 class PerformanceEvaluator(object):
     def __init__(self, params):
-        pass
+        self.t = 0
+        self.run_time = params['run_time']
 
     def finished(self):
         return False

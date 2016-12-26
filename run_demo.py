@@ -8,6 +8,8 @@ from performance_evaluator import PerformanceEvaluator
 from visualizer import Visualizer
 
 
+MAX_HISTORY_LENGTH = 5000000
+
 def get_model_params():
     params = {
         'max_angular_velocity': 0.2,
@@ -26,17 +28,18 @@ def get_sensors_params():
 
 def get_brain_params():
     params = {
+        'max_history_length': MAX_HISTORY_LENGTH,
+        'test_predictor_every_k_steps': 100,
         'autoenc_heirarchy_compression': [0.5, 0.5, 0.5],
         'autoenc_learning_rate': 0.01,
         'autoenc_learning_disable_step': 2000000,
+        'predict_nets_training_interval': 25000,
         'predict_time_steps': [1, 2, 4, 8],
         'predict_nets_input_compression_levels':   [0, 1, 2],
         'predict_nets_context_compression_levels': [1, 2, 3],
         'predict_nets_output_compression_levels':  [0, 1, 2],
-        'predict_nets_learning_rate': 0.001,
-        'predict_nets_hidden_dim': 400,
         'predict_nets_learning_disable_step': 4000000,
-        'error_average_steps': 50000,
+        'error_average_steps': 1000, # 50000
         'save_steps': 100000,
         'sensors_params': get_sensors_params(),
         'save_folder': '/home/redpanda/projects/NL/plots/',
@@ -102,6 +105,7 @@ def get_environment_params():
 
 def get_evaluator_params():
     params = {
+        'run_time': MAX_HISTORY_LENGTH
     }
     return params
 

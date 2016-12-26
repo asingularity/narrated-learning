@@ -1,6 +1,7 @@
 import pickle
 from PVM.PVM_framework import MLP
 import numpy as np
+from sklearn.neighbors import KDTree
 
 
 def _get_mlp(num_inputs, num_hidden, num_outputs, learning_rate):
@@ -28,11 +29,11 @@ class RobotBrain(object):
         num_sensory_inputs = sensors_params['num_rays']
         autoenc_heirarchy_compression = params['autoenc_heirarchy_compression']
         error_average_steps = params['error_average_steps']
-        max_history_length = 100000000
+        max_history_length = params['max_history_length']
         self.save_steps = params['save_steps']
         self.autoenc_learning_rate = params['autoenc_learning_rate']
         self.save_folder = params['save_folder']
-
+        self.test_predictor_every_k_steps = params['test_predictor_every_k_steps']
         layer_index = 0
         layer_num_inputs = num_sensory_inputs
 
@@ -65,6 +66,7 @@ class RobotBrain(object):
 
             self.autoenc_error_histories.append(np.zeros(max_history_length))
 
+        self.max_history_length = max_history_length
         self.averaged_autoenc_error_histories = np.zeros((len(autoenc_heirarchy_compression), max_history_length))
         self.autoenc_images = np.zeros((len(autoenc_heirarchy_compression), num_sensory_inputs))
         self.ctx_predictor_debug_images = np.zeros((5, num_sensory_inputs))
@@ -83,17 +85,22 @@ class RobotBrain(object):
         self.predict_nets_input_compression_levels = params['predict_nets_input_compression_levels']
         self.predict_nets_context_compression_levels = params['predict_nets_context_compression_levels']
         self.predict_nets_output_compression_levels = params['predict_nets_output_compression_levels']
-        self.predict_nets_learning_rate = params['predict_nets_learning_rate']
         self.predictor_learning_disable_step = params['predict_nets_learning_disable_step']
+        self.predict_nets_training_interval = params['predict_nets_training_interval']
+        self.concat_predictor_input_histories = None
+        self.predictor_output_histories = None
 
         num_nets = len(self.predict_nets_input_compression_levels)
         self.predictor_networks = []
         self.no_context_predictor_networks = []
 
-        self.predictor_training_history_length = np.sum(np.array(self.predict_time_steps))
+        # TODO: this needs to be all history
+        self.predictor_training_history_length = max_history_length
+        # np.sum(np.array(self.predict_time_steps))
         self.predictor_training_histories = []
         for dim in compression_levels_dimensions:
             self.predictor_training_histories.append(np.zeros((self.predictor_training_history_length, dim)))
+        self.predictor_training_history_step = 0
 
         self.predictor_error_histories = []
         self.predictor_error_history_step = 0
@@ -109,22 +116,11 @@ class RobotBrain(object):
             dim_context = compression_levels_dimensions[c_index_context]
             dim_output = compression_levels_dimensions[c_index_output]
 
-            dim_hidden = params['predict_nets_hidden_dim']
-            #dim_hidden = int(0.5 * dim_input)
+            # create KD tree later, after some data is present
+            # data storage created above
+            # what happens here? context and no context predictors? nothing for now, except errors initialized:
 
-            # 0 [40], 1 [20] -> 0 [40]
-            print 'predictor layer ', layer_index, '[' + str(dim_input) + '], [' + str(dim_context) + '] -> (' + str(dim_hidden) + ') -> [' + str(dim_output) + ']'
-
-            self.predictor_networks.append(_get_mlp(num_inputs=dim_input + dim_context,
-                                                    num_hidden=dim_hidden,
-                                                    num_outputs=dim_output,
-                                                    learning_rate=self.predict_nets_learning_rate))
-
-            self.no_context_predictor_networks.append(_get_mlp(num_inputs=dim_input + dim_context,
-                                                               num_hidden=dim_hidden,
-                                                               num_outputs=dim_output,
-                                                               learning_rate=self.predict_nets_learning_rate))
-
+            self.predictor_networks.append(None)
             self.predictor_error_histories.append(np.zeros(max_history_length))
             self.no_context_predictor_error_histories.append(np.zeros(max_history_length))
 
@@ -169,12 +165,9 @@ class RobotBrain(object):
         ray_colors = rays['ray_colors']
         ray_lengths = rays['ray_lengths']
 
-        for m_index in range(len(self.predictor_training_histories)):
-            self.predictor_training_histories[m_index] = np.roll(self.predictor_training_histories[m_index], -1, 0)
-
         net_input = ray_colors.copy()
         net_index = 0
-        self.predictor_training_histories[0][-1, :] = net_input[:]
+        self.predictor_training_histories[0][self.predictor_training_history_step, :] = net_input[:]
 
         for net in self.autoenc_networks:
             net_output = net.evaluate(net_input)
@@ -204,82 +197,82 @@ class RobotBrain(object):
 
             # copy necessary here
             net_input = net.layers[1]['activation'][:-1].copy()
-            self.predictor_training_histories[net_index + 1][-1, :] = net_input[:]
+            self.predictor_training_histories[net_index + 1][self.predictor_training_history_step, :] = net_input[:]
             net_index += 1
 
+        self.predictor_training_history_step += 1
         self.autoenc_error_history_step += 1
 
-        net_index = 0
-        for net in self.predictor_networks:
-            dt = self.predict_time_steps[net_index]
+        num_nets = len(self.predictor_networks)
+
+        for net_index in range(num_nets):
+            dt_output = self.predict_time_steps[net_index]
             dt_context = self.predict_time_steps[net_index + 1]
             c_index_input = self.predict_nets_input_compression_levels[net_index]
             c_index_context = self.predict_nets_context_compression_levels[net_index]
             c_index_output = self.predict_nets_output_compression_levels[net_index]
+            t_input = self.predictor_training_history_step - dt_context - 1
 
-            net_input = np.concatenate((self.predictor_training_histories[c_index_input][0, :],
-                                        self.predictor_training_histories[c_index_context][dt + dt_context, :]))
-            net_output = self.predictor_training_histories[c_index_output][dt, :]
+            net_input = np.concatenate((self.predictor_training_histories[c_index_input][t_input, :],
+                                        self.predictor_training_histories[c_index_context][t_input + dt_context, :]))
 
-            net_output_eval = net.evaluate(net_input)
-            error = net_output - net_output_eval
-            error = np.mean(np.fabs(error))
+            net_output = self.predictor_training_histories[c_index_output][t_input + dt_output, :]
 
-            e_step = self.predictor_error_history_step
-            self.predictor_error_histories[net_index][e_step] = error
-            if e_step > self.error_histories_average_steps:
-                e_ave = self.error_histories_average_steps
-                mean_error = np.mean(self.predictor_error_histories[net_index][e_step - e_ave:e_step])
-                self.averaged_predictor_error_histories[net_index][e_step] = mean_error
+            if self.concat_predictor_input_histories is None:
+                self.concat_predictor_input_histories = [None] * num_nets
 
-            if self.steps < self.predictor_learning_disable_step:
-                net.train(net_input, net_output)
+            if self.concat_predictor_input_histories[net_index] is None:
+                self.concat_predictor_input_histories[net_index] = np.zeros((self.max_history_length, net_input.shape[0]))
 
-            if net_index == 0:
-                self.ctx_predictor_debug_images[0, :] = self.predictor_training_histories[c_index_input][0, :]
-                self.ctx_predictor_debug_images[1, :] = self.predictor_training_histories[c_index_input][dt + dt_context, :]
-                self.ctx_predictor_debug_images[2, :] = net_output[:]
-                self.ctx_predictor_debug_images[3, :] = net_output_eval[:]
+            self.concat_predictor_input_histories[net_index][self.predictor_training_history_step, :] = net_input[:]
 
-            net_index += 1
+            if self.predictor_output_histories is None:
+                self.predictor_output_histories = [None] * num_nets
 
-        self.predictor_error_history_step += 1
+            if self.predictor_output_histories[net_index] is None:
+                self.predictor_output_histories[net_index] = np.zeros((self.max_history_length, net_output.shape[0]))
 
-        # NO CONTEXT:
+            self.predictor_output_histories[net_index][self.predictor_training_history_step, :] = net_output[:]
 
-        net_index = 0
-        for net in self.no_context_predictor_networks:
-            dt = self.predict_time_steps[net_index]
-            dt_context = self.predict_time_steps[net_index + 1]
-            c_index_input = self.predict_nets_input_compression_levels[net_index]
-            c_index_context = self.predict_nets_context_compression_levels[net_index]
-            c_index_output = self.predict_nets_output_compression_levels[net_index]
+            net = self.predictor_networks[net_index]
 
-            net_input = np.concatenate((self.predictor_training_histories[c_index_input][0, :],
-                                        0.5 * np.ones(self.compression_levels_dimensions[c_index_context])))
-            net_output = self.predictor_training_histories[c_index_output][dt, :]
+            if (net is not None) and (self.steps % self.test_predictor_every_k_steps == 0):
 
-            net_output_eval = net.evaluate(net_input)
-            error = net_output - net_output_eval
-            error = np.mean(np.fabs(error))
+                dist, ind = net.query([net_input], k=1)
+                #print 'query: ', dist, ind
 
-            e_step = self.no_context_predictor_error_history_step
-            self.no_context_predictor_error_histories[net_index][e_step] = error
-            if e_step > self.error_histories_average_steps:
-                e_ave = self.error_histories_average_steps
-                mean_error = np.mean(self.no_context_predictor_error_histories[net_index][e_step - e_ave:e_step])
-                self.averaged_no_context_predictor_error_histories[net_index][e_step] = mean_error
+                #net_output_eval = net.evaluate(net_input)
+                # TODO verify proper index here!!!!!!!!!!!!!!!!!!!!!
+                net_output_eval = self.predictor_output_histories[net_index][ind, :]
 
-            if self.steps < self.predictor_learning_disable_step:
-                net.train(net_input, net_output)
+                error = net_output - net_output_eval
+                error = np.mean(np.fabs(error))
+                e_step = self.predictor_error_history_step
+                self.predictor_error_histories[net_index][e_step] = error
 
-            if net_index == 0:
-                self.ctx_predictor_debug_images[4, :] = net_output_eval[:]
+                if net_index == num_nets - 1:
+                    self.predictor_error_history_step += 1
 
-            net_index += 1
+                if net_index == 0:
+                    self.ctx_predictor_debug_images[0, :] = self.predictor_training_histories[c_index_input][t_input, :]
+                    self.ctx_predictor_debug_images[1, :] = self.predictor_training_histories[c_index_input][t_input + dt_context, :]
+                    self.ctx_predictor_debug_images[2, :] = net_output[:]
+                    self.ctx_predictor_debug_images[3, :] = net_output_eval[:]
 
-        self.no_context_predictor_error_history_step += 1
+                if e_step > self.error_histories_average_steps:
+                    e_ave = self.error_histories_average_steps
+                    mean_error = np.mean(self.predictor_error_histories[net_index][e_step - e_ave:e_step])
+                    self.averaged_predictor_error_histories[net_index][e_step] = mean_error
 
+            if self.steps < self.predictor_learning_disable_step and self.predictor_training_history_step % self.predict_nets_training_interval == 0:
+                # TODO build KD tree here! full list not just current input, output!
+                print 'Building KD Tree for net: ', net_index, ' step: ', self.steps
+                self.predictor_networks[net_index] = KDTree(self.concat_predictor_input_histories[net_index][0:self.predictor_training_history_step, :])
+                # X : array-like, shape = [n_samples, n_features]
+
+                #self.predictor_networks[net_index] = train(net_input, net_output)
+
+        # TODO NO CONTEXT:
 
         if self.steps % self.save_steps == 0:
             print 'saving autoencoders...'
