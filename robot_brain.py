@@ -273,18 +273,18 @@ class RobotBrain(object):
                 #self.predictor_networks[net_index] = train(net_input, net_output)
 
         # TODO NO CONTEXT:
-
-        if self.steps % self.save_steps == 0:
-            print 'saving autoencoders...'
-            f = open(self.save_folder + '/autoencoders.pkl', 'w')
-            pickle.dump(self.autoenc_networks, f)
-            f.close()
-            print 'done saving autoencoders.'
-            print 'saving predictors...'
-            f = open(self.save_folder + '/predictors.pkl', 'w')
-            pickle.dump(self.predictor_networks, f)
-            f.close()
-            print 'done saving predictors.'
+        if self.save_steps is not None:
+            if self.steps % self.save_steps == 0:
+                print 'saving autoencoders...'
+                f = open(self.save_folder + '/autoencoders.pkl', 'w')
+                pickle.dump(self.autoenc_networks, f)
+                f.close()
+                print 'done saving autoencoders.'
+                print 'saving predictors...'
+                f = open(self.save_folder + '/predictors.pkl', 'w')
+                pickle.dump(self.predictor_networks, f)
+                f.close()
+                print 'done saving predictors.'
 
         #self.last_sensory_input = current_sensor_input
 

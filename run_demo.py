@@ -40,7 +40,7 @@ def get_brain_params():
         'predict_nets_output_compression_levels':  [0, 1, 2],
         'predict_nets_learning_disable_step': 4000000,
         'error_average_steps': 1000, # 50000
-        'save_steps': 100000,
+        'save_steps': None, #100000,
         'sensors_params': get_sensors_params(),
         'save_folder': '/home/redpanda/projects/NL/plots/',
         'load_autoenc_from_file': True,
