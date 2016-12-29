@@ -1,7 +1,8 @@
 import pickle
 from PVM.PVM_framework import MLP
 import numpy as np
-from sklearn.neighbors import KDTree
+#from sklearn.neighbors import KDTree
+from brute_force_knn import knn as KDTree
 
 
 def _get_mlp(num_inputs, num_hidden, num_outputs, learning_rate):
@@ -266,7 +267,8 @@ class RobotBrain(object):
 
             if self.steps < self.predictor_learning_disable_step and self.predictor_training_history_step % self.predict_nets_training_interval == 0:
                 # TODO build KD tree here! full list not just current input, output!
-                print 'Building KD Tree for net: ', net_index, ' step: ', self.steps
+                if self.predict_nets_training_interval > 1:
+                    print 'Building KD Tree for net: ', net_index, ' step: ', self.steps
                 self.predictor_networks[net_index] = KDTree(self.concat_predictor_input_histories[net_index][0:self.predictor_training_history_step, :])
                 # X : array-like, shape = [n_samples, n_features]
 

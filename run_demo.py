@@ -29,16 +29,16 @@ def get_sensors_params():
 def get_brain_params():
     params = {
         'max_history_length': MAX_HISTORY_LENGTH,
-        'test_predictor_every_k_steps': 100,
         'autoenc_heirarchy_compression': [0.5, 0.5, 0.5],
         'autoenc_learning_rate': 0.01,
         'autoenc_learning_disable_step': 2000000,
-        'predict_nets_training_interval': 25000,
+        'predict_nets_training_interval': 1,
         'predict_time_steps': [1, 2, 4, 8],
         'predict_nets_input_compression_levels':   [0, 1, 2],
         'predict_nets_context_compression_levels': [1, 2, 3],
         'predict_nets_output_compression_levels':  [0, 1, 2],
         'predict_nets_learning_disable_step': 4000000,
+        'test_predictor_every_k_steps': 100,
         'error_average_steps': 1000, # 50000
         'save_steps': None, #100000,
         'sensors_params': get_sensors_params(),
