@@ -12,7 +12,7 @@ MAX_HISTORY_LENGTH = 5000000
 
 def get_model_params():
     params = {
-        'max_angular_velocity': 0.2,
+        'max_angular_velocity': 0.2, #0.2 or 0.1,
         'linear_velocity': 0.05
     }
     return params
@@ -34,12 +34,12 @@ def get_brain_params():
         'autoenc_learning_disable_step': 2000000,
         'predict_nets_training_interval': 1,
         'predict_time_steps': [1, 2, 4, 8],
-        'predict_nets_input_compression_levels':   [0, 1, 2],
-        'predict_nets_context_compression_levels': [1, 2, 3],
-        'predict_nets_output_compression_levels':  [0, 1, 2],
+        'predict_nets_input_compression_levels':   [2, 2, 2],
+        'predict_nets_context_compression_levels': [3, 3, 3],
+        'predict_nets_output_compression_levels':  [2, 2, 2],
         'predict_nets_learning_disable_step': 4000000,
-        'test_predictor_every_k_steps': 100,
-        'error_average_steps': 1000, # 50000
+        'test_predictor_every_k_steps': 50,
+        'error_average_steps': 2000, # 50000
         'save_steps': None, #100000,
         'sensors_params': get_sensors_params(),
         'save_folder': '/home/redpanda/projects/NL/plots/',
@@ -113,8 +113,8 @@ def get_evaluator_params():
 def get_visualizer_params():
     params = {
         'fps_display_interval': 3,
-        'image_display_frames': 500,
-        'plot_brain_error_frames': 25000,
+        'image_display_frames': 500, #500,
+        'plot_brain_error_frames': 10000,
         'waitKey_time': 1,
         'scale_topdown_factor': 10,
         'scale_camera_factor': 20,

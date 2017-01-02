@@ -110,17 +110,25 @@ class RobotEnvironment(object):
         self.round_y = int(self.r_y)
 
         if self.round_x > self.W - 1:
+            #print 'self.round_x > self.W - 1'
             self.round_x = self.W - 1
             self.r_x = self.round_x
+            self.r_theta = pi
         if self.round_x < 0:
+            #print 'self.round_x < 0'
             self.round_x = 0
             self.r_x = self.round_x
+            self.r_theta = 0
         if self.round_y > self.H - 1:
+            #print 'self.round_y > self.H - 1'
             self.round_y = self.H - 1
             self.r_y = self.round_y
+            self.r_theta = 3.0 * pi / 2.0
         if self.round_y < 0:
+            #print 'self.round_y < 0'
             self.round_y = 0
             self.r_y = self.round_y
+            self.r_theta = pi / 2.0
 
         self.nonzero_tiles = self._get_nonzero_tiles()
 

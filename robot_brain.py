@@ -1,6 +1,7 @@
 import pickle
 from PVM.PVM_framework import MLP
 import numpy as np
+np.set_printoptions(suppress=True)
 #from sklearn.neighbors import KDTree
 from brute_force_knn import knn as KDTree
 
@@ -138,17 +139,17 @@ class RobotBrain(object):
         error_names_autoenc = []
         for net_index in range(len(self.autoenc_networks)):
             error_names_autoenc.append('autoenc_' + str(net_index))
-        error_histories_autoenc = self.averaged_autoenc_error_histories[:, self.error_histories_average_steps:self.autoenc_error_history_step]
+        error_histories_autoenc = self.averaged_autoenc_error_histories[:, self.error_histories_average_steps + 1:self.autoenc_error_history_step]
 
         error_names_predictor = []
         for net_index in range(len(self.predictor_networks)):
             error_names_predictor.append('predictor_' + str(net_index))
-        error_histories_predictor = self.averaged_predictor_error_histories[:, self.error_histories_average_steps:self.predictor_error_history_step]
+        error_histories_predictor = self.averaged_predictor_error_histories[:, self.error_histories_average_steps + 1:self.predictor_error_history_step]
 
         error_names_no_context_predictor = []
         for net_index in range(len(self.predictor_networks)):
             error_names_no_context_predictor.append('no_context_predictor_' + str(net_index))
-        error_histories_no_context_predictor = self.averaged_no_context_predictor_error_histories[:, self.error_histories_average_steps:self.no_context_predictor_error_history_step]
+        error_histories_no_context_predictor = self.averaged_no_context_predictor_error_histories[:, self.error_histories_average_steps + 1:self.no_context_predictor_error_history_step]
 
         return error_names_autoenc, error_histories_autoenc, \
                error_names_predictor, error_histories_predictor,\
@@ -225,6 +226,13 @@ class RobotBrain(object):
             if self.concat_predictor_input_histories[net_index] is None:
                 self.concat_predictor_input_histories[net_index] = np.zeros((self.max_history_length, net_input.shape[0]))
 
+            debug_print_every_step = False
+            if debug_print_every_step:
+                print 'input level: ', c_index_input, 'context level: ', c_index_context, 'output level: ', c_index_output
+                print 'input time: ', t_input, 'context time: ', t_input + dt_context, 'output time: ', t_input + dt_output
+                print 'net_input: ', net_index, net_input.shape[0], net_input
+                print 'net_input: ', net_index, net_output.shape[0], net_output
+
             self.concat_predictor_input_histories[net_index][self.predictor_training_history_step, :] = net_input[:]
 
             if self.predictor_output_histories is None:
@@ -254,7 +262,8 @@ class RobotBrain(object):
                 if net_index == num_nets - 1:
                     self.predictor_error_history_step += 1
 
-                if net_index == 0:
+                enable_ctx_predictor_debug = False
+                if net_index == 0 and enable_ctx_predictor_debug:
                     self.ctx_predictor_debug_images[0, :] = self.predictor_training_histories[c_index_input][t_input, :]
                     self.ctx_predictor_debug_images[1, :] = self.predictor_training_histories[c_index_input][t_input + dt_context, :]
                     self.ctx_predictor_debug_images[2, :] = net_output[:]
