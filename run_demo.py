@@ -8,7 +8,7 @@ from performance_evaluator import PerformanceEvaluator
 from visualizer import Visualizer
 
 
-MAX_HISTORY_LENGTH = 2000000
+MAX_HISTORY_LENGTH = 4000000
 
 def get_model_params():
     params = {
@@ -33,17 +33,17 @@ def get_brain_params():
         'autoenc_learning_rate': 0.01,
         'autoenc_learning_disable_step': 2000000,
         'predict_nets_training_interval': 1,
-        'predict_time_steps': [4, 8, 16, 32],
+        'predict_time_steps': [8, 16, 32, 64],
         'predict_nets_input_compression_levels':   [3, 3, 3],
         'predict_nets_context_compression_levels': [3, 3, 3],
         'predict_nets_output_compression_levels':  [3, 3, 3],
-        'predict_nets_learning_disable_step': 2000000,
+        'predict_nets_learning_disable_step': 4000000,
         'test_predictor_every_k_steps': 50,
         'error_average_steps': 4000, # 4000, 50000
         'save_steps': None, #100000,
         'sensors_params': get_sensors_params(),
         'save_folder': '/home/redpanda/projects/NL/plots/',
-        'load_autoenc_from_file': True,
+        'load_autoenc_from_file': True,  # if autoenc loaded from file, override autoenc_learning_disable_step = 0
         'load_autoenc_filename': '/home/redpanda/projects/NL/saved/autoencoders_b5ba0ea741e3f4c73d28f3723797f788e489c8a1.pkl'
     }
     return params
