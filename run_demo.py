@@ -9,6 +9,7 @@ from visualizer import Visualizer
 
 
 MAX_HISTORY_LENGTH = 4000000
+USERNAME = 'intec'
 
 def get_model_params():
     params = {
@@ -42,9 +43,9 @@ def get_brain_params():
         'error_average_steps': 4000, # 4000, 50000
         'save_steps': None, #100000,
         'sensors_params': get_sensors_params(),
-        'save_folder': '/home/redpanda/projects/NL/plots/',
+        'save_folder': '/home/' + USERNAME + '/projects/NL/plots/',
         'load_autoenc_from_file': True,  # if autoenc loaded from file, override autoenc_learning_disable_step = 0
-        'load_autoenc_filename': '/home/redpanda/projects/NL/saved/autoencoders_b5ba0ea741e3f4c73d28f3723797f788e489c8a1.pkl'
+        'load_autoenc_filename': '/home/' + USERNAME + '/projects/NL/saved/autoencoders_b5ba0ea741e3f4c73d28f3723797f788e489c8a1.pkl'
     }
     return params
 
@@ -119,7 +120,7 @@ def get_visualizer_params():
         'scale_topdown_factor': 10,
         'scale_camera_factor': 20,
         'no_wall_ray_color': 0.1,
-        'plots_folder': '/home/redpanda/projects/NL/plots/'
+        'plots_folder': '/home/' + USERNAME + '/projects/NL/plots/'
     }
     return params
 

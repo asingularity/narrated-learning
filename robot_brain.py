@@ -368,4 +368,12 @@ class RobotBrain(object):
 
         #self.last_sensory_input = current_sensor_input
 
+        if False:
+            if self.steps % 16 == 0:
+                print '----16'
+            if self.steps % 32 == 0:
+                print '--------32'
+            if self.steps % 64 == 0:
+                print '----------------64'
+
         self.steps += 1
