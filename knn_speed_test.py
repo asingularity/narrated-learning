@@ -5,7 +5,6 @@ from brute_force_knn import knn
 from sklearn.neighbors import KDTree
 from knn_cython import knn_query
 
-np.random.seed(0)
 
 def run_test_incremental():
     frames = 1000000
@@ -27,7 +26,7 @@ def run_test_incremental():
 
 def run_test_full(tree, test_seconds):
     data_frames = 1000000 * 2
-    dim = 60
+    dim = 10
     #data = 1.0 + 0.0 * np.random.random((data_frames, dim))
     data = np.random.random((data_frames, dim))
 
@@ -51,7 +50,8 @@ def run_test_full(tree, test_seconds):
     for frame in range(test_frames):
 
         dist, ind = knn_1.query([np.random.random(dim)], 1)
-        print dist, ind
+        if frame == 0:
+            print dist, ind
         if time.time() - last_time > 5:
             FPS = (frame - last_frame) * 1.0 / (time.time() - last_time)
             print 'frame: ', frame, 'FPS: ', FPS
@@ -63,7 +63,7 @@ def run_test_full(tree, test_seconds):
 
 def run_cython_knn_test(test_seconds):
     data_frames = 1000000 * 2
-    dim = 60
+    dim = 10
     data = np.random.random((data_frames, dim))
 
     start_time = time.time()
@@ -77,7 +77,8 @@ def run_cython_knn_test(test_seconds):
         query_data = np.random.random(dim)
 
         dist, ind = knn_query(data, query_data, data_frames, dim)
-        print dist, ind
+        if frame == 0:
+            print dist, ind
         if time.time() - last_time > 5:
             FPS = (frame - last_frame) * 1.0 / (time.time() - last_time)
             print 'frame: ', frame, 'FPS: ', FPS
@@ -89,7 +90,11 @@ def run_cython_knn_test(test_seconds):
 if __name__ == '__main__':
     test_seconds = 11
     #run_test_full(tree=True, test_seconds=test_seconds)
-    #run_test_full(tree=False, test_seconds=test_seconds)
+    np.random.seed(0)
+
+    run_test_full(tree=False, test_seconds=test_seconds)
+    np.random.seed(0)
+
     run_cython_knn_test(test_seconds=test_seconds)
 
     # TODO test scaling of training time for KDtree vs. data size
