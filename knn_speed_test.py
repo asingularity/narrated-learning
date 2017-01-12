@@ -89,8 +89,8 @@ def run_cython_knn_test(test_seconds):
 if __name__ == '__main__':
     test_seconds = 11
     #run_test_full(tree=True, test_seconds=test_seconds)
-    run_test_full(tree=False, test_seconds=test_seconds)
-    #run_cython_knn_test(test_seconds=test_seconds)
+    #run_test_full(tree=False, test_seconds=test_seconds)
+    run_cython_knn_test(test_seconds=test_seconds)
 
     # TODO test scaling of training time for KDtree vs. data size
     # TODO verify KDTree lookup: same neighbors as brute force for same random seed?

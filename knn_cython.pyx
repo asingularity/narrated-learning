@@ -1,21 +1,23 @@
 
+
 import numpy as np
 cimport numpy as np
 
 DTYPE = np.float64
 ctypedef np.float64_t DTYPE_t
 
+cimport cython
 
-
-
+@cython.boundscheck(False) # turn off bounds-checking for entire function
+@cython.wraparound(False)  # turn off negative index wrapping for entire function
 def knn_query(
           np.ndarray[DTYPE_t, ndim = 2] X,
           np.ndarray[DTYPE_t, ndim=1] input_vector,
           long num_points,
           long dim):
 
-    assert X.dtype == DTYPE
-    assert input_vector.dtype == DTYPE
+    #assert X.dtype == DTYPE
+    #assert input_vector.dtype == DTYPE
 
     cdef long pt_index, dim_index, min_index
     cdef DTYPE_t min_dist, diff, dist
