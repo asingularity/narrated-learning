@@ -4,6 +4,7 @@ import time
 from brute_force_knn import knn
 from sklearn.neighbors import KDTree
 from knn_cython import knn_query
+from knn_parallel import knn_query as knn_parallel_query
 
 
 def run_test_incremental():
@@ -26,7 +27,7 @@ def run_test_incremental():
 
 def run_test_full(tree, test_seconds):
     data_frames = 1000000 * 2
-    dim = 10
+    dim = 20
     #data = 1.0 + 0.0 * np.random.random((data_frames, dim))
     data = np.random.random((data_frames, dim))
 
@@ -61,9 +62,9 @@ def run_test_full(tree, test_seconds):
             return
 
 
-def run_cython_knn_test(test_seconds):
+def run_cython_knn_test(test_seconds, parallel=False):
     data_frames = 1000000 * 2
-    dim = 10
+    dim = 20
     data = np.random.random((data_frames, dim))
 
     start_time = time.time()
@@ -76,7 +77,10 @@ def run_cython_knn_test(test_seconds):
 
         query_data = np.random.random(dim)
 
-        dist, ind = knn_query(data, query_data, data_frames, dim)
+        if parallel:
+            dist, ind = knn_parallel_query(data, query_data, data_frames, dim)
+        else:
+            dist, ind = knn_query(data, query_data, data_frames, dim)
         if frame == 0:
             print dist, ind
         if time.time() - last_time > 5:
@@ -96,6 +100,7 @@ if __name__ == '__main__':
     np.random.seed(0)
 
     run_cython_knn_test(test_seconds=test_seconds)
+    run_cython_knn_test(test_seconds=test_seconds, parallel=True)
 
     # TODO test scaling of training time for KDtree vs. data size
     # TODO verify KDTree lookup: same neighbors as brute force for same random seed?
