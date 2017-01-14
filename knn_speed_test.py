@@ -66,7 +66,7 @@ def run_cython_knn_test(test_seconds, parallel=False):
     data_frames = 1000000 * 2
     dim = 20
     data = np.random.random((data_frames, dim))
-
+    tmp = np.zeros(data_frames).astype(np.float)
     start_time = time.time()
     last_time = time.time()
     last_frame = 0
@@ -78,7 +78,7 @@ def run_cython_knn_test(test_seconds, parallel=False):
         query_data = np.random.random(dim)
 
         if parallel:
-            dist, ind = knn_parallel_query(data, query_data, data_frames, dim)
+            dist, ind = knn_parallel_query(data, query_data, tmp, data_frames, dim)
         else:
             dist, ind = knn_query(data, query_data, data_frames, dim)
         if frame == 0:
@@ -91,16 +91,23 @@ def run_cython_knn_test(test_seconds, parallel=False):
         if time.time() - start_time > test_seconds:
             return
 
+
+def knn_save_test():
+    data_frames = 1000000 * 2
+    dim = 20
+    data = np.random.random((data_frames, dim))
+    np.savetxt('temp.dat', data)
+
+
 if __name__ == '__main__':
     test_seconds = 11
-    #run_test_full(tree=True, test_seconds=test_seconds)
     np.random.seed(0)
-
     run_test_full(tree=False, test_seconds=test_seconds)
     np.random.seed(0)
-
     run_cython_knn_test(test_seconds=test_seconds)
+    np.random.seed(0)
     run_cython_knn_test(test_seconds=test_seconds, parallel=True)
+
 
     # TODO test scaling of training time for KDtree vs. data size
     # TODO verify KDTree lookup: same neighbors as brute force for same random seed?

@@ -1,4 +1,5 @@
 
+from libc.math cimport fabs as c_fabs
 
 import numpy as np
 cimport numpy as np
@@ -30,7 +31,7 @@ def knn_query(
 
         for dim_index in range(dim):
             diff = X[pt_index, dim_index] - input_vector[dim_index]
-            dist = dist + abs(diff)
+            dist = dist + c_fabs(diff)
 
         if dist < min_dist:
             min_dist = dist
