@@ -5,6 +5,11 @@ from brute_force_knn import knn
 from sklearn.neighbors import KDTree
 from knn_cython import knn_query
 from knn_parallel import knn_query as knn_parallel_query
+import pickle
+from fast_save_matrix import savetxt
+from OLD_fast_save_matrix import savetxt as savetxt_old
+
+USERNAME = 'intec'
 
 
 def run_test_incremental():
@@ -92,23 +97,51 @@ def run_cython_knn_test(test_seconds, parallel=False):
             return
 
 
-def knn_save_test():
+def knn_save_test(optimized):
     data_frames = 1000000 * 2
     dim = 20
     data = np.random.random((data_frames, dim))
-    np.savetxt('temp.dat', data)
+    start_time = time.time()
+    print 'saving knn of size: ', data_frames, dim
+    if optimized == 3:
+        print '--- savetxt cython'
+        savetxt('temp.dat', data)
+    elif optimized == 2:
+        print '--- pickle'
+        f = open('temp.pkl', 'w')
+        pickle.dump(data, f)
+        f.close()
+    elif optimized == 1:
+        print '--- savetxt python'
+        savetxt_old('temp.dat', data)
+    else:
+        print '--- np.savetxt'
+        np.savetxt('temp.dat', data)
+    print '...done.'
 
+    print 'time: ', time.time() - start_time
 
 if __name__ == '__main__':
-    test_seconds = 11
-    np.random.seed(0)
-    run_test_full(tree=False, test_seconds=test_seconds)
-    np.random.seed(0)
-    run_cython_knn_test(test_seconds=test_seconds)
-    np.random.seed(0)
-    run_cython_knn_test(test_seconds=test_seconds, parallel=True)
+
+    test_save = True
+    test_run = True
+
+    if test_save:
+        np.random.seed(0)
+        knn_save_test(optimized=3)
+        np.random.seed(0)
+        knn_save_test(optimized=2)
+        np.random.seed(0)
+        knn_save_test(optimized=1)
+        np.random.seed(0)
+        knn_save_test(optimized=0)
 
 
-    # TODO test scaling of training time for KDtree vs. data size
-    # TODO verify KDTree lookup: same neighbors as brute force for same random seed?
-    # TODO ALSO try with real data here! in case it influences speed of build: YES IT DOES
+    if test_run:
+        test_seconds = 11
+        np.random.seed(0)
+        run_test_full(tree=False, test_seconds=test_seconds)
+        np.random.seed(0)
+        run_cython_knn_test(test_seconds=test_seconds)
+        np.random.seed(0)
+        run_cython_knn_test(test_seconds=test_seconds, parallel=True)
