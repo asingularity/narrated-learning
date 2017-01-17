@@ -141,8 +141,9 @@ class Visualizer(object):
             self.fig.savefig(self.plots_folder + '/' + error_name + '_' + error_name_nc + '.png', dpi=100)
 
     def visualize(self, robot_sensors, robot_brain, robot_model, robot_environment):
-        if self.frames % self.image_display_frames == 0:
-            self._display_graphic_map(robot_environment, robot_sensors, robot_brain)
+        if self.image_display_frames is not None:
+            if self.frames % self.image_display_frames == 0:
+                self._display_graphic_map(robot_environment, robot_sensors, robot_brain)
 
         if self.frames % self.plot_brain_error_frames == 0:
             self._plot_brain_errors(robot_brain)

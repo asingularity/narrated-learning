@@ -11,6 +11,7 @@ from visualizer import Visualizer
 MAX_HISTORY_LENGTH = 4000000
 USERNAME = 'intec'
 
+
 def get_model_params():
     params = {
         'max_angular_velocity': 0.25, #0.2 or 0.1,
@@ -41,7 +42,7 @@ def get_brain_params():
         'predict_nets_learning_disable_step': 4000000,
         'test_predictor_every_k_steps': 50,
         'error_average_steps': 4000, # 4000, 50000
-        'save_steps': None, #100000,
+        'save_steps': None,
         'sensors_params': get_sensors_params(),
         'save_folder': '/home/' + USERNAME + '/projects/NL/plots/',
         'load_autoenc_from_file': True,  # if autoenc loaded from file, override autoenc_learning_disable_step = 0
@@ -114,7 +115,7 @@ def get_evaluator_params():
 def get_visualizer_params():
     params = {
         'fps_display_interval': 3,
-        'image_display_frames': 500, #500,
+        'image_display_frames': None, #500,
         'plot_brain_error_frames': 5000, #10000,
         'waitKey_time': 1,
         'scale_topdown_factor': 10,
