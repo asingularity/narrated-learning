@@ -123,6 +123,7 @@ class Visualizer(object):
             print error_name
             print error_history.shape
             self.ax.cla()
+            self.ax.set_ylim([0, 0.12])
             self.ax.plot(error_history)
             self.fig.savefig(sim_folder_manager.get_plots_save_folder() + '/' + error_name + '.png', dpi=100)
 

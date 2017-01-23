@@ -241,6 +241,7 @@ class RobotBrain(object):
             for autoenc_params in params['autoencoders']:
                 autoencoders_list.append(Autoencoder(autoenc_params))
 
+        self.autoencoder_images = np.zeros((len(autoencoders_list), params['autoencoders'][0]['num_inputs']))
         for autoencoder in autoencoders_list:
             autoenc_sim_params = {}
             autoenc_sim_params['error_average_steps'] = params['error_average_steps']
@@ -290,14 +291,23 @@ class RobotBrain(object):
     def _process_autoencoders(self, autoencoders_list, net_input, sim_folder_manager):
         newest_states_list = [net_input.copy()]
 
+        net_index = 0
         for autoenc in autoencoders_list:
             hidden = autoenc.evaluate_and_store_error(net_input)
+
+            next_net_input = hidden.copy()
+            newest_states_list.append(hidden.copy())
+
+            for tmp_layer in range(net_index, -1, -1):  # [2, 1, 0] for net_index = 2
+                tmp_output = autoencoders_list[tmp_layer].net.evaluate_from_hidden(hidden)
+                hidden = tmp_output
+            self.autoencoder_images[net_index, :] = tmp_output[:]
 
             if self.autoencoders_training_time_range[0] <= self.t < self.autoencoders_training_time_range[1]:
                 autoenc.train(net_input)
 
-            net_input = hidden
-            newest_states_list.append(hidden.copy())
+            net_input = next_net_input
+            net_index += 1
 
         if self.autoencoders_save_every_k_steps is not None:
             if self.t % self.autoencoders_save_every_k_steps == 0 and self.t > 0:
@@ -357,7 +367,7 @@ class RobotBrain(object):
                error_names_no_context_predictor, error_histories_no_context_predictor
 
     def get_autoenc_images(self):
-        return self.autoenc_images
+        return self.autoencoder_images
 
     def get_predictor_images(self):
         return self.ctx_predictor_debug_images

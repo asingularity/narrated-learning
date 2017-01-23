@@ -41,7 +41,7 @@ def get_sim_folder_manager_params():
 def get_brain_params():
     params = {
         'max_history_length': MAX_HISTORY_LENGTH,
-        'error_average_steps': 5000,
+        'error_average_steps': 10000,
         'predictors_enable': False,
         'training_delay': 128,
         'autoencoders': [
@@ -135,8 +135,8 @@ def get_evaluator_params():
 def get_visualizer_params():
     params = {
         'fps_display_interval': 3,
-        'image_display_frames': None,
-        'plot_brain_error_frames': 5000,
+        'image_display_frames': 1000,
+        'plot_brain_error_frames': 10000,
         'waitKey_time': 1,
         'scale_topdown_factor': 10,
         'scale_camera_factor': 20,
