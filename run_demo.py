@@ -6,6 +6,7 @@ from robot_sensors import RobotSensors
 from robot_environment import RobotEnvironment
 from performance_evaluator import PerformanceEvaluator
 from visualizer import Visualizer
+from sim_folder_manager import SimFolderManager
 
 
 MAX_HISTORY_LENGTH = 4000000
@@ -14,7 +15,7 @@ USERNAME = 'intec'
 
 def get_model_params():
     params = {
-        'max_angular_velocity': 0.25, #0.2 or 0.1,
+        'max_angular_velocity': 0.25,
         'linear_velocity': 0.4
     }
     return params
@@ -28,25 +29,44 @@ def get_sensors_params():
     return params
 
 
+def get_sim_folder_manager_params():
+    params = {
+        'sim_prefix': 'test',
+        'sim_folders_path': '/home/' + USERNAME + '/projects/NL/sim/',
+        'scripts_folder_path': '/home/' + USERNAME + '/projects/NL/'
+    }
+    return params
+
+
 def get_brain_params():
     params = {
         'max_history_length': MAX_HISTORY_LENGTH,
-        'autoenc_heirarchy_compression': [0.5, 0.5, 0.5],
-        'autoenc_learning_rate': 0.01,
-        'autoenc_learning_disable_step': 2000000,
-        'predict_nets_training_interval': 1,
-        'predict_time_steps': [8, 16, 32, 64],
-        'predict_nets_input_compression_levels':   [3, 3, 3],
-        'predict_nets_context_compression_levels': [3, 3, 3],
-        'predict_nets_output_compression_levels':  [3, 3, 3],
-        'predict_nets_learning_disable_step': 4000000,
-        'test_predictor_every_k_steps': 50,
-        'error_average_steps': 4000, # 4000, 50000
-        'save_steps': None,
-        'sensors_params': get_sensors_params(),
-        'save_folder': '/home/' + USERNAME + '/projects/NL/plots/',
-        'load_autoenc_from_file': True,  # if autoenc loaded from file, override autoenc_learning_disable_step = 0
-        'load_autoenc_filename': '/home/' + USERNAME + '/projects/NL/saved/autoencoders_b5ba0ea741e3f4c73d28f3723797f788e489c8a1.pkl'
+        'error_average_steps': 4000,
+        'predictors_enable': False,
+        'training_delay': 128,
+        'autoencoders': [
+            {'num_inputs': 40, 'num_hidden': 20, 'learning_rate': 0.01},
+            {'num_inputs': 20, 'num_hidden': 10, 'learning_rate': 0.01},
+            {'num_inputs': 10, 'num_hidden': 5, 'learning_rate': 0.01}
+        ],
+        'autoencoders_training_time_range': [0, MAX_HISTORY_LENGTH],
+        'autoencoders_save_every_k_steps': 500000,
+        'autoencoders_enable_training': True,
+        'autoencoders_load_from_file': False,
+        'autoencoders_load_filename': '/home/' + USERNAME + '/projects/NL/sim/<none>/<none>.pkl',
+        'predictors': [
+            {'state_index_input': 3, 'state_index_context': 3, 'state_index_output': 3,
+             'dt_output': 8, 'dt_context': 16},
+            {'state_index_input': 3, 'state_index_context': 3, 'state_index_output': 3,
+             'dt_output': 16, 'dt_context': 32},
+            {'state_index_input': 3, 'state_index_context': 3, 'state_index_output': 3,
+             'dt_output': 32, 'dt_context': 64}
+        ],
+        'predictors_training_time_range': [0, MAX_HISTORY_LENGTH],
+        'predictors_save_every_k_steps': 500000,
+        'predictors_enable_training': True,
+        'predictors_load_from_file': False,
+        'predictors_load_filename': '/home/' + USERNAME + '/projects/NL/sim/<none>/<none>.pkl'
     }
     return params
 
@@ -115,13 +135,12 @@ def get_evaluator_params():
 def get_visualizer_params():
     params = {
         'fps_display_interval': 3,
-        'image_display_frames': None, #500,
-        'plot_brain_error_frames': 5000, #10000,
+        'image_display_frames': None,
+        'plot_brain_error_frames': 5000,
         'waitKey_time': 1,
         'scale_topdown_factor': 10,
         'scale_camera_factor': 20,
         'no_wall_ray_color': 0.1,
-        'plots_folder': '/home/' + USERNAME + '/projects/NL/plots/'
     }
     return params
 
@@ -133,7 +152,8 @@ def init_demo():
         'robot_sensors': RobotSensors(get_sensors_params()),
         'robot_environment': RobotEnvironment(get_environment_params()),
         'perf_eval': PerformanceEvaluator(get_evaluator_params()),
-        'visualizer': Visualizer(get_visualizer_params())
+        'visualizer': Visualizer(get_visualizer_params()),
+        'sim_folder_manager': SimFolderManager(get_sim_folder_manager_params())
     }
 
 
@@ -145,10 +165,11 @@ def run_demo(demo_components):
     robot_environment = demo_components['robot_environment']
     perf_eval = demo_components['perf_eval']
     visualizer = demo_components['visualizer']
+    sim_folder_manager = demo_components['sim_folder_manager']
 
     while not perf_eval.finished():
         robot_sensors.read_input(robot_environment)
-        robot_brain.process_input(robot_sensors)
+        robot_brain.process_input(robot_sensors, sim_folder_manager)
         robot_model.act_upon_processing(robot_brain)
         robot_environment.step_environment(robot_model, visualizer)
         perf_eval.evaluate(robot_sensors,
@@ -158,7 +179,10 @@ def run_demo(demo_components):
         visualizer.visualize(robot_sensors,
                              robot_brain,
                              robot_model,
-                             robot_environment)
+                             robot_environment,
+                             sim_folder_manager)
+
+    print 'Finished Simulation.'
 
 
 def demo():

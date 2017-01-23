@@ -22,7 +22,6 @@ class Visualizer(object):
         self.plot_brain_error_frames =params['plot_brain_error_frames']
         self.waitKey_time = params['waitKey_time']
         self.no_wall_ray_color = params['no_wall_ray_color']
-        self.plots_folder = params['plots_folder']
         self.linear_speed_from_key = 0.0
         self.angular_speed_from_key = 0.0
 
@@ -114,39 +113,40 @@ class Visualizer(object):
             if k == RIGHT:
                 self.angular_speed_from_key = 0.2
 
-    def _plot_brain_errors(self, robot_brain):
+    def _plot_brain_errors(self, robot_brain, sim_folder_manager):
         error_names_autoenc, error_histories_autoenc, error_names_predictor, error_histories_predictor, error_names_no_context_predictor, error_histories_no_context_predictor = robot_brain.get_error_names_histories()
         print self.frames
 
         for k in range(len(error_names_autoenc)):
             error_name = error_names_autoenc[k]
-            error_history = error_histories_autoenc[k, :]
+            error_history = error_histories_autoenc[k]
             print error_name
             print error_history.shape
             self.ax.cla()
             self.ax.plot(error_history)
-            self.fig.savefig(self.plots_folder + '/' + error_name + '.png', dpi=100)
+            self.fig.savefig(sim_folder_manager.get_plots_save_folder() + '/' + error_name + '.png', dpi=100)
 
-        for k in range(len(error_names_predictor)):
-            error_name = error_names_predictor[k]
-            error_history = error_histories_predictor[k, :]
-            print error_name
-            print error_history.shape
-            self.ax.cla()
-            self.ax.plot(error_history, 'b-')
+        if error_names_predictor is not None:
+            for k in range(len(error_names_predictor)):
+                error_name = error_names_predictor[k]
+                error_history = error_histories_predictor[k, :]
+                print error_name
+                print error_history.shape
+                self.ax.cla()
+                self.ax.plot(error_history, 'b-')
 
-            error_name_nc = error_names_no_context_predictor[k]
-            error_history_nc = error_histories_no_context_predictor[k, :]
-            self.ax.plot(error_history_nc, 'r-')
-            self.fig.savefig(self.plots_folder + '/' + error_name + '_' + error_name_nc + '.png', dpi=100)
+                error_name_nc = error_names_no_context_predictor[k]
+                error_history_nc = error_histories_no_context_predictor[k, :]
+                self.ax.plot(error_history_nc, 'r-')
+                self.fig.savefig(sim_folder_manager.get_plots_save_folder() + '/' + error_name + '_' + error_name_nc + '.png', dpi=100)
 
-    def visualize(self, robot_sensors, robot_brain, robot_model, robot_environment):
+    def visualize(self, robot_sensors, robot_brain, robot_model, robot_environment, sim_folder_manager):
         if self.image_display_frames is not None:
             if self.frames % self.image_display_frames == 0:
                 self._display_graphic_map(robot_environment, robot_sensors, robot_brain)
 
         if self.frames % self.plot_brain_error_frames == 0:
-            self._plot_brain_errors(robot_brain)
+            self._plot_brain_errors(robot_brain, sim_folder_manager)
 
         self._display_fps()
 
