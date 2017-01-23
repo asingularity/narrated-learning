@@ -63,7 +63,7 @@ def get_brain_params():
              'dt_output': 32, 'dt_context': 64}
         ],
         'predictors_training_time_range': [0, MAX_HISTORY_LENGTH],
-        'predictors_test_every_k_steps': None,
+        'predictors_test_every_k_steps': 50,
         'predictors_save_every_k_steps': 500000,
         'predictors_enable_training': True,
         'predictors_load_from_file': False,
@@ -137,7 +137,7 @@ def get_visualizer_params():
     params = {
         'fps_display_interval': 3,
         'image_display_frames': 1000,
-        'plot_brain_error_frames': 10000,
+        'plot_brain_error_frames': 50000,
         'waitKey_time': 1,
         'scale_topdown_factor': 10,
         'scale_camera_factor': 20,
