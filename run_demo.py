@@ -42,7 +42,7 @@ def get_brain_params():
     params = {
         'max_history_length': MAX_HISTORY_LENGTH,
         'error_average_steps': 10000,
-        'predictors_enable': False,
+        'predictors_enable': True,
         'training_delay': 128,
         'autoencoders': [
             {'num_inputs': 40, 'num_hidden': 20, 'learning_rate': 0.01},
@@ -50,10 +50,10 @@ def get_brain_params():
             {'num_inputs': 10, 'num_hidden': 5, 'learning_rate': 0.01}
         ],
         'autoencoders_training_time_range': [0, MAX_HISTORY_LENGTH],
-        'autoencoders_save_every_k_steps': 500000,
-        'autoencoders_enable_training': True,
-        'autoencoders_load_from_file': False,
-        'autoencoders_load_filename': '/home/' + USERNAME + '/projects/NL/sim/<none>/<none>.pkl',
+        'autoencoders_save_every_k_steps': None,
+        'autoencoders_enable_training': False,
+        'autoencoders_load_from_file': True,
+        'autoencoders_load_filename': '/home/' + USERNAME + '/projects/NL/sim/autoencoders_2017-01-22T20:37:11.979346/autoencoders.pkl',
         'predictors': [
             {'state_index_input': 3, 'state_index_context': 3, 'state_index_output': 3,
              'dt_output': 8, 'dt_context': 16},
@@ -63,6 +63,7 @@ def get_brain_params():
              'dt_output': 32, 'dt_context': 64}
         ],
         'predictors_training_time_range': [0, MAX_HISTORY_LENGTH],
+        'predictors_test_every_k_steps': None,
         'predictors_save_every_k_steps': 500000,
         'predictors_enable_training': True,
         'predictors_load_from_file': False,

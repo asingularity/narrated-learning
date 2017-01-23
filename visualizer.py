@@ -130,16 +130,17 @@ class Visualizer(object):
         if error_names_predictor is not None:
             for k in range(len(error_names_predictor)):
                 error_name = error_names_predictor[k]
-                error_history = error_histories_predictor[k, :]
+                error_history = error_histories_predictor[k]
                 print error_name
                 print error_history.shape
                 self.ax.cla()
                 self.ax.plot(error_history, 'b-')
 
-                error_name_nc = error_names_no_context_predictor[k]
-                error_history_nc = error_histories_no_context_predictor[k, :]
-                self.ax.plot(error_history_nc, 'r-')
-                self.fig.savefig(sim_folder_manager.get_plots_save_folder() + '/' + error_name + '_' + error_name_nc + '.png', dpi=100)
+                #error_name_nc = error_names_no_context_predictor[k]
+                #error_history_nc = error_histories_no_context_predictor[k, :]
+                #self.ax.plot(error_history_nc, 'r-')
+                #  + '_' + error_name_nc
+                self.fig.savefig(sim_folder_manager.get_plots_save_folder() + '/' + error_name + '.png', dpi=100)
 
     def visualize(self, robot_sensors, robot_brain, robot_model, robot_environment, sim_folder_manager):
         if self.image_display_frames is not None:

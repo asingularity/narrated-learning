@@ -48,6 +48,9 @@ class Autoencoder(object):
         :return:
         '''
 
+        self.error_t = None
+        self.mean_error_t = None
+
         self.error_average_steps = simulation_params['error_average_steps']
         self.max_history_length = simulation_params['max_history_length']
 
@@ -100,9 +103,12 @@ class StatesHistory(object):
         self.t = 0
 
     def process_new_states(self, newest_states_list):
+
+        assert len(newest_states_list) == len(self.state_arrays_list), 'Error: invalid states length!'
+
         state_index = 0
         for state in newest_states_list:
-            self.state_arrays_list[self.t, :] = state[:]
+            self.state_arrays_list[state_index][self.t, :] = state[:]
             state_index += 1
         self.t += 1
 
@@ -119,17 +125,33 @@ class Predictor(object):
         self.state_index_context = params['state_index_context']
         self.state_index_output = params['state_index_output']
 
-        self.max_history_length = params['max_history_length']
         self.input_history = None
         self.output_history = None
         self.input_history_t = None
 
-        self.error_average_steps = params['error_average_steps']
-        self.error_history = np.zeros(self.max_history_length)
-        self.mean_error_history = np.zeros(self.max_history_length)
         self.error_t = None
         self.mean_error_t = None
 
+        self.error_history = None
+        self.mean_error_history = None
+        self.error_average_steps = None
+        self.max_history_length = None
+
+        self.temp_array = None
+
+    def initialize_but_keep_nets(self, simulation_params):
+
+        self.error_t = None
+        self.mean_error_t = None
+
+        # TODO fix conflict between max_history_length (for error history here) vs. same variable for input_history
+        self.error_average_steps = simulation_params['error_average_steps']
+        self.max_history_length = simulation_params['max_history_length']
+
+        self.error_history = np.zeros(self.max_history_length)
+        self.mean_error_history = np.zeros(self.max_history_length)
+
+        # TODO fix conflict between max_history_length (for error history here) vs. same variable for input_history
         self.temp_array = np.zeros(self.max_history_length).astype(np.float)
 
     def _get_input_context_output(self, states_history, training_delay):
@@ -167,7 +189,7 @@ class Predictor(object):
             self.output_history[self.input_history_t, :] = net_output
             self.input_history_t += 1
 
-    def test_newest_point_and_store_error(self, states_history, training_delay):
+    def test_newest_point_and_store_error(self, states_history):
         '''
         predictor must decide if it has enough history to test
 
@@ -206,15 +228,18 @@ class Predictor(object):
                 self.mean_error_history[self.mean_error_t] = mean_error
                 self.mean_error_t += 1
 
+    def get_mean_error_history(self):
+        return self.mean_error_history[0:self.mean_error_t]
+
 
 class RobotBrain(object):
     def __init__(self, params):
         self._init_globals(params)
         self.config = self._init_config(params)
-        self.autoencoders_list = self._init_autoencoders(params)
+        self.autoencoders_list, states_dim_list = self._init_autoencoders(params)
         if self.predictors_enable:
             self.predictors_list = self._init_predictors(params)
-            self.states_history = self._init_states_history(params)
+            self.states_history = self._init_states_history(params, states_dim_list)
 
     def _init_globals(self, params):
         self.t = 0
@@ -242,20 +267,47 @@ class RobotBrain(object):
                 autoencoders_list.append(Autoencoder(autoenc_params))
 
         self.autoencoder_images = np.zeros((len(autoencoders_list), params['autoencoders'][0]['num_inputs']))
+        states_dim_list = [params['autoencoders'][0]['num_inputs']]
+        net_index = 0
         for autoencoder in autoencoders_list:
             autoenc_sim_params = {}
             autoenc_sim_params['error_average_steps'] = params['error_average_steps']
             autoenc_sim_params['max_history_length'] = params['max_history_length']
             autoencoder.initialize_but_keep_nets(autoenc_sim_params)
-
-        return autoencoders_list
+            states_dim_list.append(params['autoencoders'][net_index]['num_hidden'])
+            net_index += 1
+        return autoencoders_list, states_dim_list
 
     def _init_predictors(self, params):
-        predictors_list = []
+
+        self.predictors_training_time_range = params['predictors_training_time_range']
+        self.predictors_test_every_k_steps = params['predictors_test_every_k_steps']
+        self.predictors_save_every_k_steps = params['predictors_save_every_k_steps']
+        self.predictors_enable_training = params['predictors_enable_training']
+
+        if params['predictors_load_from_file']:
+            f = open(params['predictors_load_filename'], 'r')
+            predictors_list = pickle.load(f)
+            f.close()
+        else:
+            predictors_list = []
+            for predictor_params in params['predictors']:
+                predictors_list.append(Predictor(predictor_params))
+
+        for predictor in predictors_list:
+            predictor_sim_params = {}
+            predictor_sim_params['error_average_steps'] = params['error_average_steps']
+            predictor_sim_params['max_history_length'] = params['max_history_length']
+            predictor.initialize_but_keep_nets(predictor_sim_params)
+
         return predictors_list
 
-    def _init_states_history(self, params):
-        states_history = StatesHistory()
+    def _init_states_history(self, params, states_dim_list):
+        states_history_params = {}
+        states_history_params['max_history_length'] = params['max_history_length']
+        states_history_params['states_dim_list'] = states_dim_list
+
+        states_history = StatesHistory(states_history_params)
         return states_history
 
     def process_input(self, robot_sensors, sim_folder_manager):
@@ -303,8 +355,9 @@ class RobotBrain(object):
                 hidden = tmp_output
             self.autoencoder_images[net_index, :] = tmp_output[:]
 
-            if self.autoencoders_training_time_range[0] <= self.t < self.autoencoders_training_time_range[1]:
-                autoenc.train(net_input)
+            if self.autoencoders_enable_training:
+                if self.autoencoders_training_time_range[0] <= self.t < self.autoencoders_training_time_range[1]:
+                    autoenc.train(net_input)
 
             net_input = next_net_input
             net_index += 1
@@ -328,13 +381,21 @@ class RobotBrain(object):
         '''
 
         training_delay = config['training_delay']
-        test_every_k_steps = config['test_predictor_every_k_steps']
 
         for predictor in predictors_list:
-            predictor.train(states_history, training_delay)
+            if self.predictors_enable_training:
+                predictor.train(states_history, training_delay)
 
-            if self.t % test_every_k_steps == 0:
-                predictor.test_newest_point_and_store_error(states_history, training_delay)
+            if self.predictors_test_every_k_steps is not None:
+                if self.t % self.predictors_test_every_k_steps == 0:
+                    predictor.test_newest_point_and_store_error(states_history)
+
+        if self.predictors_save_every_k_steps is not None:
+            if self.t % self.predictors_save_every_k_steps == 0 and self.t > 0:
+                print 'saving predictors...'
+                f = open(sim_folder_manager.get_models_save_folder() + '/predictors.pkl', 'w')
+                pickle.dump(predictors_list, f)
+                f.close()
 
     # functions for other interfaces to retrieve information:
 
@@ -348,14 +409,16 @@ class RobotBrain(object):
 
         if self.predictors_enable:
             error_names_predictor = []
-            for net_index in range(len(self.predictor_networks)):
+            error_histories_predictor = []
+            for net_index in range(len(self.predictors_list)):
                 error_names_predictor.append('predictor_' + str(net_index))
-            error_histories_predictor = self.averaged_predictor_error_histories[:, self.error_histories_average_steps + 1:self.predictor_error_history_step]
-
-            error_names_no_context_predictor = []
-            for net_index in range(len(self.predictor_networks)):
-                error_names_no_context_predictor.append('no_context_predictor_' + str(net_index))
-            error_histories_no_context_predictor = self.averaged_no_context_predictor_error_histories[:, self.error_histories_average_steps + 1:self.no_context_predictor_error_history_step]
+                error_histories_predictor.append(self.predictors_list[net_index].get_mean_error_history())
+            #error_names_no_context_predictor = []
+            #for net_index in range(len(self.predictor_networks)):
+            #    error_names_no_context_predictor.append('no_context_predictor_' + str(net_index))
+            #error_histories_no_context_predictor = self.averaged_no_context_predictor_error_histories[:, self.error_histories_average_steps + 1:self.no_context_predictor_error_history_step]
+            error_names_no_context_predictor = None
+            error_histories_no_context_predictor = None
         else:
             error_names_predictor = None
             error_histories_predictor = None
