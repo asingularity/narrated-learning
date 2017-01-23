@@ -9,7 +9,7 @@ from visualizer import Visualizer
 from sim_folder_manager import SimFolderManager
 
 
-MAX_HISTORY_LENGTH = 4000000
+MAX_HISTORY_LENGTH = 4000000 + 1
 USERNAME = 'intec'
 
 
@@ -41,7 +41,7 @@ def get_sim_folder_manager_params():
 def get_brain_params():
     params = {
         'max_history_length': MAX_HISTORY_LENGTH,
-        'error_average_steps': 4000,
+        'error_average_steps': 5000,
         'predictors_enable': False,
         'training_delay': 128,
         'autoencoders': [
