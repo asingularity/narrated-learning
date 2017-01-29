@@ -113,8 +113,27 @@ class StatesHistory(object):
         self.t += 1
 
     def get_state(self, state_index, delay):
-        state = self.state_arrays_list[state_index][self.t - 1 - delay, :]
-        return state
+        if self.t - 1 - delay >= 0:
+            state = self.state_arrays_list[state_index][self.t - 1 - delay, :]
+            return state
+        else:
+            return None
+
+class MotorHistory(object):
+    def __init__(self, params):
+        self.max_history_length = params['max_history_length']
+        self.dim = params['dim']
+
+        self.motor_array = np.zeros((self.max_history_length, self.dim)).astype(np.float)
+        self.t = 0
+
+    def process_new_motor_command(self, motor_command):
+        self.motor_array[self.t, :] = motor_command[:]
+        self.t += 1
+
+    def get_sequence(self, delay_start, delay_end):
+        assert delay_start >= delay_end, 'delay_start must be >= delay_end ' + str(delay_start) + ', ' + str(delay_end)
+        return self.motor_array[self.t - 1 - delay_start:self.t - delay_end, :].flatten()
 
 
 class Predictor(object):
@@ -232,6 +251,109 @@ class Predictor(object):
         return self.mean_error_history[0:self.mean_error_t]
 
 
+class InverseModel(object):
+    def __init__(self, params):
+        self.state_index_current = params['state_index_current']
+        self.state_index_future = params['state_index_future']
+        self.dt = params['dt']
+
+        self.input_history = None
+        self.output_history = None
+        self.input_history_t = None
+
+        self.error_t = None
+        self.mean_error_t = None
+
+        self.error_history = None
+        self.mean_error_history = None
+        self.error_average_steps = None
+        self.max_history_length = None
+
+        self.temp_array = None
+
+    def initialize_but_keep_nets(self, simulation_params):
+        self.error_t = None
+        self.mean_error_t = None
+
+        self.error_average_steps = simulation_params['error_average_steps']
+        self.max_history_length = simulation_params['max_history_length']
+
+        self.error_history = np.zeros(self.max_history_length)
+        self.mean_error_history = np.zeros(self.max_history_length)
+
+        # TODO fix conflict between max_history_length (for error history here) vs. same variable for input_history
+        self.temp_array = np.zeros(self.max_history_length).astype(np.float)
+
+    def _get_current_future_motor(self, states_history, motor_history, training_delay):
+        current_state = states_history.get_state(state_index=self.state_index_current, delay=training_delay + self.dt)
+        future_state = states_history.get_state(state_index=self.state_index_future, delay=training_delay + 0)
+        motor_sequence = motor_history.get_sequence(delay_start=training_delay + self.dt,
+                                                    delay_end=training_delay + 1)
+
+        # TODO might want to verify correct indices above
+
+        return current_state, future_state, motor_sequence
+
+    def train(self, states_history, motor_history, training_delay):
+        assert training_delay > self.dt, \
+            'training_delay must be greater than self.dt ' + str(training_delay) + str(self.dt)
+
+        current_state, future_state, motor_sequence = self._get_current_future_motor(states_history=states_history,
+                                                                                     motor_history=motor_history,
+                                                                                     training_delay=training_delay)
+
+        if current_state is not None:
+            net_input = np.concatenate((current_state, future_state))
+            net_output = motor_sequence
+
+            if self.input_history is None:
+                self.input_history = np.zeros((self.max_history_length, net_input.shape[0]))
+                self.output_history = np.zeros((self.max_history_length, net_output.shape[0]))
+                self.input_history_t = 0
+
+            self.input_history[self.input_history_t, :] = net_input
+            self.output_history[self.input_history_t, :] = net_output
+            self.input_history_t += 1
+
+    def test_newest_point_and_store_error(self, states_history, motor_history):
+        if self.input_history_t is not None:
+            data_set = self.input_history
+            data_frames = self.input_history_t
+            dim = data_set.shape[1]
+            tmp = self.temp_array
+
+            current_state, future_state, motor_sequence = self._get_current_future_motor(states_history=states_history,
+                                                                                         motor_history=motor_history,
+                                                                                         training_delay=0)
+
+            net_input = np.concatenate((current_state, future_state))
+            net_output_actual = motor_sequence
+
+            dist, ind = knn_parallel_query(data_set, net_input, tmp, data_frames, dim)
+            net_output_predicted = self.output_history[ind, :]
+
+            error = net_output_actual - net_output_predicted
+            error = np.mean(np.fabs(error))
+
+            if self.error_t is None:
+                self.error_t = 0
+
+            self.error_history[self.error_t] = error
+            self.error_t += 1
+
+            if self.error_t > self.error_average_steps:
+                if self.mean_error_t is None:
+                    self.mean_error_t = 0
+                mean_error = np.mean(self.error_history[self.error_t - self.error_average_steps:self.error_t])
+                self.mean_error_history[self.mean_error_t] = mean_error
+                self.mean_error_t += 1
+
+    def get_mean_error_history(self):
+        return self.mean_error_history[0:self.mean_error_t]
+
+    # TODO for inverse model, mean error histories, add to plots!
+
+
 class RobotBrain(object):
     def __init__(self, params):
         self._init_globals(params)
@@ -240,6 +362,8 @@ class RobotBrain(object):
         if self.predictors_enable:
             self.predictors_list = self._init_predictors(params)
             self.states_history = self._init_states_history(params, states_dim_list)
+            self.motor_history = self._init_motor_history(params)
+            self.inverse = self._init_inverse(params)
 
     def _init_globals(self, params):
         self.t = 0
@@ -258,9 +382,11 @@ class RobotBrain(object):
         self.autoencoders_enable_training = params['autoencoders_enable_training']
 
         if params['autoencoders_load_from_file']:
+            print 'loading autoencoders...'
             f = open(params['autoencoders_load_filename'], 'r')
             autoencoders_list = pickle.load(f)
             f.close()
+            print 'done.'
         else:
             autoencoders_list = []
             for autoenc_params in params['autoencoders']:
@@ -286,9 +412,11 @@ class RobotBrain(object):
         self.predictors_enable_training = params['predictors_enable_training']
 
         if params['predictors_load_from_file']:
+            print 'loading predictors...'
             f = open(params['predictors_load_filename'], 'r')
             predictors_list = pickle.load(f)
             f.close()
+            print 'done.'
         else:
             predictors_list = []
             for predictor_params in params['predictors']:
@@ -310,12 +438,44 @@ class RobotBrain(object):
         states_history = StatesHistory(states_history_params)
         return states_history
 
+    def _init_motor_history(self, params):
+        motor_history_params = {}
+        motor_history_params['max_history_length'] = params['max_history_length']
+        motor_history_params['dim'] = 2
+
+        motor_history = MotorHistory(motor_history_params)
+        return motor_history
+
+    def _init_inverse(self, params):
+        self.inverse_training_time_range = params['inverse_training_time_range']
+        self.inverse_test_every_k_steps = params['inverse_test_every_k_steps']
+        self.inverse_save_every_k_steps = params['inverse_save_every_k_steps']
+        self.inverse_enable_training = params['inverse_enable_training']
+
+        if params['inverse_load_from_file']:
+            print 'loading inverse...'
+            f = open(params['inverse_load_filename'], 'r')
+            inverse = pickle.load(f)
+            f.close()
+            print 'done.'
+        else:
+            inverse = InverseModel(params['inverse_model'])
+
+        inverse_sim_params  = {}
+        inverse_sim_params['error_average_steps'] = params['error_average_steps']
+        inverse_sim_params['max_history_length'] = params['max_history_length']
+        inverse.initialize_but_keep_nets(inverse_sim_params)
+
+        return inverse
+
+    # ************ process ************
+
     def process_input(self, robot_sensors, sim_folder_manager):
 
-        net_input = self._process_net_input(robot_sensors)
+        visual_input, motor_command = self._process_sensors(robot_sensors)
 
         newest_states_list = self._process_autoencoders(autoencoders_list=self.autoencoders_list,
-                                                        net_input=net_input,
+                                                        net_input=visual_input,
                                                         sim_folder_manager=sim_folder_manager)
 
         if self.predictors_enable:
@@ -328,17 +488,28 @@ class RobotBrain(object):
                                      sim_folder_manager=sim_folder_manager
                                      )
 
+            self._process_motor_history(newest_motor_command=motor_command,
+                                        motor_history=self.motor_history)
+
+            self._process_inverse(inverse=self.inverse,
+                                  states_history=self.states_history,
+                                  motor_history=self.motor_history,
+                                  config=self.config,
+                                  sim_folder_manager=sim_folder_manager
+                                  )
+
         self.t += 1
 
-    def _process_net_input(self, robot_sensors):
+    def _process_sensors(self, robot_sensors):
         rays = robot_sensors.get_rays()
+        motor_command = robot_sensors.get_last_motor_command()
         ray_radians = rays['ray_radians']
         ray_colors = rays['ray_colors']
         ray_lengths = rays['ray_lengths']
 
-        net_input = ray_colors.copy()
+        visual_input = ray_colors.copy()
 
-        return net_input
+        return visual_input, motor_command
 
     def _process_autoencoders(self, autoencoders_list, net_input, sim_folder_manager):
         newest_states_list = [net_input.copy()]
@@ -397,7 +568,28 @@ class RobotBrain(object):
                 pickle.dump(predictors_list, f)
                 f.close()
 
-    # functions for other interfaces to retrieve information:
+    def _process_motor_history(self, newest_motor_command, motor_history):
+        motor_history.process_new_motor_command(newest_motor_command)
+
+    def _process_inverse(self, inverse, states_history, motor_history, config, sim_folder_manager):
+
+        training_delay = config['training_delay']
+
+        if self.inverse_enable_training:
+            inverse.train(states_history, motor_history, training_delay)
+
+        if self.inverse_test_every_k_steps is not None:
+            if self.t % self.inverse_test_every_k_steps == 0 and self.t > 0:
+                inverse.test_newest_point_and_store_error(states_history, motor_history)
+
+        if self.inverse_save_every_k_steps is not None:
+            if self.t % self.inverse_save_every_k_steps == 0 and self.t > 0:
+                print 'saving inverse model...'
+                f = open(sim_folder_manager.get_models_save_folder() + '/inverse.pkl', 'w')
+                pickle.dump(inverse, f)
+                f.close()
+
+    # ************ functions for other interfaces to retrieve information ************
 
     def get_error_names_histories(self):
 
@@ -410,6 +602,9 @@ class RobotBrain(object):
         if self.predictors_enable:
             error_names_predictor = []
             error_histories_predictor = []
+            error_names_inverse = []
+            error_histories_inverse = []
+
             for net_index in range(len(self.predictors_list)):
                 error_names_predictor.append('predictor_' + str(net_index))
                 error_histories_predictor.append(self.predictors_list[net_index].get_mean_error_history())
@@ -417,16 +612,23 @@ class RobotBrain(object):
             #for net_index in range(len(self.predictor_networks)):
             #    error_names_no_context_predictor.append('no_context_predictor_' + str(net_index))
             #error_histories_no_context_predictor = self.averaged_no_context_predictor_error_histories[:, self.error_histories_average_steps + 1:self.no_context_predictor_error_history_step]
+
+            error_names_inverse.append('inverse_0')
+            error_histories_inverse.append(self.inverse.get_mean_error_history())
+
             error_names_no_context_predictor = None
             error_histories_no_context_predictor = None
         else:
             error_names_predictor = None
             error_histories_predictor = None
+            error_names_inverse = None
+            error_histories_inverse = None
             error_names_no_context_predictor = None
             error_histories_no_context_predictor = None
 
         return error_names_autoenc, error_histories_autoenc, \
-               error_names_predictor, error_histories_predictor,\
+               error_names_predictor, error_histories_predictor, \
+               error_names_inverse, error_histories_inverse, \
                error_names_no_context_predictor, error_histories_no_context_predictor
 
     def get_autoenc_images(self):
@@ -435,279 +637,32 @@ class RobotBrain(object):
     def get_predictor_images(self):
         return self.ctx_predictor_debug_images
 
-    # old / deprecated:
-
-    def __init__OLD(self, params):
-        sensors_params = params['sensors_params']
-        num_sensory_inputs = sensors_params['num_rays']
-        autoenc_heirarchy_compression = params['autoenc_heirarchy_compression']
-        error_average_steps = params['error_average_steps']
-        max_history_length = params['max_history_length']
-        self.save_steps = params['save_steps']
-        self.autoenc_learning_rate = params['autoenc_learning_rate']
-        self.save_folder = params['save_folder']
-        self.test_predictor_every_k_steps = params['test_predictor_every_k_steps']
-        layer_index = 0
-        layer_num_inputs = num_sensory_inputs
-
-        self.num_autoenc_networks = len(autoenc_heirarchy_compression)
-        self.autoenc_networks = []
-
-        self.autoenc_error_histories = []
-        self.autoenc_error_history_step = 0
-        self.error_histories_average_steps = error_average_steps
-
-        # ***** autoenc nets *****
-        compression_levels_dimensions = [num_sensory_inputs]
-        self.compression_levels_dimensions = compression_levels_dimensions
-
-        for ratio in autoenc_heirarchy_compression:
-            layer_num_hidden = int(ratio * layer_num_inputs)
-            layer_num_outputs = layer_num_inputs
-            compression_levels_dimensions.append(layer_num_hidden)
-
-            print 'autoenc layer ', layer_index, '[' + str(layer_num_inputs) + '] -> [' + str(layer_num_hidden) + '] -> [' + str(layer_num_outputs) + ']'
-
-            if not params['load_autoenc_from_file']:
-                self.autoenc_networks.append(_get_mlp(num_inputs=layer_num_inputs,
-                                                      num_hidden=layer_num_hidden,
-                                                      num_outputs=layer_num_outputs,
-                                                      learning_rate=self.autoenc_learning_rate))
-
-            layer_index += 1
-            layer_num_inputs = layer_num_hidden
-
-            self.autoenc_error_histories.append(np.zeros(max_history_length))
-
-        self.max_history_length = max_history_length
-        self.averaged_autoenc_error_histories = np.zeros((len(autoenc_heirarchy_compression), max_history_length))
-        self.autoenc_images = np.zeros((len(autoenc_heirarchy_compression), num_sensory_inputs))
-        self.ctx_predictor_debug_images = np.zeros((5, num_sensory_inputs))
-
-        if params['load_autoenc_from_file']:
-            self.autoenc_learning_disable_step = -1
-            f = open(params['load_autoenc_filename'], 'r')
-            self.autoenc_networks = pickle.load(f)
-            f.close()
-        else:
-            self.autoenc_learning_disable_step = params['autoenc_learning_disable_step']
-
-        # ***** prediction nets *****
-
-        self.predict_time_steps = params['predict_time_steps']
-        self.predict_nets_input_compression_levels = params['predict_nets_input_compression_levels']
-        self.predict_nets_context_compression_levels = params['predict_nets_context_compression_levels']
-        self.predict_nets_output_compression_levels = params['predict_nets_output_compression_levels']
-        self.predictor_learning_disable_step = params['predict_nets_learning_disable_step']
-        self.predict_nets_training_interval = params['predict_nets_training_interval']
-        self.concat_predictor_input_histories = None
-        self.predictor_output_histories = None
-
-        self.concat_no_context_predictor_input_histories = None
-        self.no_context_predictor_output_histories = None
-
-        num_nets = len(self.predict_nets_input_compression_levels)
-        self.predictor_networks = []
-        self.no_context_predictor_networks = []
-
-        # TODO: this needs to be all history
-        self.predictor_training_history_length = max_history_length
-        # np.sum(np.array(self.predict_time_steps))
-        self.predictor_training_histories = []
-        for dim in compression_levels_dimensions:
-            self.predictor_training_histories.append(np.zeros((self.predictor_training_history_length, dim)))
-        self.predictor_training_history_step = 0
-
-        self.predictor_error_histories = []
-        self.predictor_error_history_step = 0
-        self.no_context_predictor_error_histories = []
-        self.no_context_predictor_error_history_step = 0
-        self.predictor_temp_arrays = []
-
-        for n in range(num_nets):
-            c_index_input = self.predict_nets_input_compression_levels[n]
-            c_index_context = self.predict_nets_context_compression_levels[n]
-            c_index_output = self.predict_nets_output_compression_levels[n]
-
-            dim_input = compression_levels_dimensions[c_index_input]
-            dim_context = compression_levels_dimensions[c_index_context]
-            dim_output = compression_levels_dimensions[c_index_output]
-
-            self.predictor_temp_arrays.append(np.zeros(max_history_length).astype(np.float))
-            # create KD tree later, after some data is present
-            # data storage created above
-            # what happens here? context and no context predictors? nothing for now, except errors initialized:
 
-            self.predictor_networks.append(None)
-            self.no_context_predictor_networks.append(None)
 
-            self.predictor_error_histories.append(np.zeros(max_history_length))
-            self.no_context_predictor_error_histories.append(np.zeros(max_history_length))
 
-        self.averaged_predictor_error_histories = np.zeros((len(autoenc_heirarchy_compression), max_history_length))
-        self.averaged_no_context_predictor_error_histories = np.zeros((len(autoenc_heirarchy_compression), max_history_length))
 
-        # ***** other *****
 
-        self.last_sensory_input = None
-        self.steps = 0
 
-    def process_input_OLD(self, robot_sensors):
-        rays = robot_sensors.get_rays()
-        ray_radians = rays['ray_radians']
-        ray_colors = rays['ray_colors']
-        ray_lengths = rays['ray_lengths']
 
-        net_input = ray_colors.copy()
 
-        # autoenc
 
-        net_index = 0
-        self.predictor_training_histories[0][self.predictor_training_history_step, :] = net_input[:]
 
-        for net in self.autoenc_networks:
-            net_output = net.evaluate(net_input)
 
-            error = net_output - net_input
-            error = np.mean(np.fabs(error))
 
-            e_step = self.autoenc_error_history_step
-            self.autoenc_error_histories[net_index][e_step] = error
-            if e_step > self.error_histories_average_steps:
-                e_ave = self.error_histories_average_steps
-                mean_error = np.mean(self.autoenc_error_histories[net_index][e_step - e_ave:e_step])
-                self.averaged_autoenc_error_histories[net_index][e_step] = mean_error
 
-            # evaluate hidden -> out
-            # technically we could skip one redundant compute per layer (initial hidden->output is given above)
 
-            hidden = net.layers[1]['activation'][:-1].copy()
 
-            for tmp_layer in range(net_index, -1, -1):  # [2, 1, 0] for net_index = 2
-                tmp_output = self.autoenc_networks[tmp_layer].evaluate_from_hidden(hidden)
-                hidden = tmp_output
-            self.autoenc_images[net_index, :] = tmp_output[:]
 
-            if self.steps < self.autoenc_learning_disable_step:
-                net.train(net_input, net_input)
 
-            # copy necessary here
-            net_input = net.layers[1]['activation'][:-1].copy()
-            self.predictor_training_histories[net_index + 1][self.predictor_training_history_step, :] = net_input[:]
-            net_index += 1
 
-        self.predictor_training_history_step += 1
-        self.autoenc_error_history_step += 1
 
-        # predictors
 
-        num_nets = len(self.predictor_networks)
 
-        for net_index in range(num_nets):
-            dt_output = self.predict_time_steps[net_index]
-            dt_context = self.predict_time_steps[net_index + 1]
-            c_index_input = self.predict_nets_input_compression_levels[net_index]
-            c_index_context = self.predict_nets_context_compression_levels[net_index]
-            c_index_output = self.predict_nets_output_compression_levels[net_index]
-            t_input = self.predictor_training_history_step - dt_context - 1
 
-            net_input = np.concatenate((self.predictor_training_histories[c_index_input][t_input, :],
-                                        self.predictor_training_histories[c_index_context][t_input + dt_context, :]))
 
-            net_output = self.predictor_training_histories[c_index_output][t_input + dt_output, :]
 
-            if self.concat_predictor_input_histories is None:
-                self.concat_predictor_input_histories = [None] * num_nets
 
-            if self.concat_predictor_input_histories[net_index] is None:
-                self.concat_predictor_input_histories[net_index] = np.zeros((self.max_history_length, net_input.shape[0]))
 
-            debug_print_every_step = False
-            if debug_print_every_step:
-                print 'input level: ', c_index_input, 'context level: ', c_index_context, 'output level: ', c_index_output
-                print 'input time: ', t_input, 'context time: ', t_input + dt_context, 'output time: ', t_input + dt_output
-                print 'net_input: ', net_index, net_input.shape[0], net_input
-                print 'net_input: ', net_index, net_output.shape[0], net_output
 
-            self.concat_predictor_input_histories[net_index][self.predictor_training_history_step, :] = net_input[:]
 
-            if self.predictor_output_histories is None:
-                self.predictor_output_histories = [None] * num_nets
 
-            if self.predictor_output_histories[net_index] is None:
-                self.predictor_output_histories[net_index] = np.zeros((self.max_history_length, net_output.shape[0]))
-
-            self.predictor_output_histories[net_index][self.predictor_training_history_step, :] = net_output[:]
-
-            net = self.predictor_networks[net_index]
-
-            if (net is not None) and (self.steps % self.test_predictor_every_k_steps == 0):
-
-                #dist, ind = net.query([net_input], k=1)
-
-                data_set = self.predictor_networks[net_index]
-                data_frames = data_set.shape[0]
-                dim = data_set.shape[1]
-                tmp = self.predictor_temp_arrays[net_index]
-
-                dist, ind = knn_parallel_query(data_set, net_input, tmp, data_frames, dim)
-                #print 'query: ', dist, ind
-
-                #net_output_eval = net.evaluate(net_input)
-                # TODO verify proper index here!!!!!!!!!!!!!!!!!!!!!
-                net_output_eval = self.predictor_output_histories[net_index][ind, :]
-
-                error = net_output - net_output_eval
-                error = np.mean(np.fabs(error))
-                e_step = self.predictor_error_history_step
-                self.predictor_error_histories[net_index][e_step] = error
-
-                if net_index == num_nets - 1:
-                    self.predictor_error_history_step += 1
-
-                enable_ctx_predictor_debug = False
-                if net_index == 0 and enable_ctx_predictor_debug:
-                    self.ctx_predictor_debug_images[0, :] = self.predictor_training_histories[c_index_input][t_input, :]
-                    self.ctx_predictor_debug_images[1, :] = self.predictor_training_histories[c_index_input][t_input + dt_context, :]
-                    self.ctx_predictor_debug_images[2, :] = net_output[:]
-                    self.ctx_predictor_debug_images[3, :] = net_output_eval[:]
-
-                if e_step > self.error_histories_average_steps:
-                    e_ave = self.error_histories_average_steps
-                    mean_error = np.mean(self.predictor_error_histories[net_index][e_step - e_ave:e_step])
-                    self.averaged_predictor_error_histories[net_index][e_step] = mean_error
-
-            if self.steps < self.predictor_learning_disable_step and self.predictor_training_history_step % self.predict_nets_training_interval == 0 and self.predictor_training_history_step > 2.0 * np.sum(self.predict_time_steps):
-                if self.predict_nets_training_interval > 1:
-                    print 'Building predictor for net: ', net_index, ' step: ', self.steps
-                self.predictor_networks[net_index] = self.concat_predictor_input_histories[net_index][0:self.predictor_training_history_step - 2.0 * np.sum(self.predict_time_steps), :]
-                # X : array-like, shape = [n_samples, n_features]
-
-                #self.predictor_networks[net_index] = train(net_input, net_output)
-
-        # saving
-
-        if self.save_steps is not None:
-            if self.steps % self.save_steps == 0:
-                print 'saving autoencoders...'
-                f = open(self.save_folder + '/autoencoders.pkl', 'w')
-                pickle.dump(self.autoenc_networks, f)
-                f.close()
-                print 'done saving autoencoders.'
-                print 'saving predictors...'
-                f = open(self.save_folder + '/predictors.pkl', 'w')
-                pickle.dump(self.predictor_networks, f)
-                f.close()
-                print 'done saving predictors.'
-
-        #self.last_sensory_input = current_sensor_input
-
-        if False:
-            if self.steps % 16 == 0:
-                print '----16'
-            if self.steps % 32 == 0:
-                print '--------32'
-            if self.steps % 64 == 0:
-                print '----------------64'
-
-        self.steps += 1

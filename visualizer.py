@@ -114,7 +114,10 @@ class Visualizer(object):
                 self.angular_speed_from_key = 0.2
 
     def _plot_brain_errors(self, robot_brain, sim_folder_manager):
-        error_names_autoenc, error_histories_autoenc, error_names_predictor, error_histories_predictor, error_names_no_context_predictor, error_histories_no_context_predictor = robot_brain.get_error_names_histories()
+        error_names_autoenc, error_histories_autoenc, \
+        error_names_predictor, error_histories_predictor, \
+        error_names_inverse, error_histories_inverse, \
+        error_names_no_context_predictor, error_histories_no_context_predictor = robot_brain.get_error_names_histories()
         print self.frames
 
         for k in range(len(error_names_autoenc)):
@@ -140,6 +143,15 @@ class Visualizer(object):
                 #error_history_nc = error_histories_no_context_predictor[k, :]
                 #self.ax.plot(error_history_nc, 'r-')
                 #  + '_' + error_name_nc
+                self.fig.savefig(sim_folder_manager.get_plots_save_folder() + '/' + error_name + '.png', dpi=100)
+
+            for k in range(len(error_names_inverse)):
+                error_name = error_names_inverse[k]
+                error_history = error_histories_inverse[k]
+                print error_name
+                print error_history.shape
+                self.ax.cla()
+                self.ax.plot(error_history, 'b-')
                 self.fig.savefig(sim_folder_manager.get_plots_save_folder() + '/' + error_name + '.png', dpi=100)
 
     def visualize(self, robot_sensors, robot_brain, robot_model, robot_environment, sim_folder_manager):

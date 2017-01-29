@@ -40,10 +40,12 @@ def get_sim_folder_manager_params():
 
 def get_brain_params():
     params = {
+        # ************ general ************
         'max_history_length': MAX_HISTORY_LENGTH,
         'error_average_steps': 10000,
         'predictors_enable': True,
         'training_delay': 128,
+        # ************ autoencoders ************
         'autoencoders': [
             {'num_inputs': 40, 'num_hidden': 20, 'learning_rate': 0.01},
             {'num_inputs': 20, 'num_hidden': 10, 'learning_rate': 0.01},
@@ -54,6 +56,7 @@ def get_brain_params():
         'autoencoders_enable_training': False,
         'autoencoders_load_from_file': True,
         'autoencoders_load_filename': '/home/' + USERNAME + '/projects/NL/sim/autoencoders_2017-01-22T20:37:11.979346/autoencoders.pkl',
+        # ************ predictors ************
         'predictors': [
             {'state_index_input': 3, 'state_index_context': 3, 'state_index_output': 3,
              'dt_output': 8, 'dt_context': 16},
@@ -63,11 +66,19 @@ def get_brain_params():
              'dt_output': 32, 'dt_context': 64}
         ],
         'predictors_training_time_range': [0, MAX_HISTORY_LENGTH],
-        'predictors_test_every_k_steps': 50,
-        'predictors_save_every_k_steps': 500000,
-        'predictors_enable_training': True,
-        'predictors_load_from_file': False,
-        'predictors_load_filename': '/home/' + USERNAME + '/projects/NL/sim/<none>/<none>.pkl'
+        'predictors_test_every_k_steps': 50,  # 50 for training
+        'predictors_save_every_k_steps': None,
+        'predictors_enable_training': False,
+        'predictors_load_from_file': True,
+        'predictors_load_filename': '/home/' + USERNAME + '/projects/NL/sim/predictors_2017-01-23T08:39:18.437290/predictors.pkl',
+        # ************ inverse model ************
+        'inverse_model': {'state_index_current': 3, 'state_index_future': 3, 'dt': 8},
+        'inverse_training_time_range': [0, MAX_HISTORY_LENGTH],
+        'inverse_test_every_k_steps': 50,
+        'inverse_save_every_k_steps': 500000,
+        'inverse_enable_training': True,
+        'inverse_load_from_file': False,
+        'inverse_load_filename': '/home/' + USERNAME + '/projects/NL/sim/<none>/<none>.pkl',
     }
     return params
 
@@ -169,7 +180,7 @@ def run_demo(demo_components):
     sim_folder_manager = demo_components['sim_folder_manager']
 
     while not perf_eval.finished():
-        robot_sensors.read_input(robot_environment)
+        robot_sensors.read_input(robot_environment, robot_model)
         robot_brain.process_input(robot_sensors, sim_folder_manager)
         robot_model.act_upon_processing(robot_brain)
         robot_environment.step_environment(robot_model, visualizer)

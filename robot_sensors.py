@@ -14,6 +14,8 @@ class RobotSensors(object):
         self.relative_ray_radians = self.ray_radians.copy()
         self.ray_colors = np.zeros(num_rays)
         self.ray_lengths = np.zeros(num_rays)
+        # TODO fix this hack:
+        self.last_motor_command = np.zeros(2).astype(np.float)
 
     def get_rays(self):
         return {
@@ -22,7 +24,11 @@ class RobotSensors(object):
             'ray_lengths': self.ray_lengths
         }
 
-    def read_input(self, robot_environment):
+    def get_last_motor_command(self):
+        return self.last_motor_command
+
+    def read_input(self, robot_environment, robot_model):
+        self.last_motor_command = robot_model.get_last_motor_command()
         nonzero_tiles = robot_environment.get_nonzero_tiles()
         dist = nonzero_tiles['nonzero_dist']
         theta = nonzero_tiles['nonzero_theta']
