@@ -7,7 +7,7 @@ class RobotModel(object):
     def __init__(self, params):
         self.max_angular_velocity = params['max_angular_velocity']
         self.linear_velocity = params['linear_velocity']
-        self.last_motor_command = np.array([0, 0])
+        self.last_motor_command = np.zeros(2).astype(np.float)
 
     def act_upon_processing(self, robot_brain):
         pass

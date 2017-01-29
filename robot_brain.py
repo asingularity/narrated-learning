@@ -134,7 +134,8 @@ class MotorHistory(object):
 
     def get_sequence(self, delay_start, delay_end):
         assert delay_start >= delay_end, 'delay_start must be >= delay_end ' + str(delay_start) + ', ' + str(delay_end)
-        return self.motor_array[self.t - 1 - delay_start:self.t - delay_end, :].flatten()
+        return_arr = self.motor_array[self.t - 1 - delay_start:self.t - delay_end, :].flatten()
+        return return_arr
 
 
 class Predictor(object):
@@ -335,7 +336,6 @@ class InverseModel(object):
 
                 dist, ind = knn_parallel_query(data_set, net_input, tmp, data_frames, dim)
                 net_output_predicted = self.output_history[ind, :]
-
                 error = net_output_actual - net_output_predicted
                 error = np.mean(np.fabs(error))
 
