@@ -119,6 +119,7 @@ class StatesHistory(object):
         else:
             return None
 
+
 class MotorHistory(object):
     def __init__(self, params):
         self.max_history_length = params['max_history_length']
