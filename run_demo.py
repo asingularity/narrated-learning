@@ -72,7 +72,12 @@ def get_brain_params():
         'predictors_load_from_file': True,
         'predictors_load_filename': '/home/' + USERNAME + '/projects/NL/sim/predictors_2017-01-23T08:39:18.437290/predictors.pkl',
         # ************ inverse model ************
-        'inverse_model': {'state_index_current': 3, 'state_index_future': 3, 'dt': 8},
+        'inverse_models': [
+            {'state_index_current': 3, 'state_index_future': 3, 'dt': 1},
+            {'state_index_current': 3, 'state_index_future': 3, 'dt': 2},
+            {'state_index_current': 3, 'state_index_future': 3, 'dt': 4},
+            {'state_index_current': 3, 'state_index_future': 3, 'dt': 8},
+        ],
         'inverse_training_time_range': [0, MAX_HISTORY_LENGTH],
         'inverse_test_every_k_steps': 50,
         'inverse_save_every_k_steps': 500000,
@@ -197,10 +202,22 @@ def run_demo(demo_components):
     print 'Finished Simulation.'
 
 
-def demo():
+def learning_demo():
+    demo_components = init_demo()
+    run_demo(demo_components)
+
+
+def task_demo():
     demo_components = init_demo()
     run_demo(demo_components)
 
 
 if __name__ == '__main__':
-    demo()
+    do_learning_demo = True
+    do_task_demo = False
+
+    if do_learning_demo:
+        learning_demo()
+
+    if do_task_demo:
+        task_demo()

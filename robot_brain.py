@@ -367,7 +367,7 @@ class RobotBrain(object):
             self.predictors_list = self._init_predictors(params)
             self.states_history = self._init_states_history(params, states_dim_list)
             self.motor_history = self._init_motor_history(params)
-            self.inverse = self._init_inverse(params)
+            self.inverse_list = self._init_inverse(params)
 
     def _init_globals(self, params):
         self.t = 0
@@ -459,18 +459,21 @@ class RobotBrain(object):
         if params['inverse_load_from_file']:
             print 'loading inverse...'
             f = open(params['inverse_load_filename'], 'r')
-            inverse = pickle.load(f)
+            inverse_list = pickle.load(f)
             f.close()
             print 'done.'
         else:
-            inverse = InverseModel(params['inverse_model'])
+            inverse_list = []
+            for inverse_params in params['inverse_models']:
+                inverse_list.append(InverseModel(inverse_params))
 
-        inverse_sim_params  = {}
-        inverse_sim_params['error_average_steps'] = params['error_average_steps']
-        inverse_sim_params['max_history_length'] = params['max_history_length']
-        inverse.initialize_but_keep_nets(inverse_sim_params)
+        for inverse in inverse_list:
+            inverse_sim_params  = {}
+            inverse_sim_params['error_average_steps'] = params['error_average_steps']
+            inverse_sim_params['max_history_length'] = params['max_history_length']
+            inverse.initialize_but_keep_nets(inverse_sim_params)
 
-        return inverse
+        return inverse_list
 
     # ************ process ************
 
@@ -495,7 +498,7 @@ class RobotBrain(object):
             self._process_motor_history(newest_motor_command=motor_command,
                                         motor_history=self.motor_history)
 
-            self._process_inverse(inverse=self.inverse,
+            self._process_inverse(inverse_list=self.inverse_list,
                                   states_history=self.states_history,
                                   motor_history=self.motor_history,
                                   config=self.config,
@@ -575,22 +578,23 @@ class RobotBrain(object):
     def _process_motor_history(self, newest_motor_command, motor_history):
         motor_history.process_new_motor_command(newest_motor_command)
 
-    def _process_inverse(self, inverse, states_history, motor_history, config, sim_folder_manager):
+    def _process_inverse(self, inverse_list, states_history, motor_history, config, sim_folder_manager):
 
         training_delay = config['training_delay']
 
-        if self.inverse_enable_training:
-            inverse.train(states_history, motor_history, training_delay)
+        for inverse in inverse_list:
+            if self.inverse_enable_training:
+                inverse.train(states_history, motor_history, training_delay)
 
-        if self.inverse_test_every_k_steps is not None:
-            if self.t % self.inverse_test_every_k_steps == 0 and self.t > 0:
-                inverse.test_newest_point_and_store_error(states_history, motor_history)
+            if self.inverse_test_every_k_steps is not None:
+                if self.t % self.inverse_test_every_k_steps == 0 and self.t > 0:
+                    inverse.test_newest_point_and_store_error(states_history, motor_history)
 
         if self.inverse_save_every_k_steps is not None:
             if self.t % self.inverse_save_every_k_steps == 0 and self.t > 0:
-                print 'saving inverse model...'
+                print 'saving inverse models...'
                 f = open(sim_folder_manager.get_models_save_folder() + '/inverse.pkl', 'w')
-                pickle.dump(inverse, f)
+                pickle.dump(inverse_list, f)
                 f.close()
 
     # ************ functions for other interfaces to retrieve information ************
@@ -617,8 +621,9 @@ class RobotBrain(object):
             #    error_names_no_context_predictor.append('no_context_predictor_' + str(net_index))
             #error_histories_no_context_predictor = self.averaged_no_context_predictor_error_histories[:, self.error_histories_average_steps + 1:self.no_context_predictor_error_history_step]
 
-            error_names_inverse.append('inverse_0')
-            error_histories_inverse.append(self.inverse.get_mean_error_history())
+            for net_index in range(len(self.inverse_list)):
+                error_names_inverse.append('inverse_' + str(net_index))
+                error_histories_inverse.append(self.inverse_list[net_index].get_mean_error_history())
 
             error_names_no_context_predictor = None
             error_histories_no_context_predictor = None
