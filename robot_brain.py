@@ -225,27 +225,29 @@ class Predictor(object):
 
             input_state, context_state, output_state = self._get_input_context_output(states_history=states_history,
                                                                                       training_delay=0)
-            net_input = np.concatenate((input_state, context_state))
-            net_output_actual = output_state
 
-            dist, ind = knn_parallel_query(data_set, net_input, tmp, data_frames, dim)
-            net_output_predicted = self.output_history[ind, :]
+            if input_state is not None:
+                net_input = np.concatenate((input_state, context_state))
+                net_output_actual = output_state
 
-            error = net_output_actual - net_output_predicted
-            error = np.mean(np.fabs(error))
+                dist, ind = knn_parallel_query(data_set, net_input, tmp, data_frames, dim)
+                net_output_predicted = self.output_history[ind, :]
 
-            if self.error_t is None:
-                self.error_t = 0
+                error = net_output_actual - net_output_predicted
+                error = np.mean(np.fabs(error))
 
-            self.error_history[self.error_t] = error
-            self.error_t += 1
+                if self.error_t is None:
+                    self.error_t = 0
 
-            if self.error_t > self.error_average_steps:
-                if self.mean_error_t is None:
-                    self.mean_error_t = 0
-                mean_error = np.mean(self.error_history[self.error_t - self.error_average_steps:self.error_t])
-                self.mean_error_history[self.mean_error_t] = mean_error
-                self.mean_error_t += 1
+                self.error_history[self.error_t] = error
+                self.error_t += 1
+
+                if self.error_t > self.error_average_steps:
+                    if self.mean_error_t is None:
+                        self.mean_error_t = 0
+                    mean_error = np.mean(self.error_history[self.error_t - self.error_average_steps:self.error_t])
+                    self.mean_error_history[self.mean_error_t] = mean_error
+                    self.mean_error_t += 1
 
     def get_mean_error_history(self):
         return self.mean_error_history[0:self.mean_error_t]
@@ -326,27 +328,28 @@ class InverseModel(object):
                                                                                          motor_history=motor_history,
                                                                                          training_delay=0)
 
-            net_input = np.concatenate((current_state, future_state))
-            net_output_actual = motor_sequence
+            if current_state is not None:
+                net_input = np.concatenate((current_state, future_state))
+                net_output_actual = motor_sequence
 
-            dist, ind = knn_parallel_query(data_set, net_input, tmp, data_frames, dim)
-            net_output_predicted = self.output_history[ind, :]
+                dist, ind = knn_parallel_query(data_set, net_input, tmp, data_frames, dim)
+                net_output_predicted = self.output_history[ind, :]
 
-            error = net_output_actual - net_output_predicted
-            error = np.mean(np.fabs(error))
+                error = net_output_actual - net_output_predicted
+                error = np.mean(np.fabs(error))
 
-            if self.error_t is None:
-                self.error_t = 0
+                if self.error_t is None:
+                    self.error_t = 0
 
-            self.error_history[self.error_t] = error
-            self.error_t += 1
+                self.error_history[self.error_t] = error
+                self.error_t += 1
 
-            if self.error_t > self.error_average_steps:
-                if self.mean_error_t is None:
-                    self.mean_error_t = 0
-                mean_error = np.mean(self.error_history[self.error_t - self.error_average_steps:self.error_t])
-                self.mean_error_history[self.mean_error_t] = mean_error
-                self.mean_error_t += 1
+                if self.error_t > self.error_average_steps:
+                    if self.mean_error_t is None:
+                        self.mean_error_t = 0
+                    mean_error = np.mean(self.error_history[self.error_t - self.error_average_steps:self.error_t])
+                    self.mean_error_history[self.mean_error_t] = mean_error
+                    self.mean_error_t += 1
 
     def get_mean_error_history(self):
         return self.mean_error_history[0:self.mean_error_t]
