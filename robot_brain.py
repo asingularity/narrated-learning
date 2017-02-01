@@ -114,6 +114,7 @@ class StatesHistory(object):
 
     def get_state(self, state_index, delay):
         if self.t - 1 - delay >= 0:
+            #print 'StatesHistory.get_state: self.t: ', self.t, ', index: ', self.t - 1 - delay
             state = self.state_arrays_list[state_index][self.t - 1 - delay, :]
             return state
         else:
@@ -134,6 +135,7 @@ class MotorHistory(object):
 
     def get_sequence(self, delay_start, delay_end):
         assert delay_start >= delay_end, 'delay_start must be >= delay_end ' + str(delay_start) + ', ' + str(delay_end)
+        #print 'MotorHistory.get_sequence: self.t: ', self.t, ', range: [', self.t - 1 - delay_start, ', ', self.t - delay_end, ')'
         return_arr = self.motor_array[self.t - 1 - delay_start:self.t - delay_end, :].flatten()
         return return_arr
 
@@ -289,12 +291,27 @@ class InverseModel(object):
         self.temp_array = np.zeros(self.max_history_length).astype(np.float)
 
     def _get_current_future_motor(self, states_history, motor_history, training_delay):
-        current_state = states_history.get_state(state_index=self.state_index_current, delay=training_delay + self.dt)
-        future_state = states_history.get_state(state_index=self.state_index_future, delay=training_delay + 0)
+        #print '********* START _get_current_future_motor ***********'
+        state_add_delay = 1
+        # because:
+        #   latest motor_command (T) in motor_history was initiated at T-1, applied [T-1, T],
+        #   latest state (T) in states_history is at time T
+
+        current_state = states_history.get_state(state_index=self.state_index_current,
+                                                 delay=state_add_delay + training_delay + self.dt)
+        future_state = states_history.get_state(state_index=self.state_index_future,
+                                                delay=state_add_delay + training_delay + 0)
         motor_sequence = motor_history.get_sequence(delay_start=training_delay + self.dt,
                                                     delay_end=training_delay + 1)
 
-        # TODO might want to verify correct indices above
+        #print 'current state: delay: ', training_delay + self.dt
+        #print 'future state: delay: ', training_delay + 0
+        #print 'motor_sequence: delay_start: ', training_delay + self.dt, ', delay_end: ', training_delay + 1
+
+        #print '********* END _get_current_future_motor ***********'
+        # current state: delay:  129
+        # future state: delay:  128
+        # motor_sequence: delay_start:  129, delay_end:  129
 
         return current_state, future_state, motor_sequence
 
@@ -479,24 +496,26 @@ class RobotBrain(object):
 
     def process_input(self, robot_sensors, sim_folder_manager):
 
-        visual_input, motor_command = self._process_sensors(robot_sensors)
+        current_visual_input, previous_motor_command = self._process_sensors(robot_sensors)
+        # previous_motor_command was initiated at T-1, applied [T-1, T],
+        # current_visual_input is at time T
 
         newest_states_list = self._process_autoencoders(autoencoders_list=self.autoencoders_list,
-                                                        net_input=visual_input,
+                                                        net_input=current_visual_input,
                                                         sim_folder_manager=sim_folder_manager)
 
         if self.predictors_enable:
             self._process_states_history(newest_states_list=newest_states_list,
                                          states_history=self.states_history)
 
+            self._process_motor_history(newest_motor_command=previous_motor_command,
+                                        motor_history=self.motor_history)
+
             self._process_predictors(predictors_list=self.predictors_list,
                                      states_history=self.states_history,
                                      config=self.config,
                                      sim_folder_manager=sim_folder_manager
                                      )
-
-            self._process_motor_history(newest_motor_command=motor_command,
-                                        motor_history=self.motor_history)
 
             self._process_inverse(inverse_list=self.inverse_list,
                                   states_history=self.states_history,
@@ -509,14 +528,14 @@ class RobotBrain(object):
 
     def _process_sensors(self, robot_sensors):
         rays = robot_sensors.get_rays()
-        motor_command = robot_sensors.get_last_motor_command()
+        previous_motor_command = robot_sensors.get_last_motor_command()
         ray_radians = rays['ray_radians']
         ray_colors = rays['ray_colors']
         ray_lengths = rays['ray_lengths']
 
-        visual_input = ray_colors.copy()
+        current_visual_input = ray_colors.copy()
 
-        return visual_input, motor_command
+        return current_visual_input, previous_motor_command
 
     def _process_autoencoders(self, autoencoders_list, net_input, sim_folder_manager):
         newest_states_list = [net_input.copy()]

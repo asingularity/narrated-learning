@@ -187,9 +187,17 @@ def run_demo(demo_components):
 
     while not perf_eval.finished():
         robot_sensors.read_input(robot_environment, robot_model)
+        #   robot_sensors.rays updated from environment: STATE_T+1
+        #   robot_sensors.last_motor_command updated from robot_model.last_motor_command: CMD_T
+
         robot_brain.process_input(robot_sensors, sim_folder_manager)
+
         robot_model.act_upon_processing(robot_brain)
+
         robot_environment.step_environment(robot_model, visualizer)
+        #   robot_model.last_motor_command updated to new random command CMD_T
+        #   robot_environment state updated with motor cmd CMD_T: STATE_T -> STATE_T+1
+
         perf_eval.evaluate(robot_sensors,
                            robot_brain,
                            robot_model,
