@@ -73,14 +73,15 @@ def get_brain_params():
         'predictors_load_filename': '/home/' + USERNAME + '/projects/NL/sim/predictors_2017-01-23T08:39:18.437290/predictors.pkl',
         # ************ inverse model ************
         'inverse_models': [
-            {'state_index_current': 3, 'state_index_future': 3, 'dt': 1},
-            {'state_index_current': 3, 'state_index_future': 3, 'dt': 2},
+            {'state_index_current': 0, 'state_index_future': 0, 'dt': 1},
+            {'state_index_current': 1, 'state_index_future': 1, 'dt': 2},
+            {'state_index_current': 2, 'state_index_future': 2, 'dt': 2},
             {'state_index_current': 3, 'state_index_future': 3, 'dt': 4},
             {'state_index_current': 3, 'state_index_future': 3, 'dt': 8},
         ],
         'inverse_training_time_range': [0, MAX_HISTORY_LENGTH],
         'inverse_test_every_k_steps': 50,
-        'inverse_save_every_k_steps': 500000,
+        'inverse_save_every_k_steps': 2000000,
         'inverse_enable_training': True,
         'inverse_load_from_file': False,
         'inverse_load_filename': '/home/' + USERNAME + '/projects/NL/sim/<none>/<none>.pkl',
