@@ -99,7 +99,7 @@ class StatesHistory(object):
         self.states_dim_list = params['states_dim_list']
         self.state_arrays_list = []
         for k in range(len(self.states_dim_list)):
-            self.state_arrays_list.append(np.zeros((self.max_history_length, self.states_dim_list[k])).astype(np.float))
+            self.state_arrays_list.append(np.zeros((self.max_history_length, self.states_dim_list[k])).astype(np.float32))
         self.t = 0
 
     def process_new_states(self, newest_states_list):
@@ -126,7 +126,7 @@ class MotorHistory(object):
         self.max_history_length = params['max_history_length']
         self.dim = params['dim']
 
-        self.motor_array = np.zeros((self.max_history_length, self.dim)).astype(np.float)
+        self.motor_array = np.zeros((self.max_history_length, self.dim)).astype(np.float32)
         self.t = 0
 
     def process_new_motor_command(self, motor_command):
@@ -175,7 +175,12 @@ class Predictor(object):
         self.mean_error_history = np.zeros(self.max_history_length)
 
         # TODO fix conflict between max_history_length (for error history here) vs. same variable for input_history
-        self.temp_array = np.zeros(self.max_history_length).astype(np.float)
+        self.temp_array = np.zeros(self.max_history_length).astype(np.float32)
+
+        if self.input_history is not None:
+            self.input_history = self.input_history.astype(np.float32)
+        if self.output_history is not None:
+            self.output_history = self.output_history.astype(np.float32)
 
     def _get_input_context_output(self, states_history, training_delay):
         input_state = states_history.get_state(state_index=self.state_index_input, delay=training_delay + self.dt_context)
@@ -204,8 +209,8 @@ class Predictor(object):
             net_output = output_state
 
             if self.input_history is None:
-                self.input_history = np.zeros((self.max_history_length, net_input.shape[0]))
-                self.output_history = np.zeros((self.max_history_length, net_output.shape[0]))
+                self.input_history = np.zeros((self.max_history_length, net_input.shape[0])).astype(np.float32)
+                self.output_history = np.zeros((self.max_history_length, net_output.shape[0])).astype(np.float32)
                 self.input_history_t = 0
 
             self.input_history[self.input_history_t, :] = net_input
@@ -288,7 +293,12 @@ class InverseModel(object):
         self.mean_error_history = np.zeros(self.max_history_length)
 
         # TODO fix conflict between max_history_length (for error history here) vs. same variable for input_history
-        self.temp_array = np.zeros(self.max_history_length).astype(np.float)
+        self.temp_array = np.zeros(self.max_history_length).astype(np.float32)
+
+        if self.input_history is not None:
+            self.input_history = self.input_history.astype(np.float32)
+        if self.output_history is not None:
+            self.output_history = self.output_history.astype(np.float32)
 
     def _get_current_future_motor(self, states_history, motor_history, training_delay):
         #print '********* START _get_current_future_motor ***********'
@@ -328,8 +338,8 @@ class InverseModel(object):
             net_output = motor_sequence
 
             if self.input_history is None:
-                self.input_history = np.zeros((self.max_history_length, net_input.shape[0]))
-                self.output_history = np.zeros((self.max_history_length, net_output.shape[0]))
+                self.input_history = np.zeros((self.max_history_length, net_input.shape[0])).astype(np.float32)
+                self.output_history = np.zeros((self.max_history_length, net_output.shape[0])).astype(np.float32)
                 self.input_history_t = 0
 
             self.input_history[self.input_history_t, :] = net_input

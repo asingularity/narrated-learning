@@ -74,6 +74,10 @@ def get_brain_params():
         # ************ inverse model ************
         'inverse_models': [
             {'state_index_current': 0, 'state_index_future': 0, 'dt': 1},
+            {'state_index_current': 1, 'state_index_future': 1, 'dt': 1},
+            {'state_index_current': 2, 'state_index_future': 2, 'dt': 1},
+            {'state_index_current': 3, 'state_index_future': 3, 'dt': 1},
+            {'state_index_current': 0, 'state_index_future': 0, 'dt': 2},
             {'state_index_current': 1, 'state_index_future': 1, 'dt': 2},
             {'state_index_current': 2, 'state_index_future': 2, 'dt': 2},
             {'state_index_current': 3, 'state_index_future': 3, 'dt': 4},
