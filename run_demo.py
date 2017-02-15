@@ -7,6 +7,9 @@ from robot_environment import RobotEnvironment
 from performance_evaluator import PerformanceEvaluator
 from visualizer import Visualizer
 from sim_folder_manager import SimFolderManager
+from task_manager import TaskManager
+import time
+from math import pi
 
 
 MAX_HISTORY_LENGTH = 4000000 + 1
@@ -85,10 +88,10 @@ def get_brain_params():
         ],
         'inverse_training_time_range': [0, MAX_HISTORY_LENGTH],
         'inverse_test_every_k_steps': 50,
-        'inverse_save_every_k_steps': 2000000,
-        'inverse_enable_training': True,
-        'inverse_load_from_file': False,
-        'inverse_load_filename': '/home/' + USERNAME + '/projects/NL/sim/<none>/<none>.pkl',
+        'inverse_save_every_k_steps': None, #2000000,
+        'inverse_enable_training': False,
+        'inverse_load_from_file': True,
+        'inverse_load_filename': '/home/' + USERNAME + '/projects/NL/sim/inverse_2017-01-31T21:35:41.721329/inverse.pkl',
     }
     return params
 
@@ -157,12 +160,24 @@ def get_evaluator_params():
 def get_visualizer_params():
     params = {
         'fps_display_interval': 3,
-        'image_display_frames': 1000,
+        'image_display_frames': 1,
         'plot_brain_error_frames': 50000,
-        'waitKey_time': 1,
+        'waitKey_time': 10,
         'scale_topdown_factor': 10,
         'scale_camera_factor': 20,
         'no_wall_ray_color': 0.1,
+    }
+    return params
+
+
+def get_task_manager_params():
+    params = {
+        'enabled': True,
+        'max_task_steps': 15,
+        'min_delta_theta': -pi/2.0,
+        'max_delta_theta': pi/2.0,
+        'min_distance': 5,
+        'max_distance': 5
     }
     return params
 
@@ -175,7 +190,8 @@ def init_demo():
         'robot_environment': RobotEnvironment(get_environment_params()),
         'perf_eval': PerformanceEvaluator(get_evaluator_params()),
         'visualizer': Visualizer(get_visualizer_params()),
-        'sim_folder_manager': SimFolderManager(get_sim_folder_manager_params())
+        'sim_folder_manager': SimFolderManager(get_sim_folder_manager_params()),
+        'task_manager': TaskManager(get_task_manager_params())
     }
 
 
@@ -188,49 +204,52 @@ def run_demo(demo_components):
     perf_eval = demo_components['perf_eval']
     visualizer = demo_components['visualizer']
     sim_folder_manager = demo_components['sim_folder_manager']
+    task_manager = demo_components['task_manager']
 
     while not perf_eval.finished():
-        robot_sensors.read_input(robot_environment, robot_model)
-        #   robot_sensors.rays updated from environment: STATE_T+1
-        #   robot_sensors.last_motor_command updated from robot_model.last_motor_command: CMD_T
 
-        robot_brain.process_input(robot_sensors, sim_folder_manager)
+        # TODO if in task mode
+        time.sleep(0.3)
+        task_manager.choose_new_task(robot_environment, robot_sensors, robot_brain)
+        new_task_chosen = True
 
-        robot_model.act_upon_processing(robot_brain)
+        while not (task_manager.finished_task(robot_environment)):
+            robot_sensors.read_input(robot_environment, robot_model)
+            #   robot_sensors.rays updated from environment: STATE_T+1
+            #   robot_sensors.last_motor_command updated from robot_model.last_motor_command: CMD_T
 
-        robot_environment.step_environment(robot_model, visualizer)
-        #   robot_model.last_motor_command updated to new random command CMD_T
-        #   robot_environment state updated with motor cmd CMD_T: STATE_T -> STATE_T+1
+            robot_brain.process_input(robot_sensors, sim_folder_manager, task_manager)
 
-        perf_eval.evaluate(robot_sensors,
-                           robot_brain,
-                           robot_model,
-                           robot_environment)
-        visualizer.visualize(robot_sensors,
-                             robot_brain,
-                             robot_model,
-                             robot_environment,
-                             sim_folder_manager)
+            robot_model.act_upon_processing(robot_brain)
+
+            robot_environment.step_environment(robot_model, visualizer)
+            #   robot_model.last_motor_command updated to new random command CMD_T
+            #   robot_environment state updated with motor cmd CMD_T: STATE_T -> STATE_T+1
+
+            perf_eval.evaluate(robot_sensors,
+                               robot_brain,
+                               robot_model,
+                               robot_environment)
+
+            visualizer.visualize(robot_sensors,
+                                 robot_brain,
+                                 robot_model,
+                                 robot_environment,
+                                 sim_folder_manager,
+                                 task_manager)
+
+            # TODO if in task mode
+            if new_task_chosen:
+                time.sleep(0.3)
+                new_task_chosen = False
 
     print 'Finished Simulation.'
 
 
-def learning_demo():
-    demo_components = init_demo()
-    run_demo(demo_components)
-
-
-def task_demo():
+def demo():
     demo_components = init_demo()
     run_demo(demo_components)
 
 
 if __name__ == '__main__':
-    do_learning_demo = True
-    do_task_demo = False
-
-    if do_learning_demo:
-        learning_demo()
-
-    if do_task_demo:
-        task_demo()
+    demo()

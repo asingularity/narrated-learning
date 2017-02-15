@@ -159,9 +159,13 @@ class RobotEnvironment(object):
             else:
                 pass
 
-    def _get_nonzero_tiles(self):
-        round_x = self.round_x
-        round_y = self.round_y
+    def _get_nonzero_tiles(self, robot_x=None, robot_y=None):
+        if robot_x is not None and robot_y is not None:
+            round_x = max(min(robot_x, self.W - 1), 0)
+            round_y = max(min(robot_y, self.H - 1), 0)
+        else:
+            round_x = self.round_x
+            round_y = self.round_y
         dist_from_robot = self.dist[round_y, round_x, :, :]
         theta_from_robot = self.theta[round_y, round_x, :, :]
         delta_theta_from_robot = self.delta_theta[round_y, round_x, :, :]

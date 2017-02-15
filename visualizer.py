@@ -39,7 +39,7 @@ class Visualizer(object):
             self.last_FPS_time = time.time()
         self.fps_frames += 1
 
-    def _display_graphic_map(self, robot_environment, robot_sensors, robot_brain):
+    def _display_graphic_map(self, robot_environment, robot_sensors, robot_brain, task_manager):
         topdown_info = robot_environment.get_topdown_info()
 
         im = topdown_info['env_map_copy']
@@ -70,6 +70,20 @@ class Visualizer(object):
         resized_image = cv2.resize(src=im, dsize=(0, 0), fx=self.scale_topdown_factor, fy=self.scale_topdown_factor, interpolation=cv2.INTER_NEAREST)
 
         # TODO rays should be drawn on resized image? so always width 1
+
+        goal_x, goal_y, goal_theta = task_manager.get_current_goal_position_angle()
+        cv2.circle(img=resized_image,
+                   center=(int(goal_x * self.scale_topdown_factor), int(goal_y * self.scale_topdown_factor)),
+                   radius=5,
+                   color=(255, 0, 0),
+                   thickness=3)
+        g2_x = goal_x + 2. * cos(goal_theta)
+        g2_y = goal_y + 2. * sin(goal_theta)
+        cv2.line(resized_image,
+                 pt1=(int(goal_x * self.scale_topdown_factor), int(goal_y * self.scale_topdown_factor)),
+                 pt2=(int(g2_x * self.scale_topdown_factor), int(g2_y * self.scale_topdown_factor)),
+                 color=(255, 255, 0),
+                 thickness=2)
 
         for k in range(ray_colors.shape[0]):
 
@@ -154,10 +168,10 @@ class Visualizer(object):
                 self.ax.plot(error_history, 'b-')
                 self.fig.savefig(sim_folder_manager.get_plots_save_folder() + '/' + error_name + '.png', dpi=100)
 
-    def visualize(self, robot_sensors, robot_brain, robot_model, robot_environment, sim_folder_manager):
+    def visualize(self, robot_sensors, robot_brain, robot_model, robot_environment, sim_folder_manager, task_manager):
         if self.image_display_frames is not None:
             if self.frames % self.image_display_frames == 0:
-                self._display_graphic_map(robot_environment, robot_sensors, robot_brain)
+                self._display_graphic_map(robot_environment, robot_sensors, robot_brain, task_manager)
 
         if self.frames % self.plot_brain_error_frames == 0:
             self._plot_brain_errors(robot_brain, sim_folder_manager)

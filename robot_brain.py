@@ -57,7 +57,7 @@ class Autoencoder(object):
         self.error_history = np.zeros(self.max_history_length)
         self.mean_error_history = np.zeros(self.max_history_length)
 
-    def evaluate_and_store_error(self, net_input):
+    def evaluate_and_store_error(self, net_input, store_error):
         '''
         must evaluate net_output against net_input and store that error
         returns hidden
@@ -68,21 +68,22 @@ class Autoencoder(object):
         net_output = self.net.evaluate(net_input)
         hidden = self.net.layers[1]['activation'][:-1].copy()
 
-        error = net_output - net_input
-        error = np.mean(np.fabs(error))
+        if store_error:
+            error = net_output - net_input
+            error = np.mean(np.fabs(error))
 
-        if self.error_t is None:
-            self.error_t = 0
+            if self.error_t is None:
+                self.error_t = 0
 
-        self.error_history[self.error_t] = error
-        self.error_t += 1
+            self.error_history[self.error_t] = error
+            self.error_t += 1
 
-        if self.error_t > self.error_average_steps:
-            if self.mean_error_t is None:
-                self.mean_error_t = 0
-            mean_error = np.mean(self.error_history[self.error_t - self.error_average_steps:self.error_t])
-            self.mean_error_history[self.mean_error_t] = mean_error
-            self.mean_error_t += 1
+            if self.error_t > self.error_average_steps:
+                if self.mean_error_t is None:
+                    self.mean_error_t = 0
+                mean_error = np.mean(self.error_history[self.error_t - self.error_average_steps:self.error_t])
+                self.mean_error_history[self.mean_error_t] = mean_error
+                self.mean_error_t += 1
 
         return hidden
 
@@ -346,6 +347,22 @@ class InverseModel(object):
             self.output_history[self.input_history_t, :] = net_output
             self.input_history_t += 1
 
+    def lookup_motor_to_goal(self, goal_state, states_history):
+
+        data_set = self.input_history
+        data_frames = self.input_history_t
+        dim = data_set.shape[1]
+        tmp = self.temp_array
+
+        current_state = states_history.get_state(state_index=self.state_index_current,
+                                                 delay=0)
+
+        net_input = np.concatenate((current_state, goal_state))
+        dist, ind = knn_parallel_query(data_set, net_input, tmp, data_frames, dim)
+        net_output_predicted = self.output_history[ind, :]
+        print 'lookup_motor_to_goal: net_output_predicted ', net_output_predicted
+        return net_output_predicted
+
     def test_newest_point_and_store_error(self, states_history, motor_history):
         if self.input_history_t is not None:
             data_set = self.input_history
@@ -398,6 +415,7 @@ class RobotBrain(object):
 
     def _init_globals(self, params):
         self.t = 0
+        self.motor_out = None
         self.predictors_enable = params['predictors_enable']
 
     def _init_config(self, params):
@@ -504,7 +522,7 @@ class RobotBrain(object):
 
     # ************ process ************
 
-    def process_input(self, robot_sensors, sim_folder_manager):
+    def process_input(self, robot_sensors, sim_folder_manager, task_manager):
 
         current_visual_input, previous_motor_command = self._process_sensors(robot_sensors)
         # previous_motor_command was initiated at T-1, applied [T-1, T],
@@ -534,7 +552,19 @@ class RobotBrain(object):
                                   sim_folder_manager=sim_folder_manager
                                   )
 
+        goal_state = task_manager.get_current_goal_state()
+        if goal_state is not None:
+            inv = self.inverse_list[0]
+            self.motor_out = inv.lookup_motor_to_goal(goal_state, self.states_history)
+            print 'motor_out, no index: ', self.motor_out
+            self.motor_out = self.motor_out[1]
+        else:
+            self.motor_out = None
+
         self.t += 1
+
+    def get_motor_output(self):
+        return self.motor_out
 
     def _process_sensors(self, robot_sensors):
         rays = robot_sensors.get_rays()
@@ -547,12 +577,12 @@ class RobotBrain(object):
 
         return current_visual_input, previous_motor_command
 
-    def _process_autoencoders(self, autoencoders_list, net_input, sim_folder_manager):
+    def _process_autoencoders(self, autoencoders_list, net_input, sim_folder_manager, include_in_history=True):
         newest_states_list = [net_input.copy()]
 
         net_index = 0
         for autoenc in autoencoders_list:
-            hidden = autoenc.evaluate_and_store_error(net_input)
+            hidden = autoenc.evaluate_and_store_error(net_input, store_error=include_in_history)
 
             next_net_input = hidden.copy()
             newest_states_list.append(hidden.copy())
@@ -560,21 +590,24 @@ class RobotBrain(object):
             for tmp_layer in range(net_index, -1, -1):  # [2, 1, 0] for net_index = 2
                 tmp_output = autoencoders_list[tmp_layer].net.evaluate_from_hidden(hidden)
                 hidden = tmp_output
-            self.autoencoder_images[net_index, :] = tmp_output[:]
+            if include_in_history:
+                self.autoencoder_images[net_index, :] = tmp_output[:]
 
-            if self.autoencoders_enable_training:
-                if self.autoencoders_training_time_range[0] <= self.t < self.autoencoders_training_time_range[1]:
-                    autoenc.train(net_input)
+                if self.autoencoders_enable_training:
+                    if self.autoencoders_training_time_range[0] <= self.t < self.autoencoders_training_time_range[1]:
+                        autoenc.train(net_input)
 
-            net_input = next_net_input
             net_index += 1
 
-        if self.autoencoders_save_every_k_steps is not None:
-            if self.t % self.autoencoders_save_every_k_steps == 0 and self.t > 0:
-                print 'saving autoencoders...'
-                f = open(sim_folder_manager.get_models_save_folder() + '/autoencoders.pkl', 'w')
-                pickle.dump(autoencoders_list, f)
-                f.close()
+            net_input = next_net_input
+
+        if include_in_history:
+            if self.autoencoders_save_every_k_steps is not None:
+                if self.t % self.autoencoders_save_every_k_steps == 0 and self.t > 0:
+                    print 'saving autoencoders...'
+                    f = open(sim_folder_manager.get_models_save_folder() + '/autoencoders.pkl', 'w')
+                    pickle.dump(autoencoders_list, f)
+                    f.close()
 
         return newest_states_list
 
