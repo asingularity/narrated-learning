@@ -5,15 +5,15 @@ from math import pi
 
 class RobotSensors(object):
     def __init__(self, params):
-        num_rays = params['num_rays']
+        self.num_rays = params['num_rays']
         fov_degrees = params['fov_degrees']
 
         # relative to robot angle:
-        self.ray_degrees = np.linspace(-fov_degrees / 2.0, fov_degrees / 2.0, num_rays)
+        self.ray_degrees = np.linspace(-fov_degrees / 2.0, fov_degrees / 2.0, self.num_rays)
         self.ray_radians = (pi / 180.0) * self.ray_degrees
         self.relative_ray_radians = self.ray_radians.copy()
-        self.ray_colors = np.zeros(num_rays)
-        self.ray_lengths = np.zeros(num_rays)
+        self.ray_colors = np.zeros(self.num_rays)
+        self.ray_lengths = np.zeros(self.num_rays)
         # TODO fix this hack:
         self.last_motor_command = np.zeros(2).astype(np.float)
 
@@ -27,16 +27,18 @@ class RobotSensors(object):
     def get_last_motor_command(self):
         return self.last_motor_command
 
-    def read_input(self, robot_environment, robot_model):
-        self.last_motor_command = robot_model.get_last_motor_command()
-        nonzero_tiles = robot_environment.get_nonzero_tiles()
+    def _compute_rays_for_env_and_theta(self, env, robot_theta, robot_x, robot_y):
+        ray_colors = np.zeros(self.num_rays)
+        ray_lengths = np.zeros(self.num_rays)
+
+        if robot_x is None:
+            nonzero_tiles = env.get_nonzero_tiles()
+        else:
+            nonzero_tiles = env._get_nonzero_tiles(robot_x, robot_y)
         dist = nonzero_tiles['nonzero_dist']
         theta = nonzero_tiles['nonzero_theta']
         d_theta = nonzero_tiles['nonzero_delta_theta']
         color = nonzero_tiles['nonzero_color']
-
-        robot_info = robot_environment.get_robot_theta()
-        robot_theta = robot_info['robot_theta']
 
         # for each ray, find which tiles are within theta for it
         #   then pick color of minimum distance tile
@@ -57,12 +59,50 @@ class RobotSensors(object):
                 matching_tile_colors = color[matching_tile_indices]
                 matching_tile_dists = dist[matching_tile_indices]
                 min_tile = np.argmin(matching_tile_dists)
-                self.ray_colors[k] = matching_tile_colors[min_tile]
-                self.ray_lengths[k] = matching_tile_dists[min_tile]
+                ray_colors[k] = matching_tile_colors[min_tile]
+                ray_lengths[k] = matching_tile_dists[min_tile]
             else:
-                self.ray_colors[k] = 0
-
+                ray_colors[k] = 0
                 # TODO make this a parameter (max ray length):
-                self.ray_lengths[k] = 1000
+                ray_lengths[k] = 1000
 
-        self.relative_ray_radians = relative_ray_radians
+        #self.relative_ray_radians = relative_ray_radians
+
+        return ray_colors, ray_lengths, relative_ray_radians
+
+    def read_input(self, robot_environment, robot_model):
+        self.last_motor_command = robot_model.get_last_motor_command()
+
+        robot_info = robot_environment.get_robot_theta()
+        robot_theta = robot_info['robot_theta']
+
+        self.ray_colors, self.ray_lengths, self.relative_ray_radians = \
+            self._compute_rays_for_env_and_theta(env=robot_environment, robot_theta=robot_theta,
+                                                 robot_x=None, robot_y=None)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
