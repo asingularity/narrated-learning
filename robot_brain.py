@@ -347,7 +347,7 @@ class InverseModel(object):
             self.output_history[self.input_history_t, :] = net_output
             self.input_history_t += 1
 
-    def lookup_motor_to_goal(self, goal_state, states_history):
+    def lookup_motor_to_goal(self, goal_states, states_history):
 
         data_set = self.input_history
         data_frames = self.input_history_t
@@ -357,7 +357,7 @@ class InverseModel(object):
         current_state = states_history.get_state(state_index=self.state_index_current,
                                                  delay=0)
 
-        net_input = np.concatenate((current_state, goal_state))
+        net_input = np.concatenate((current_state, goal_states[self.state_index_future].astype(np.float32)))
         dist, ind = knn_parallel_query(data_set, net_input, tmp, data_frames, dim)
         net_output_predicted = self.output_history[ind, :]
         print 'lookup_motor_to_goal: net_output_predicted ', net_output_predicted
@@ -552,12 +552,12 @@ class RobotBrain(object):
                                   sim_folder_manager=sim_folder_manager
                                   )
 
-        goal_state = task_manager.get_current_goal_state()
-        if goal_state is not None:
-            inv = self.inverse_list[0]
-            self.motor_out = inv.lookup_motor_to_goal(goal_state, self.states_history)
+        goal_states = task_manager.get_current_goal_state()
+        if goal_states is not None:
+            inv = self.inverse_list[0]  # TODO select inverse model here
+            self.motor_out = inv.lookup_motor_to_goal(goal_states, self.states_history)
             print 'motor_out, no index: ', self.motor_out
-            self.motor_out = self.motor_out[1]
+            self.motor_out = self.motor_out[1]  # TODO this depends on which inverse model
         else:
             self.motor_out = None
 
