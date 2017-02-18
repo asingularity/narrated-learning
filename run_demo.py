@@ -1,4 +1,8 @@
 
+import random
+import numpy as np
+random.seed(0)
+np.random.seed(0)
 
 from robot_brain import RobotBrain
 from robot_model import RobotModel
@@ -14,6 +18,8 @@ from math import pi
 
 MAX_HISTORY_LENGTH = 4000000 + 1
 USERNAME = 'intec'
+NUM_INPUT_RAYS = 40
+INPUT_DIM = NUM_INPUT_RAYS * 3
 
 
 def get_model_params():
@@ -26,7 +32,7 @@ def get_model_params():
 
 def get_sensors_params():
     params = {
-        'num_rays': 40,
+        'num_rays': NUM_INPUT_RAYS,
         'fov_degrees': 100
     }
     return params
@@ -50,9 +56,9 @@ def get_brain_params():
         'training_delay': 128,
         # ************ autoencoders ************
         'autoencoders': [
-            {'num_inputs': 40, 'num_hidden': 20, 'learning_rate': 0.01},
-            {'num_inputs': 20, 'num_hidden': 10, 'learning_rate': 0.01},
-            {'num_inputs': 10, 'num_hidden': 5, 'learning_rate': 0.01}
+            {'num_inputs': INPUT_DIM, 'num_hidden': INPUT_DIM / 2, 'learning_rate': 0.01},
+            {'num_inputs': INPUT_DIM / 2, 'num_hidden': INPUT_DIM / 4, 'learning_rate': 0.01},
+            {'num_inputs': INPUT_DIM / 4, 'num_hidden': INPUT_DIM / 8, 'learning_rate': 0.01}
         ],
         'autoencoders_training_time_range': [0, MAX_HISTORY_LENGTH],
         'autoencoders_save_every_k_steps': None,
@@ -61,12 +67,12 @@ def get_brain_params():
         'autoencoders_load_filename': '/home/' + USERNAME + '/projects/NL/sim/autoencoders_2017-01-22T20:37:11.979346/autoencoders.pkl',
         # ************ predictors ************
         'predictors': [
-            {'state_index_input': 3, 'state_index_context': 3, 'state_index_output': 3,
-             'dt_output': 8, 'dt_context': 16},
-            {'state_index_input': 3, 'state_index_context': 3, 'state_index_output': 3,
-             'dt_output': 16, 'dt_context': 32},
-            {'state_index_input': 3, 'state_index_context': 3, 'state_index_output': 3,
-             'dt_output': 32, 'dt_context': 64}
+            {'state_index_input': 0, 'state_index_context': 1, 'state_index_output': 0,
+                                     'dt_context': 16,         'dt_output': 8},
+            {'state_index_input': 1, 'state_index_context': 2, 'state_index_output': 1,
+                                      'dt_context': 32,        'dt_output': 16},
+            {'state_index_input': 2, 'state_index_context': 3, 'state_index_output': 2,
+                                     'dt_context': 64,         'dt_output': 32}
         ],
         'predictors_training_time_range': [0, MAX_HISTORY_LENGTH],
         'predictors_test_every_k_steps': 50,  # 50 for training
@@ -77,14 +83,7 @@ def get_brain_params():
         # ************ inverse model ************
         'inverse_models': [
             {'state_index_current': 0, 'state_index_future': 0, 'dt': 1},
-            {'state_index_current': 1, 'state_index_future': 1, 'dt': 1},
-            {'state_index_current': 2, 'state_index_future': 2, 'dt': 1},
-            {'state_index_current': 3, 'state_index_future': 3, 'dt': 1},
-            {'state_index_current': 0, 'state_index_future': 0, 'dt': 2},
-            {'state_index_current': 1, 'state_index_future': 1, 'dt': 2},
-            {'state_index_current': 2, 'state_index_future': 2, 'dt': 2},
-            {'state_index_current': 3, 'state_index_future': 3, 'dt': 4},
-            {'state_index_current': 3, 'state_index_future': 3, 'dt': 8},
+            {'state_index_current': 0, 'state_index_future': 0, 'dt': 4}
         ],
         'inverse_training_time_range': [0, MAX_HISTORY_LENGTH],
         'inverse_test_every_k_steps': 50,
@@ -98,54 +97,16 @@ def get_brain_params():
 
 def get_environment_params():
     params = {
-        'use_keyboard_input': False,
         'width': 40,
         'height': 40,
+        'min_num_walls': 20,
+        'max_num_walls': 20,
+        'wall_min_length': 1,
+        'wall_max_length': 20,
+        'min_space_between_walls': 2,
         'init_robot_x': 25,
         'init_robot_y': 25,
-        'init_robot_theta': 45,
-        'walls': [
-            {'x_start': 2,
-             'y_start': 11,
-             'length': 21,
-             'color': 0.1,
-             'orientation': 'vertical'},
-            {'x_start': 5,
-             'y_start': 22,
-             'length': 11,
-             'color': 0.2,
-             'orientation': 'vertical'},
-            {'x_start': 10,
-             'y_start': 15,
-             'length': 15,
-             'color': 0.3,
-             'orientation': 'horizontal'},
-            {'x_start': 32,
-             'y_start': 32,
-             'length': 7,
-             'color': 0.4,
-             'orientation': 'horizontal'},
-            {'x_start': 22,
-             'y_start': 15,
-             'length': 7,
-             'color': 0.5,
-             'orientation': 'vertical'},
-            {'x_start': 38,
-             'y_start': 20,
-             'length': 7,
-             'color': 0.6,
-             'orientation': 'vertical'},
-            {'x_start': 28,
-             'y_start': 14,
-             'length': 12,
-             'color': 0.7,
-             'orientation': 'vertical'},
-            {'x_start': 24,
-             'y_start': 6,
-             'length': 12,
-             'color': 0.8,
-             'orientation': 'horizontal'},
-        ]
+        'init_robot_theta': 45
     }
     return params
 
@@ -184,10 +145,10 @@ def get_task_manager_params():
 
 def init_demo():
     return {
+        'robot_environment': RobotEnvironment(get_environment_params()),
         'robot_brain': RobotBrain(get_brain_params()),
         'robot_model': RobotModel(get_model_params()),
         'robot_sensors': RobotSensors(get_sensors_params()),
-        'robot_environment': RobotEnvironment(get_environment_params()),
         'perf_eval': PerformanceEvaluator(get_evaluator_params()),
         'visualizer': Visualizer(get_visualizer_params()),
         'sim_folder_manager': SimFolderManager(get_sim_folder_manager_params()),
@@ -197,51 +158,79 @@ def init_demo():
 
 #@profile
 def run_demo(demo_components):
+    robot_environment = demo_components['robot_environment']
     robot_brain = demo_components['robot_brain']
     robot_model = demo_components['robot_model']
     robot_sensors = demo_components['robot_sensors']
-    robot_environment = demo_components['robot_environment']
     perf_eval = demo_components['perf_eval']
     visualizer = demo_components['visualizer']
     sim_folder_manager = demo_components['sim_folder_manager']
     task_manager = demo_components['task_manager']
 
+    use_keyboard_input = False
+    task_manager_enabled = task_manager.get_enabled()
+    new_task_chosen = False
+    task_goal_states = None
+
     while not perf_eval.finished():
 
-        # TODO if in task mode
-        time.sleep(0.3)
-        task_manager.choose_new_task(robot_environment, robot_sensors, robot_brain)
-        new_task_chosen = True
+        if task_manager_enabled:
+            time.sleep(0.3)
+            task_manager.choose_new_task_goal(topdown_info=robot_environment.get_topdown_info())
+            task_goal_nonzero_tiles = robot_environment.get_nonzero_tiles(robot_position_angle=task_manager.get_current_goal_position_angle())
+            task_goal_sensory_input = robot_sensors.get_rays(nozero_tiles=task_goal_nonzero_tiles,
+                                                             robot_position_angle=task_manager.get_current_goal_position_angle())
+            task_goal_states = robot_brain.get_autoencoder_states_for_input(net_input=task_goal_sensory_input)
+            new_task_chosen = True
 
-        while not (task_manager.finished_task(robot_environment)):
-            robot_sensors.read_input(robot_environment, robot_model)
+        # TODO add color to environment
+        # TODO larger test environment with walls along edges
+        #   TODO random walls. make sure they don't overlap so much robot is trapped
+
+        finished_task = False
+        while not finished_task:
+
+            robot_sensors.read_input(nonzero_tiles_dict=robot_environment.get_nonzero_tiles(),
+                                     robot_theta=robot_environment.get_robot_theta())
+
             #   robot_sensors.rays updated from environment: STATE_T+1
             #   robot_sensors.last_motor_command updated from robot_model.last_motor_command: CMD_T
 
-            robot_brain.process_input(robot_sensors, sim_folder_manager, task_manager)
+            robot_brain.process_input(rays=robot_sensors.get_rays(),
+                                      last_motor_command=robot_model.get_last_motor_command(),
+                                      goal_states=task_goal_states,
+                                      models_save_folder=sim_folder_manager.get_models_save_folder())
 
-            robot_model.act_upon_processing(robot_brain)
+            robot_model.act_upon_processing(motor_command=robot_brain.get_motor_output())
 
-            robot_environment.step_environment(robot_model, visualizer)
+            if use_keyboard_input:
+                linear_speed, angular_speed = robot_model.get_delta_configuration()
+            else:
+                linear_speed, angular_speed = visualizer.get_linear_angular_speed()
+
+            robot_environment.step_environment(linear_speed=linear_speed,
+                                               angular_speed=angular_speed)
+
             #   robot_model.last_motor_command updated to new random command CMD_T
             #   robot_environment state updated with motor cmd CMD_T: STATE_T -> STATE_T+1
 
-            perf_eval.evaluate(robot_sensors,
-                               robot_brain,
-                               robot_model,
-                               robot_environment)
+            visualizer.visualize(rays=robot_sensors.get_rays(),
+                                 robot_brain=robot_brain,  # get_autoenc_images, get_predictor_images, get_error_names_histories
+                                 topdown_info=robot_environment.get_topdown_info(),
+                                 plots_save_folder=sim_folder_manager.get_plots_save_folder(),
+                                 current_goal_position_angle=task_manager.get_current_goal_position_angle())
 
-            visualizer.visualize(robot_sensors,
-                                 robot_brain,
-                                 robot_model,
-                                 robot_environment,
-                                 sim_folder_manager,
-                                 task_manager)
+            if task_manager_enabled:
+                if new_task_chosen:
+                    time.sleep(0.3)
+                    new_task_chosen = False
+                finished_task = task_manager.finished_task()
+            else:
+                finished_task = True
 
-            # TODO if in task mode
-            if new_task_chosen:
-                time.sleep(0.3)
-                new_task_chosen = False
+            perf_eval.step()
+
+        perf_eval.evaluate()
 
     print 'Finished Simulation.'
 
