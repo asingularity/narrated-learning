@@ -52,7 +52,14 @@ class Visualizer(object):
         ray_lengths = rays['ray_lengths']
 
         autoenc_images = robot_brain.get_autoenc_images()
-        resized_autoenc = cv2.resize(src=autoenc_images, dsize=(0, 0), fx=self.scale_camera_factor, fy=self.scale_camera_factor, interpolation=cv2.INTER_NEAREST)
+        autoenc_images_color = np.zeros((autoenc_images.shape[0], autoenc_images.shape[1] / 3, 3))
+        for r in range(autoenc_images.shape[0]):
+            tmp = autoenc_images[r, :].reshape(autoenc_images.shape[1] / 3, 3)
+            autoenc_images_color[r, :, 0] = tmp[:, 0]
+            autoenc_images_color[r, :, 1] = tmp[:, 1]
+            autoenc_images_color[r, :, 2] = tmp[:, 2]
+
+        resized_autoenc = cv2.resize(src=autoenc_images_color, dsize=(0, 0), fx=self.scale_camera_factor, fy=self.scale_camera_factor, interpolation=cv2.INTER_NEAREST)
         cv2.imshow('autoenc', resized_autoenc)
 
         enable_ctx_predictor_debug = False

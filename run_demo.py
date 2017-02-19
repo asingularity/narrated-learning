@@ -172,7 +172,6 @@ def run_demo(demo_components):
     new_task_chosen = False
     task_goal_states = None
 
-    # TODO fix visualize autoenc images!
     # TODO fix see through walls from left side of vertical wall viewing right
 
     while not perf_eval.finished():
