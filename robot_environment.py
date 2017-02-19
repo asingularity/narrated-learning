@@ -60,11 +60,14 @@ class RobotEnvironment(object):
             cv2.waitKey(600000)
 
         self.env_map = env_map
+        env_map_sum = np.sum(env_map, axis=2)
 
         # store nonzero elements of env_map explicitly:
-        self.nonzero_map_y = np.nonzero(env_map)[0]
-        self.nonzero_map_x = np.nonzero(env_map)[1]
-        self.nonzero_map_color = env_map[np.nonzero(env_map)]
+        self.nonzero_map_y = np.nonzero(env_map_sum)[0]
+        self.nonzero_map_x = np.nonzero(env_map_sum)[1]
+        # TODO should store tuple or list in each position:
+        self.nonzero_map_color = env_map[np.nonzero(env_map_sum)]
+        # print self.nonzero_map_color.shape  # (150, 3)
 
         self.theta, self.delta_theta, self.dist = self._load_or_precompute_angles_dist(rows=self.H, cols=self.W)
 

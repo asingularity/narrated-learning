@@ -61,9 +61,9 @@ def get_brain_params():
             {'num_inputs': INPUT_DIM / 4, 'num_hidden': INPUT_DIM / 8, 'learning_rate': 0.01}
         ],
         'autoencoders_training_time_range': [0, MAX_HISTORY_LENGTH],
-        'autoencoders_save_every_k_steps': None,
-        'autoencoders_enable_training': False,
-        'autoencoders_load_from_file': True,
+        'autoencoders_save_every_k_steps': 200000,
+        'autoencoders_enable_training': True,
+        'autoencoders_load_from_file': False,
         'autoencoders_load_filename': '/home/' + USERNAME + '/projects/NL/sim/autoencoders_2017-01-22T20:37:11.979346/autoencoders.pkl',
         # ************ predictors ************
         'predictors': [
@@ -78,7 +78,7 @@ def get_brain_params():
         'predictors_test_every_k_steps': 50,  # 50 for training
         'predictors_save_every_k_steps': None,
         'predictors_enable_training': False,
-        'predictors_load_from_file': True,
+        'predictors_load_from_file': False,
         'predictors_load_filename': '/home/' + USERNAME + '/projects/NL/sim/predictors_2017-01-23T08:39:18.437290/predictors.pkl',
         # ************ inverse model ************
         'inverse_models': [
@@ -89,7 +89,7 @@ def get_brain_params():
         'inverse_test_every_k_steps': 50,
         'inverse_save_every_k_steps': None, #2000000,
         'inverse_enable_training': False,
-        'inverse_load_from_file': True,
+        'inverse_load_from_file': False,
         'inverse_load_filename': '/home/' + USERNAME + '/projects/NL/sim/inverse_2017-01-31T21:35:41.721329/inverse.pkl',
     }
     return params
@@ -126,14 +126,14 @@ def get_visualizer_params():
         'waitKey_time': 10,
         'scale_topdown_factor': 10,
         'scale_camera_factor': 20,
-        'no_wall_ray_color': 0.1,
+        'no_wall_ray_color': (0.1, 0.1, 0.1),
     }
     return params
 
 
 def get_task_manager_params():
     params = {
-        'enabled': True,
+        'enabled': False,
         'max_task_steps': 15,
         'min_delta_theta': -pi/2.0,
         'max_delta_theta': pi/2.0,
@@ -172,7 +172,8 @@ def run_demo(demo_components):
     new_task_chosen = False
     task_goal_states = None
 
-    # TODO make colors work everywhere: robot_sensors returns rays['ray_colors'], should be 1-d, but 3d data, but display should work/flatten etc.
+    # TODO fix visualize autoenc images!
+    # TODO fix see through walls from left side of vertical wall viewing right
 
     while not perf_eval.finished():
 
@@ -180,7 +181,7 @@ def run_demo(demo_components):
             time.sleep(0.3)
             task_manager.choose_new_task_goal(topdown_info=robot_environment.get_topdown_info())
             task_goal_nonzero_tiles = robot_environment.get_nonzero_tiles(robot_position_angle=task_manager.get_current_goal_position_angle())
-            task_goal_rays = robot_sensors.get_rays(nozero_tiles=task_goal_nonzero_tiles,
+            task_goal_rays = robot_sensors.get_rays(nonzero_tiles=task_goal_nonzero_tiles,
                                                     robot_position_angle=task_manager.get_current_goal_position_angle())
             task_goal_sensory_input = task_goal_rays['ray_colors']
             task_goal_states = robot_brain.get_autoencoder_states_for_input(net_input=task_goal_sensory_input)
@@ -189,7 +190,7 @@ def run_demo(demo_components):
         finished_task = False
         while not finished_task:
 
-            robot_sensors.read_input(nozero_tiles=robot_environment.get_nonzero_tiles(),
+            robot_sensors.read_input(nonzero_tiles=robot_environment.get_nonzero_tiles(),
                                      robot_theta=robot_environment.get_robot_theta())
 
             #   robot_sensors.rays updated from environment: STATE_T+1

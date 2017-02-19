@@ -48,7 +48,7 @@ class Visualizer(object):
         robot_theta = topdown_info['robot_theta']
 
         ray_radians = rays['ray_radians']
-        ray_colors = rays['ray_colors']
+        ray_colors = rays['ray_colors'].reshape((len(rays['ray_colors']) / 3, 3))
         ray_lengths = rays['ray_lengths']
 
         autoenc_images = robot_brain.get_autoenc_images()
@@ -69,37 +69,40 @@ class Visualizer(object):
         # TODO rays should be drawn on resized image? so always width 1
 
         goal_x, goal_y, goal_theta = current_goal_position_angle
-        cv2.circle(img=resized_image,
-                   center=(int(goal_x * self.scale_topdown_factor), int(goal_y * self.scale_topdown_factor)),
-                   radius=5,
-                   color=(255, 0, 0),
-                   thickness=3)
-        g2_x = goal_x + 2. * cos(goal_theta)
-        g2_y = goal_y + 2. * sin(goal_theta)
-        cv2.line(resized_image,
-                 pt1=(int(goal_x * self.scale_topdown_factor), int(goal_y * self.scale_topdown_factor)),
-                 pt2=(int(g2_x * self.scale_topdown_factor), int(g2_y * self.scale_topdown_factor)),
-                 color=(255, 255, 0),
-                 thickness=2)
+        if goal_x is not None:
+            cv2.circle(img=resized_image,
+                       center=(int(goal_x * self.scale_topdown_factor), int(goal_y * self.scale_topdown_factor)),
+                       radius=5,
+                       color=(255, 0, 0),
+                       thickness=3)
+            g2_x = goal_x + 2. * cos(goal_theta)
+            g2_y = goal_y + 2. * sin(goal_theta)
+            cv2.line(resized_image,
+                     pt1=(int(goal_x * self.scale_topdown_factor), int(goal_y * self.scale_topdown_factor)),
+                     pt2=(int(g2_x * self.scale_topdown_factor), int(g2_y * self.scale_topdown_factor)),
+                     color=(255, 255, 0),
+                     thickness=2)
 
         for k in range(ray_colors.shape[0]):
 
             pt2_x = robot_x + ray_lengths[k] * cos(ray_radians[k])
             pt2_y = robot_y + ray_lengths[k] * sin(ray_radians[k])
-            ray_color = ray_colors[k]
-            if ray_color == 0:
+            ray_color = ray_colors[k, :]
+            if np.sum(ray_color) == 0:
                 ray_color = self.no_wall_ray_color
 
             cv2.line(resized_image,
                      pt1=(int(robot_x * self.scale_topdown_factor), int(robot_y * self.scale_topdown_factor)),
                      pt2=(int(pt2_x * self.scale_topdown_factor), int(pt2_y * self.scale_topdown_factor)),
-                     color=ray_color,
+                     color=(ray_color[0], ray_color[1], ray_color[2]),
                      thickness=1)
 
         cv2.imshow('env_map', resized_image)
 
-        camera_image = np.zeros((1, ray_colors.shape[0]))
-        camera_image[0, :] = ray_colors[:]
+        camera_image = np.zeros((1, ray_colors.shape[0], 3))
+        camera_image[0, :, 0] = ray_colors[:, 0]
+        camera_image[0, :, 1] = ray_colors[:, 1]
+        camera_image[0, :, 2] = ray_colors[:, 2]
         resized_camera = cv2.resize(src=camera_image, dsize=(0, 0), fx=self.scale_camera_factor, fy=self.scale_camera_factor, interpolation=cv2.INTER_NEAREST)
 
         cv2.imshow('camera', resized_camera)
@@ -168,7 +171,7 @@ class Visualizer(object):
     def visualize(self, rays, robot_brain, topdown_info, plots_save_folder, current_goal_position_angle):
         if self.image_display_frames is not None:
             if self.frames % self.image_display_frames == 0:
-                self._display_graphic_map(rays, robot_brain, topdown_info, plots_save_folder, current_goal_position_angle)
+                self._display_graphic_map(rays, robot_brain, topdown_info, current_goal_position_angle)
 
         if self.frames % self.plot_brain_error_frames == 0:
             self._plot_brain_errors(robot_brain, plots_save_folder)

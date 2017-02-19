@@ -38,7 +38,7 @@ class RobotSensors(object):
                                                  robot_theta=robot_theta)
 
     def _compute_rays_for_env_and_theta(self, nonzero_tiles, robot_theta):
-        ray_colors = np.zeros(self.num_rays)
+        ray_colors = np.zeros((self.num_rays, 3))
         ray_lengths = np.zeros(self.num_rays)
 
         dist = nonzero_tiles['nonzero_dist']
@@ -62,19 +62,19 @@ class RobotSensors(object):
             #matching_tile_indices = np.nonzero(np.logical_or(np.logical_and(ray_theta > theta - d_theta, ray_theta < theta + d_theta), np.logical_and(ray_theta > theta - d_theta + 2 * pi, ray_theta < theta + d_theta + 2 * pi)))[0]
             matching_tile_indices = np.nonzero(np.logical_and(ray_theta > theta - d_theta, ray_theta < theta + d_theta))[0]
             if matching_tile_indices.shape[0] > 0:
-                matching_tile_colors = color[matching_tile_indices]
+                matching_tile_colors = color[matching_tile_indices, :]
                 matching_tile_dists = dist[matching_tile_indices]
                 min_tile = np.argmin(matching_tile_dists)
-                ray_colors[k] = matching_tile_colors[min_tile]
+                ray_colors[k, :] = matching_tile_colors[min_tile, :]
                 ray_lengths[k] = matching_tile_dists[min_tile]
             else:
-                ray_colors[k] = 0
+                ray_colors[k, :] = np.zeros(3)
                 # TODO make this a parameter (max ray length):
                 ray_lengths[k] = 1000
 
         #self.relative_ray_radians = relative_ray_radians
 
-        return ray_colors, ray_lengths, relative_ray_radians
+        return ray_colors.flatten(), ray_lengths, relative_ray_radians
 
 
 
