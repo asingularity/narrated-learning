@@ -39,9 +39,7 @@ class Visualizer(object):
             self.last_FPS_time = time.time()
         self.fps_frames += 1
 
-    def _display_graphic_map(self, robot_environment, robot_sensors, robot_brain, task_manager):
-        topdown_info = robot_environment.get_topdown_info()
-
+    def _display_graphic_map(self, rays, robot_brain, topdown_info, current_goal_position_angle):
         im = topdown_info['env_map_copy']
         robot_x = topdown_info['robot_x']
         robot_y = topdown_info['robot_y']
@@ -49,7 +47,6 @@ class Visualizer(object):
         round_y = topdown_info['round_robot_y']
         robot_theta = topdown_info['robot_theta']
 
-        rays = robot_sensors.get_rays()
         ray_radians = rays['ray_radians']
         ray_colors = rays['ray_colors']
         ray_lengths = rays['ray_lengths']
@@ -71,7 +68,7 @@ class Visualizer(object):
 
         # TODO rays should be drawn on resized image? so always width 1
 
-        goal_x, goal_y, goal_theta = task_manager.get_current_goal_position_angle()
+        goal_x, goal_y, goal_theta = current_goal_position_angle
         cv2.circle(img=resized_image,
                    center=(int(goal_x * self.scale_topdown_factor), int(goal_y * self.scale_topdown_factor)),
                    radius=5,
@@ -127,7 +124,7 @@ class Visualizer(object):
             if k == RIGHT:
                 self.angular_speed_from_key = 0.2
 
-    def _plot_brain_errors(self, robot_brain, sim_folder_manager):
+    def _plot_brain_errors(self, robot_brain, plots_save_folder):
         error_names_autoenc, error_histories_autoenc, \
         error_names_predictor, error_histories_predictor, \
         error_names_inverse, error_histories_inverse, \
@@ -142,7 +139,7 @@ class Visualizer(object):
             self.ax.cla()
             self.ax.set_ylim([0, 0.12])
             self.ax.plot(error_history)
-            self.fig.savefig(sim_folder_manager.get_plots_save_folder() + '/' + error_name + '.png', dpi=100)
+            self.fig.savefig(plots_save_folder + '/' + error_name + '.png', dpi=100)
 
         if error_names_predictor is not None:
             for k in range(len(error_names_predictor)):
@@ -157,7 +154,7 @@ class Visualizer(object):
                 #error_history_nc = error_histories_no_context_predictor[k, :]
                 #self.ax.plot(error_history_nc, 'r-')
                 #  + '_' + error_name_nc
-                self.fig.savefig(sim_folder_manager.get_plots_save_folder() + '/' + error_name + '.png', dpi=100)
+                self.fig.savefig(plots_save_folder + '/' + error_name + '.png', dpi=100)
 
             for k in range(len(error_names_inverse)):
                 error_name = error_names_inverse[k]
@@ -166,15 +163,15 @@ class Visualizer(object):
                 print error_history.shape
                 self.ax.cla()
                 self.ax.plot(error_history, 'b-')
-                self.fig.savefig(sim_folder_manager.get_plots_save_folder() + '/' + error_name + '.png', dpi=100)
+                self.fig.savefig(plots_save_folder + '/' + error_name + '.png', dpi=100)
 
-    def visualize(self, robot_sensors, robot_brain, robot_model, robot_environment, sim_folder_manager, task_manager):
+    def visualize(self, rays, robot_brain, topdown_info, plots_save_folder, current_goal_position_angle):
         if self.image_display_frames is not None:
             if self.frames % self.image_display_frames == 0:
-                self._display_graphic_map(robot_environment, robot_sensors, robot_brain, task_manager)
+                self._display_graphic_map(rays, robot_brain, topdown_info, plots_save_folder, current_goal_position_angle)
 
         if self.frames % self.plot_brain_error_frames == 0:
-            self._plot_brain_errors(robot_brain, sim_folder_manager)
+            self._plot_brain_errors(robot_brain, plots_save_folder)
 
         self._display_fps()
 

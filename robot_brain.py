@@ -522,37 +522,36 @@ class RobotBrain(object):
 
     # ************ process ************
 
-    def process_input(self, robot_sensors, sim_folder_manager, task_manager):
+    def process_input(self, rays, last_motor_command, goal_states, models_save_folder):
 
-        current_visual_input, previous_motor_command = self._process_sensors(robot_sensors)
+        current_visual_input = self._process_sensors(rays=rays)
         # previous_motor_command was initiated at T-1, applied [T-1, T],
         # current_visual_input is at time T
 
         newest_states_list = self._process_autoencoders(autoencoders_list=self.autoencoders_list,
                                                         net_input=current_visual_input,
-                                                        sim_folder_manager=sim_folder_manager)
+                                                        models_save_folder=models_save_folder)
 
         if self.predictors_enable:
             self._process_states_history(newest_states_list=newest_states_list,
                                          states_history=self.states_history)
 
-            self._process_motor_history(newest_motor_command=previous_motor_command,
+            self._process_motor_history(newest_motor_command=last_motor_command,
                                         motor_history=self.motor_history)
 
             self._process_predictors(predictors_list=self.predictors_list,
                                      states_history=self.states_history,
                                      config=self.config,
-                                     sim_folder_manager=sim_folder_manager
+                                     models_save_folder=models_save_folder
                                      )
 
             self._process_inverse(inverse_list=self.inverse_list,
                                   states_history=self.states_history,
                                   motor_history=self.motor_history,
                                   config=self.config,
-                                  sim_folder_manager=sim_folder_manager
+                                  models_save_folder=models_save_folder
                                   )
 
-        goal_states = task_manager.get_current_goal_state()
         if goal_states is not None:
             inv = self.inverse_list[0]  # TODO select inverse model here
             self.motor_out = inv.lookup_motor_to_goal(goal_states, self.states_history)
@@ -566,18 +565,16 @@ class RobotBrain(object):
     def get_motor_output(self):
         return self.motor_out
 
-    def _process_sensors(self, robot_sensors):
-        rays = robot_sensors.get_rays()
-        previous_motor_command = robot_sensors.get_last_motor_command()
+    def _process_sensors(self, rays):
         ray_radians = rays['ray_radians']
         ray_colors = rays['ray_colors']
         ray_lengths = rays['ray_lengths']
 
         current_visual_input = ray_colors.copy()
 
-        return current_visual_input, previous_motor_command
+        return current_visual_input
 
-    def _process_autoencoders(self, autoencoders_list, net_input, sim_folder_manager, include_in_history=True):
+    def _process_autoencoders(self, autoencoders_list, net_input, models_save_folder, include_in_history=True):
         newest_states_list = [net_input.copy()]
 
         net_index = 0
@@ -605,7 +602,7 @@ class RobotBrain(object):
             if self.autoencoders_save_every_k_steps is not None:
                 if self.t % self.autoencoders_save_every_k_steps == 0 and self.t > 0:
                     print 'saving autoencoders...'
-                    f = open(sim_folder_manager.get_models_save_folder() + '/autoencoders.pkl', 'w')
+                    f = open(models_save_folder + '/autoencoders.pkl', 'w')
                     pickle.dump(autoencoders_list, f)
                     f.close()
 
@@ -614,7 +611,7 @@ class RobotBrain(object):
     def _process_states_history(self, newest_states_list, states_history):
         states_history.process_new_states(newest_states_list)
 
-    def _process_predictors(self, predictors_list, states_history, config, sim_folder_manager):
+    def _process_predictors(self, predictors_list, states_history, config, models_save_folder):
         '''
             training_delay: delay such that testing points (at current time) are independent of recent training
                 it is otherwise possible to "cheat" if testing on the point the network was just trained on.
@@ -633,14 +630,14 @@ class RobotBrain(object):
         if self.predictors_save_every_k_steps is not None:
             if self.t % self.predictors_save_every_k_steps == 0 and self.t > 0:
                 print 'saving predictors...'
-                f = open(sim_folder_manager.get_models_save_folder() + '/predictors.pkl', 'w')
+                f = open(models_save_folder + '/predictors.pkl', 'w')
                 pickle.dump(predictors_list, f)
                 f.close()
 
     def _process_motor_history(self, newest_motor_command, motor_history):
         motor_history.process_new_motor_command(newest_motor_command)
 
-    def _process_inverse(self, inverse_list, states_history, motor_history, config, sim_folder_manager):
+    def _process_inverse(self, inverse_list, states_history, motor_history, config, models_save_folder):
 
         training_delay = config['training_delay']
 
@@ -655,11 +652,17 @@ class RobotBrain(object):
         if self.inverse_save_every_k_steps is not None:
             if self.t % self.inverse_save_every_k_steps == 0 and self.t > 0:
                 print 'saving inverse models...'
-                f = open(sim_folder_manager.get_models_save_folder() + '/inverse.pkl', 'w')
+                f = open(models_save_folder + '/inverse.pkl', 'w')
                 pickle.dump(inverse_list, f)
                 f.close()
 
     # ************ functions for other interfaces to retrieve information ************
+    def get_autoencoder_states_for_input(self, net_input):
+        newest_states_list = self._process_autoencoders(autoencoders_list=self.autoencoders_list,
+                                                        net_input=net_input,
+                                                        models_save_folder=None,
+                                                        include_in_history=False)
+        return newest_states_list
 
     def get_error_names_histories(self):
 

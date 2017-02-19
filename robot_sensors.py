@@ -14,27 +14,33 @@ class RobotSensors(object):
         self.relative_ray_radians = self.ray_radians.copy()
         self.ray_colors = np.zeros(self.num_rays)
         self.ray_lengths = np.zeros(self.num_rays)
-        # TODO fix this hack:
-        self.last_motor_command = np.zeros(2).astype(np.float)
 
-    def get_rays(self):
-        return {
-            'ray_radians': self.relative_ray_radians,
-            'ray_colors': self.ray_colors,
-            'ray_lengths': self.ray_lengths
-        }
+    def get_rays(self, nonzero_tiles=None, robot_position_angle=None):
+        if nonzero_tiles is None or robot_position_angle is None:
+            return {
+                'ray_radians': self.relative_ray_radians,
+                'ray_colors': self.ray_colors,
+                'ray_lengths': self.ray_lengths
+            }
+        else:
+            ray_colors, ray_lengths, relative_ray_radians = \
+                self._compute_rays_for_env_and_theta(nonzero_tiles=nonzero_tiles,
+                                                     robot_theta=robot_position_angle[2])
+            return {
+                'ray_radians': relative_ray_radians,
+                'ray_colors': ray_colors,
+                'ray_lengths': ray_lengths
+            }
 
-    def get_last_motor_command(self):
-        return self.last_motor_command
+    def read_input(self, nonzero_tiles, robot_theta):
+        self.ray_colors, self.ray_lengths, self.relative_ray_radians = \
+            self._compute_rays_for_env_and_theta(nonzero_tiles=nonzero_tiles,
+                                                 robot_theta=robot_theta)
 
-    def _compute_rays_for_env_and_theta(self, env, robot_theta, robot_x, robot_y):
+    def _compute_rays_for_env_and_theta(self, nonzero_tiles, robot_theta):
         ray_colors = np.zeros(self.num_rays)
         ray_lengths = np.zeros(self.num_rays)
 
-        if robot_x is None:
-            nonzero_tiles = env.get_nonzero_tiles()
-        else:
-            nonzero_tiles = env._get_nonzero_tiles(robot_x, robot_y)
         dist = nonzero_tiles['nonzero_dist']
         theta = nonzero_tiles['nonzero_theta']
         d_theta = nonzero_tiles['nonzero_delta_theta']
@@ -69,17 +75,6 @@ class RobotSensors(object):
         #self.relative_ray_radians = relative_ray_radians
 
         return ray_colors, ray_lengths, relative_ray_radians
-
-    def read_input(self, robot_environment, robot_model):
-        self.last_motor_command = robot_model.get_last_motor_command()
-
-        robot_info = robot_environment.get_robot_theta()
-        robot_theta = robot_info['robot_theta']
-
-        self.ray_colors, self.ray_lengths, self.relative_ray_radians = \
-            self._compute_rays_for_env_and_theta(env=robot_environment, robot_theta=robot_theta,
-                                                 robot_x=None, robot_y=None)
-
 
 
 

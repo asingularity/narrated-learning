@@ -172,29 +172,28 @@ def run_demo(demo_components):
     new_task_chosen = False
     task_goal_states = None
 
+    # TODO make colors work everywhere: robot_sensors returns rays['ray_colors'], should be 1-d, but 3d data, but display should work/flatten etc.
+
     while not perf_eval.finished():
 
         if task_manager_enabled:
             time.sleep(0.3)
             task_manager.choose_new_task_goal(topdown_info=robot_environment.get_topdown_info())
             task_goal_nonzero_tiles = robot_environment.get_nonzero_tiles(robot_position_angle=task_manager.get_current_goal_position_angle())
-            task_goal_sensory_input = robot_sensors.get_rays(nozero_tiles=task_goal_nonzero_tiles,
-                                                             robot_position_angle=task_manager.get_current_goal_position_angle())
+            task_goal_rays = robot_sensors.get_rays(nozero_tiles=task_goal_nonzero_tiles,
+                                                    robot_position_angle=task_manager.get_current_goal_position_angle())
+            task_goal_sensory_input = task_goal_rays['ray_colors']
             task_goal_states = robot_brain.get_autoencoder_states_for_input(net_input=task_goal_sensory_input)
             new_task_chosen = True
-
-        # TODO add color to environment
-        # TODO larger test environment with walls along edges
-        #   TODO random walls. make sure they don't overlap so much robot is trapped
 
         finished_task = False
         while not finished_task:
 
-            robot_sensors.read_input(nonzero_tiles_dict=robot_environment.get_nonzero_tiles(),
+            robot_sensors.read_input(nozero_tiles=robot_environment.get_nonzero_tiles(),
                                      robot_theta=robot_environment.get_robot_theta())
 
             #   robot_sensors.rays updated from environment: STATE_T+1
-            #   robot_sensors.last_motor_command updated from robot_model.last_motor_command: CMD_T
+            #   robot_model.last_motor_command: CMD_T
 
             robot_brain.process_input(rays=robot_sensors.get_rays(),
                                       last_motor_command=robot_model.get_last_motor_command(),
@@ -204,9 +203,9 @@ def run_demo(demo_components):
             robot_model.act_upon_processing(motor_command=robot_brain.get_motor_output())
 
             if use_keyboard_input:
-                linear_speed, angular_speed = robot_model.get_delta_configuration()
-            else:
                 linear_speed, angular_speed = visualizer.get_linear_angular_speed()
+            else:
+                linear_speed, angular_speed = robot_model.get_delta_configuration()
 
             robot_environment.step_environment(linear_speed=linear_speed,
                                                angular_speed=angular_speed)

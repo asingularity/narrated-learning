@@ -7,6 +7,9 @@ class PerformanceEvaluator(object):
     def finished(self):
         return self.t >= self.run_time
 
-    def evaluate(self, robot_sensors, robot_brain, robot_model, robot_environment):
+    def step(self):
         self.t += 1
+
+    def evaluate(self):
+        pass
 
