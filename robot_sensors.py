@@ -59,15 +59,17 @@ class RobotSensors(object):
             ray_theta = relative_ray_radians[k]
 
             # TODO fix discontinuity issue! This fixes it but at large computational cost:
-            #matching_tile_indices = np.nonzero(np.logical_or(np.logical_and(ray_theta > theta - d_theta, ray_theta < theta + d_theta), np.logical_and(ray_theta > theta - d_theta + 2 * pi, ray_theta < theta + d_theta + 2 * pi)))[0]
-            matching_tile_indices = np.nonzero(np.logical_and(ray_theta > theta - d_theta, ray_theta < theta + d_theta))[0]
+            matching_tile_indices = np.nonzero(np.logical_or(np.logical_and(ray_theta > theta - d_theta, ray_theta < theta + d_theta), np.logical_and(ray_theta > theta - d_theta + 2 * pi, ray_theta < theta + d_theta + 2 * pi)))[0]
+            #matching_tile_indices = np.nonzero(np.logical_and(ray_theta > theta - d_theta, ray_theta < theta + d_theta))[0]
             if matching_tile_indices.shape[0] > 0:
                 matching_tile_colors = color[matching_tile_indices, :]
                 matching_tile_dists = dist[matching_tile_indices]
                 min_tile = np.argmin(matching_tile_dists)
+                #print k, matching_tile_dists, min_tile, matching_tile_dists[min_tile]
                 ray_colors[k, :] = matching_tile_colors[min_tile, :]
                 ray_lengths[k] = matching_tile_dists[min_tile]
             else:
+                #print k, None
                 ray_colors[k, :] = np.zeros(3)
                 # TODO make this a parameter (max ray length):
                 ray_lengths[k] = 1000
