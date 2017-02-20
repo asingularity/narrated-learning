@@ -19,9 +19,15 @@ class SimFolderManager(object):
                      'robot_environment.py',
                      'robot_sensors.py',
                      'run_demo.py',
+                     'brain_components.py',
                      'sim_folder_manager.py',
                      'performance_evaluator.py',
-                     'visualizer.py']
+                     'setup.py',
+                     'setup_fast_save_matrix.py',
+                     'setup_knn_parallel.py',
+                     'task_manager.py',
+                     'visualizer.py',
+                     'install_cython_libraries.sh']
 
         for filename in file_list:
             shutil.copy2(params['scripts_folder_path'] + '/' + filename, self.sim_folder_path)
