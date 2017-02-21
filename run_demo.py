@@ -134,11 +134,11 @@ def get_visualizer_params():
 def get_task_manager_params():
     params = {
         'enabled': True,
-        'max_task_steps': 15,
-        'min_delta_theta': -pi/2.0,
-        'max_delta_theta': pi/2.0,
-        'min_distance': 5,
-        'max_distance': 5
+        'max_task_steps': 10,
+        'min_delta_theta': -pi/4.0,
+        'max_delta_theta': pi/4.0,
+        'min_distance': 3,
+        'max_distance': 3
     }
     return params
 

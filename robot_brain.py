@@ -156,7 +156,7 @@ class RobotBrain(object):
                                   )
 
         if goal_states is not None:
-            inv = self.inverse_list[0]  # TODO select inverse model here
+            inv = self.inverse_list[1]  # TODO select inverse model here
             self.motor_out = inv.lookup_motor_to_goal(goal_states, self.states_history)
             print 'motor_out, no index: ', self.motor_out
             self.motor_out = self.motor_out[1]  # TODO this depends on which inverse model?

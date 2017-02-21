@@ -39,7 +39,12 @@ class TaskManager(object):
             H = td_info['env_map_copy'].shape[0]
 
             distance = self.min_distance + random.random() * (self.max_distance - self.min_distance)
-            delta_theta = self.min_delta_theta + random.random() * (self.max_delta_theta - self.min_delta_theta)
+            #delta_theta = self.min_delta_theta + random.random() * (self.max_delta_theta - self.min_delta_theta)
+            r1 = random.random()
+            if r1 < 0.5:
+                delta_theta = self.min_delta_theta
+            else:
+                delta_theta = self.max_delta_theta
 
             goal_r_theta = r_theta + delta_theta
             # make sure normalized same way as robot theta
