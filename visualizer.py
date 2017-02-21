@@ -34,7 +34,7 @@ class Visualizer(object):
     def _display_fps(self):
         if time.time() - self.last_FPS_time > self.fps_display_interval:
             fps = self.fps_frames * 1.0 / (time.time() - self.last_FPS_time)
-            logging.info('FPS: ' + str(fps))
+            logging.info('FPS: ' + str(fps) + ', frames: ' + str(self.frames))
             self.fps_frames = 0
             self.last_FPS_time = time.time()
         self.fps_frames += 1
