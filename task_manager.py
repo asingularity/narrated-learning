@@ -12,6 +12,7 @@ class TaskManager(object):
         self.max_delta_theta = params['max_delta_theta']  # radians
         self.min_distance = params['min_distance']
         self.max_distance = params['max_distance']
+        self.constrain_to_params = params['constrain_to_params']
         self.t_task = None
 
         self.goal_states = None
@@ -38,24 +39,29 @@ class TaskManager(object):
             W = td_info['env_map_copy'].shape[1]
             H = td_info['env_map_copy'].shape[0]
 
-            distance = self.min_distance + random.random() * (self.max_distance - self.min_distance)
-            #delta_theta = self.min_delta_theta + random.random() * (self.max_delta_theta - self.min_delta_theta)
-            r1 = random.random()
-            if r1 < 0.5:
-                delta_theta = self.min_delta_theta
+            if self.constrain_to_params:
+                distance = self.min_distance + random.random() * (self.max_distance - self.min_distance)
+                #delta_theta = self.min_delta_theta + random.random() * (self.max_delta_theta - self.min_delta_theta)
+                r1 = random.random()
+                if r1 < 0.5:
+                    delta_theta = self.min_delta_theta
+                else:
+                    delta_theta = self.max_delta_theta
+
+                goal_r_theta = r_theta + delta_theta
+                # make sure normalized same way as robot theta
+                while goal_r_theta > 2 * pi:
+                    goal_r_theta -= 2 * pi
+                while goal_r_theta < 0:
+                    goal_r_theta += 2 * pi
+
+                self.goal_r_theta = goal_r_theta
+                self.goal_r_x = r_x + distance * cos(goal_r_theta)
+                self.goal_r_y = r_y + distance * sin(goal_r_theta)
             else:
-                delta_theta = self.max_delta_theta
-
-            goal_r_theta = r_theta + delta_theta
-            # make sure normalized same way as robot theta
-            while goal_r_theta > 2 * pi:
-                goal_r_theta -= 2 * pi
-            while goal_r_theta < 0:
-                goal_r_theta += 2 * pi
-
-            self.goal_r_theta = goal_r_theta
-            self.goal_r_x = r_x + distance * cos(goal_r_theta)
-            self.goal_r_y = r_y + distance * sin(goal_r_theta)
+                self.goal_r_theta = random.random() * 2.0 * pi
+                self.goal_r_x = 2.0 + random.random() * (W - 4.0)
+                self.goal_r_y = 2.0 + random.random() * (H - 4.0)
 
             self.t_task = 0
 

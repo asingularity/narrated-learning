@@ -51,7 +51,7 @@ def get_brain_params():
     params = {
         # ************ general ************
         'max_history_length': MAX_HISTORY_LENGTH,
-        'error_average_steps': 10000,
+        'error_average_steps': 1000,  # 1000
         'predictors_enable': True,
         'training_delay': 128,
         # ************ autoencoders ************
@@ -67,30 +67,26 @@ def get_brain_params():
         'autoencoders_load_filename': '/home/' + USERNAME + '/projects/NL/sim/2017-02-19T16:01:29.835767_autoencoders/autoencoders.pkl',
         # ************ predictors ************
         'predictors': [
-            {'state_index_input': 0, 'state_index_context': 1, 'state_index_output': 0,
-                                     'dt_context': 16,         'dt_output': 8},
-            {'state_index_input': 1, 'state_index_context': 2, 'state_index_output': 1,
-                                      'dt_context': 32,        'dt_output': 16},
-            {'state_index_input': 2, 'state_index_context': 3, 'state_index_output': 2,
-                                     'dt_context': 64,         'dt_output': 32}
+            {'state_index_input': 0, 'state_index_context': 0, 'state_index_output': 0,
+                                     'dt_context': 2,          'dt_output': 1}
         ],
         'predictors_training_time_range': [0, MAX_HISTORY_LENGTH],
-        'predictors_test_every_k_steps': None,  # 50 for training
+        'predictors_test_every_k_steps': None, #500,  # 500 for training
         'predictors_save_every_k_steps': None,
         'predictors_enable_training': False,
-        'predictors_load_from_file': True,
-        'predictors_load_filename': '/home/' + USERNAME + '/projects/NL/sim/2017-02-19T18:49:56.079917_predictors_and_inverse/predictors.pkl',
+        'predictors_optimize_training': False,  # second step
+        'predictors_load_from_file': False,
+        'predictors_load_filename': '/home/' + USERNAME + '/projects/NL/sim/2017-03-05T07:14:47.040189_predictor_inverse_level_0/predictors.pkl',
         # ************ inverse model ************
         'inverse_models': [
-            {'state_index_current': 0, 'state_index_future': 0, 'dt': 1},
-            {'state_index_current': 0, 'state_index_future': 0, 'dt': 4}
+            {'state_index_current': 0, 'state_index_future': 0, 'dt': 1}
         ],
         'inverse_training_time_range': [0, MAX_HISTORY_LENGTH],
-        'inverse_test_every_k_steps': None,
-        'inverse_save_every_k_steps': None,
+        'inverse_test_every_k_steps': None, #500, #None,
+        'inverse_save_every_k_steps': None, #4000000,
         'inverse_enable_training': False,
         'inverse_load_from_file': True,
-        'inverse_load_filename': '/home/' + USERNAME + '/projects/NL/sim/2017-02-19T18:49:56.079917_predictors_and_inverse/inverse.pkl'
+        'inverse_load_filename': '/home/' + USERNAME + '/projects/NL/sim/2017-03-05T07:14:47.040189_predictor_inverse_level_0/inverse.pkl',
     }
     return params
 
@@ -134,7 +130,8 @@ def get_visualizer_params():
 def get_task_manager_params():
     params = {
         'enabled': True,
-        'max_task_steps': 10,
+        'constrain_to_params': True,
+        'max_task_steps': 10,  # 64,  # 64 * 2
         'min_delta_theta': -pi/4.0,
         'max_delta_theta': pi/4.0,
         'min_distance': 3,
@@ -171,7 +168,7 @@ def run_demo(demo_components):
     task_manager_enabled = task_manager.get_enabled()
     new_task_chosen = False
     task_goal_states = None
-
+    random.seed(123)
     # TODO fix see through walls from left side of vertical wall viewing right
 
     while not perf_eval.finished():
@@ -184,6 +181,7 @@ def run_demo(demo_components):
                                                     robot_position_angle=task_manager.get_current_goal_position_angle())
             task_goal_sensory_input = task_goal_rays['ray_colors']
             task_goal_states = robot_brain.get_autoencoder_states_for_input(net_input=task_goal_sensory_input)
+            robot_brain.reset_for_new_task()
             new_task_chosen = True
 
         finished_task = False

@@ -21,6 +21,14 @@ class RobotBrain(object):
         self.motor_out = None
         self.predictors_enable = params['predictors_enable']
 
+        # for task
+        self.last_time_set_8 = -9e4
+        self.last_time_set_16 = -9e4
+        self.last_time_set_32 = -9e4
+        self.dist_2 = 0
+        self.dist_1 = 0
+        self.dist_0 = 0
+
     def _init_config(self, params):
         config = {}
         config['training_delay'] = params['training_delay']
@@ -62,6 +70,9 @@ class RobotBrain(object):
         self.predictors_test_every_k_steps = params['predictors_test_every_k_steps']
         self.predictors_save_every_k_steps = params['predictors_save_every_k_steps']
         self.predictors_enable_training = params['predictors_enable_training']
+        self.predictors_optimize_training = params['predictors_optimize_training']
+
+        assert self.predictors_enable_training is False or self.predictors_optimize_training is False
 
         if params['predictors_load_from_file']:
             print 'loading predictors...'
@@ -156,14 +167,155 @@ class RobotBrain(object):
                                   )
 
         if goal_states is not None:
-            inv = self.inverse_list[1]  # TODO select inverse model here
-            self.motor_out = inv.lookup_motor_to_goal(goal_states, self.states_history)
-            print 'motor_out, no index: ', self.motor_out
-            self.motor_out = self.motor_out[1]  # TODO this depends on which inverse model?
+
+            use_recurrence = False
+            if use_recurrence:
+                proximal_goal_states = self._get_proximal_goal_states(goal_states=goal_states,
+                                                                      states_history=self.states_history,  # includes current input?
+                                                                      predictors_list=self.predictors_list)
+                                                                      # TODO needs ongoing memory for running online?
+
+                # proximal goal states could be [v0, None, None, None], or [None, v1, None, None] etc.
+                # it doesn't necessarily have every level complete, just what the most proximal predictor provides
+
+                inv = self.inverse_list[0]  # TODO select inverse model here
+                self.motor_out = inv.lookup_motor_to_goal(goal_states=proximal_goal_states,
+                                                          states_history=self.states_history)
+                print 'motor_out, no index: ', self.motor_out
+                self.motor_out = self.motor_out[1]  # [v, w; v, w; v, w]
+            else:
+                inv = self.inverse_list[0]  # TODO select inverse model here
+                self.motor_out = inv.lookup_motor_to_goal(goal_states=goal_states,
+                                                          states_history=self.states_history)
+                print 'motor_out, no index: ', self.motor_out
+                self.motor_out = self.motor_out[1]  # [v, w; v, w; v, w]
         else:
             self.motor_out = None
 
         self.t += 1
+
+    def reset_for_new_task(self):
+        self.last_time_set_8 = -9e4
+        self.last_time_set_16 = -9e4
+        self.last_time_set_32 = -9e4
+
+    def _get_proximal_goal_states(self, goal_states, states_history, predictors_list):
+        '''
+
+        'predictors': [
+            {'state_index_input': 0, 'state_index_context': 1, 'state_index_output': 0,
+                                     'dt_context': 16,         'dt_output': 8},
+            {'state_index_input': 1, 'state_index_context': 2, 'state_index_output': 1,
+                                      'dt_context': 32,        'dt_output': 16},
+            {'state_index_input': 2, 'state_index_context': 3, 'state_index_output': 2,
+                                     'dt_context': 64,         'dt_output': 32}
+        ],
+
+        :param goal_states:
+        :param states_history:
+        :param predictors_list:
+        :return:
+        '''
+
+        proximal_goal_states = [None] * len(goal_states)
+        # TODO: could be completed at end, None states filled in (these are just autoencoder states)
+
+        #   predictor       input,           context,       output
+        #       0            t=0, c=0       t=16, c=1      t=8, c=0
+        #       1            t=0, c=1       t=32, c=2      t=16, c=1
+        #       2            t=0, c=2       t=64, c=3      t=32, c=2
+
+        # order
+        # run predictor 2:
+        #       input: states_history: (t=0, c=2)
+        #       context: goal_states: (t=64, c=3)
+        #       output: (t=32, c=2)
+        # run predictor 1:
+        #       input: states_history: (t=0, c=1)
+        #       context: (t=32, c=2)
+        #       output: (t=16, c=1)
+        # run predictor 0:
+        #       input: states_history: (t=0, c=0)
+        #       context: (t=16, c=1)
+        #       output: (t=8, c=0)
+
+        predictor_2 = predictors_list[2]
+        predictor_1 = predictors_list[1]
+        predictor_0 = predictors_list[0]
+
+        if self.t > self.last_time_set_32 + 16:
+            input_state = states_history.get_state(state_index=2, delay=0)
+            context_state = goal_states[3]
+            self.state_t_32_c_2, dist_2 = predictor_2.predict(input_state=input_state,
+                                                              context_state=context_state)
+            dist_2 = dist_2 * 1.0 / (len(input_state) + len(context_state))
+            self.dist_2 = dist_2
+            self.last_time_set_32 = self.t
+
+        if self.t > self.last_time_set_16 + 8:
+            input_state = states_history.get_state(state_index=1, delay=0)
+            # context_state_g = goal_states[2]
+            context_state = self.state_t_32_c_2
+            self.state_t_16_c_1, dist_1 = predictor_1.predict(input_state=input_state,
+                                                              context_state=context_state)
+            dist_1 = dist_1 * 1.0 / (len(input_state) + len(context_state))
+
+            #state_t_16_c_1, dist_1_g = predictor_1.predict(input_state=input_state,
+            #                                               context_state=context_state_g)
+            #dist_1_g = dist_1_g * 1.0 / (len(input_state) + len(context_state))
+            #state_t_16_c_1, dist_1_h = predictor_1.predict(input_state=states_history.get_state(state_index=1, delay=0),
+            #                                               context_state=context_state_h)
+            #dist_1 = dist_1 * 1.0 / (len(input_state) + len(context_state))
+
+            self.dist_1 = dist_1
+            self.last_time_set_16 = self.t
+
+        if self.t > self.last_time_set_8 + 4:
+            input_state = states_history.get_state(state_index=0, delay=0)
+            context_state = self.state_t_16_c_1
+            self.state_t_8_c_0, dist_0 = predictor_0.predict(input_state=input_state,
+                                                             context_state=context_state)
+            dist_0 = dist_0 * 1.0 / (len(input_state) + len(context_state))
+            self.dist_0 = dist_0
+            self.last_time_set_8 = self.t
+
+        proximal_goal_states[0] = self.state_t_8_c_0
+
+        # todo return best dist, so inv can override if better:
+        return proximal_goal_states
+
+#        for predictor in predictors_list:
+#            input_state = []
+#            context_state = []
+#            output_state = predictor.predict(input_state, context_state)
+
+        # memory_state_indices = [0, 1, 2, 3]
+
+        # sTODO maybe better init for intermediate memory states (between init and end)
+        # mem_state_0 = states_history.get_state(state_index=0, delay=0)
+        #                   t=0, c=0       t=8, c=0      t=16, c=1       t=32, c=2       t=64, c=3
+        # memory_states = [mem_state_0, goal_states[0], goal_states[1], goal_states[2], goal_states[3]]
+        #                      0            1                2              3               4
+
+        # dTODO missing memory states for compress & copy operation?
+        # according to notebook:
+        # predictor timescales:
+        #   predictor       input, context, output
+        #       0             0     (0)+16  (0)+8
+        #       1             8     (8)+32  (8)+16
+        #       2            8+16
+
+        # flattened?         timescale (compression)
+
+        # refer to memory state indices:
+        # predictors_input_mem_state =   [0, ]
+        # predictors_context_mem_state = [2, ]
+        # predictors_output_mem_state =  [1, ]
+
+#        num_iterations = 5
+#        for n in range(num_iterations):
+
+            # each predictor updates states corresponding to its output
 
     def get_motor_output(self):
         return self.motor_out
@@ -225,6 +377,8 @@ class RobotBrain(object):
         for predictor in predictors_list:
             if self.predictors_enable_training:
                 predictor.train(states_history, training_delay)
+            elif self.predictors_optimize_training:
+                predictor.optimize_train(states_history, training_delay)
 
             if self.predictors_test_every_k_steps is not None:
                 if self.t % self.predictors_test_every_k_steps == 0:

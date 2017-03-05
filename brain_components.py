@@ -218,6 +218,71 @@ class Predictor(object):
             self.output_history[self.input_history_t, :] = net_output
             self.input_history_t += 1
 
+    def optimize_train(self, states_history, training_delay):
+        '''
+        Overwrites output state for closest entry to new (input, context), if output state is more "efficient"
+        :param states_history:
+        :param training_delay:
+        :return:
+        '''
+
+        assert training_delay > self.dt_context, \
+            'training_delay must be greater than self.dt_context ' + str(training_delay) + str(self.dt_context)
+        assert self.dt_context > self.dt_output, 'dt_context must be > dt_output'
+
+        input_state, context_state, output_state = self._get_input_context_output(states_history=states_history,
+                                                                                  training_delay=training_delay)
+
+        if input_state is not None:
+
+            net_output_predicted, dist, index = self.predict(input_state=input_state,
+                                                             context_state=context_state)
+            # replace based on minimum distance:
+            #   |(output_predicted) - input_state| + |(output_predicted) - context_state|
+            #       vs.
+            #   |(output_actual) - input_state| + |(output_actual) - context_state|
+            # problem: input state, or context state, not same dimensionality (necessarily) as output state...
+            #   1. we do it anyway for now since it can be the same
+            #   2. we only take distance vs. input_state, assuming predictor output is always same dim as input
+            #           (always predicting its own input)
+
+            distance_predicted = np.mean(np.fabs(net_output_predicted - input_state))
+            distance_actual = np.mean(np.fabs(output_state - input_state))
+
+            if distance_actual < distance_predicted:
+
+                if self.error_t is None:
+                    self.error_t = 0
+
+                self.error_history[self.error_t] = np.mean(np.fabs(output_state - net_output_predicted))
+                self.error_t += 1
+
+                if self.error_t > self.error_average_steps:
+                    if self.mean_error_t is None:
+                        self.mean_error_t = 0
+                    mean_error = np.mean(self.error_history[self.error_t - self.error_average_steps:self.error_t])
+                    self.mean_error_history[self.mean_error_t] = mean_error
+                    self.mean_error_t += 1
+
+                #print 'replacing: (actual < predicted) ', distance_actual, ' < ', distance_predicted
+                # replace only output (near term prediction)
+                net_output = output_state
+                self.output_history[index, :] = net_output
+            else:
+                pass
+                #print 'not replacing: (actual > predicted) ', distance_actual, ' > ', distance_predicted
+
+    def predict(self, input_state, context_state):
+        net_input = np.concatenate((input_state, context_state)).astype(np.float32)
+        data_set = self.input_history
+        data_frames = self.input_history_t
+        dim = data_set.shape[1]
+        tmp = self.temp_array
+
+        dist, ind = knn_parallel_query(data_set, net_input, tmp, data_frames, dim)
+        net_output_predicted = self.output_history[ind, :]
+        return net_output_predicted, dist, ind
+
     def test_newest_point_and_store_error(self, states_history):
         '''
         predictor must decide if it has enough history to test

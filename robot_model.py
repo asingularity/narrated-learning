@@ -21,10 +21,11 @@ class RobotModel(object):
         :return: linear speed, angular speed
         '''
 
-        lin_val = self.linear_velocity
         if self.new_angle_val is None:
+            lin_val = self.linear_velocity
             ang_val = self.max_angular_velocity * 2.0 * (random.random() - 0.5)
         else:
+            lin_val = self.linear_velocity  # * 4.0 hack to make faster during task mode
             ang_val = self.new_angle_val
 
         self.last_motor_command[0] = lin_val
