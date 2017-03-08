@@ -172,17 +172,27 @@ def cuda_query(query_data, cuda_data_gpu, cuda_arr_gpu, func, b_doubled, data, m
     # this slows down things a lot!
     # cuda.memcpy_htod(cuda_data_gpu, data)
 
+    st = time.time()
     cuda.memcpy_htod(cuda_arr_gpu, query_data)
+    print '<<< t0:', time.time() - st
 
+    st = time.time()
     func(cuda_data_gpu, cuda_arr_gpu, min_indices_gpu, min_dists_gpu, block=(16, 16, 1))
+    print '<<< t1:', time.time() - st
 
+    st = time.time()
     cuda.memcpy_dtoh(min_dists_tmp, min_dists_gpu)
+    print '<<< t2:', time.time() - st
+    st = time.time()
     cuda.memcpy_dtoh(min_indices_tmp, min_indices_gpu)
+    print '<<< t3:', time.time() - st
 
+    st = time.time()
     argm = np.argmin(min_dists_tmp)
 
     dist = min_dists_tmp[argm]
     ind = min_indices_tmp[argm]
+    print '<<< t4:', time.time() - st
 
     return dist, ind
 
