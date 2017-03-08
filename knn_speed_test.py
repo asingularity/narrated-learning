@@ -164,7 +164,6 @@ def cuda_init(data, query_data):
     cuda.memcpy_htod(min_indices_gpu, min_indices_tmp)
 
     return data_gpu, arr_gpu, min_indices_gpu, min_indices_tmp, min_dists_gpu, min_dists_tmp, func
-    #return func
 
 #@profile
 def cuda_query(query_data, cuda_data_gpu, cuda_arr_gpu, func, b_doubled, data, min_indices_gpu, min_indices_tmp, min_dists_gpu, min_dists_tmp):
@@ -175,29 +174,13 @@ def cuda_query(query_data, cuda_data_gpu, cuda_arr_gpu, func, b_doubled, data, m
 
     cuda.memcpy_htod(cuda_arr_gpu, query_data)
 
-
     func(cuda_data_gpu, cuda_arr_gpu, min_indices_gpu, min_dists_gpu, block=(16, 16, 1))
-
-    #   block=(threads_x * threads_y * blocks) ?
-    #   no... there's also
-    #       block = (32, 1, 1), grid=(2, 1)
 
     cuda.memcpy_dtoh(min_dists_tmp, min_dists_gpu)
     cuda.memcpy_dtoh(min_indices_tmp, min_indices_gpu)
 
-    #print 'min_dists_tmp', min_dists_tmp
-    #                                                   print 'min_indices_tmp', min_indices_tmp
-
-    #a_doubled[:, :] = 2.0 * data[:, :]
-
-    #diff = data - query_data
-    #dists = np.sum(np.fabs(diff), axis=1)
-    #ind = np.argmin(dists)
-    #dist = dists[ind]
-
     argm = np.argmin(min_dists_tmp)
 
-    #dist, ind = None, None
     dist = min_dists_tmp[argm]
     ind = min_indices_tmp[argm]
 
