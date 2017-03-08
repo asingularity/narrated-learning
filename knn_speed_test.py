@@ -121,24 +121,25 @@ def cuda_init(data, query_data):
     mod = SourceModule("""
         __global__ void knn_query(float *data, float *arr, float *abs_dists)
         {
-          long num_entries_per_thread = 15625; //250000;
+          int num_entries_per_thread = 15625; //250000;
           int dim = 40 * 3;
           int idx = threadIdx.x + threadIdx.y * 16; // 4;
 
-          long r0 = idx * num_entries_per_thread;
-          long r1 = r0 + num_entries_per_thread;
+          int r0 = idx * num_entries_per_thread;
+          int r1 = r0 + num_entries_per_thread;
           float dist = 0.0;
-          long k = 0;
+          int k = 0;
+          int dim_index = 0;
           float diff = 0.0;
 
           for (k = r0; k < r1; k++)
           {
                 dist = 0.0;
 
-                for (int dim_index = 0; dim_index < dim; dim_index++)
+                for (dim_index = 0; dim_index < dim; dim_index++)
                 {
                     diff = data[dim_index + k * dim] - arr[dim_index];
-                    dist = dist + abs(diff);
+                    dist = dist + abs(diff);  // problem is not the abs
                 }
                 abs_dists[k] = dist;
           }
@@ -156,26 +157,34 @@ def cuda_init(data, query_data):
 #@profile
 def cuda_query(query_data, cuda_data_gpu, cuda_arr_gpu, func, b_doubled, data, abs_dists_gpu, abs_dists_tmp):
 
+    print_times = False
+    run_function = True
+
     # copying entire KNN table over again:
     # this slows down things a lot!
     # cuda.memcpy_htod(cuda_data_gpu, data)
 
     st = time.time()
     cuda.memcpy_htod(cuda_arr_gpu, query_data)
-    print '<<< t0:', time.time() - st
+    if print_times:
+        print '<<< t0:', time.time() - st
 
     st = time.time()
-    func(cuda_data_gpu, cuda_arr_gpu, abs_dists_gpu, block=(16, 16, 1))
-    print '<<< t1:', time.time() - st
+    if run_function:
+        func(cuda_data_gpu, cuda_arr_gpu, abs_dists_gpu, block=(16, 16, 1))
+    if print_times:
+        print '<<< t1:', time.time() - st
 
     st = time.time()
     cuda.memcpy_dtoh(abs_dists_tmp, abs_dists_gpu)
-    print '<<< t2:', time.time() - st
+    if print_times:
+        print '<<< t2:', time.time() - st
 
     st = time.time()
     ind = np.argmin(abs_dists_tmp)
     dist = abs_dists_tmp[ind]
-    print '<<< t4:', time.time() - st
+    if print_times:
+        print '<<< t4:', time.time() - st
 
     return dist, ind
 
