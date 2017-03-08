@@ -111,18 +111,15 @@ def cuda_init(data, query_data):
     data_gpu = cuda.mem_alloc(data.size * data.dtype.itemsize)
     arr_gpu = cuda.mem_alloc(query_data.size * query_data.dtype.itemsize)
 
-    num_threads = 16 * 16
-    min_indices_tmp = np.ones(num_threads).astype(np.long)
-    min_indices_gpu = cuda.mem_alloc(min_indices_tmp.size * min_indices_tmp.dtype.itemsize)
-    min_dists_tmp = np.ones(num_threads).astype(np.float32)
-    min_dists_gpu = cuda.mem_alloc(min_dists_tmp.size * min_dists_tmp.dtype.itemsize)
+    abs_dists_tmp = np.zeros(FRAMES).astype(np.float32)
+    abs_dists_gpu = cuda.mem_alloc(abs_dists_tmp.size * abs_dists_tmp.dtype.itemsize)
 
     # num_entries_per_thread = 4000000 / (4 * 4)
     # min_indices, min_values: storing result, one index is one result from one thread
     #   indexed by idx
 
     mod = SourceModule("""
-        __global__ void knn_query(float *data, float *arr, long *min_indices, float *min_dists)
+        __global__ void knn_query(float *data, float *arr, float *abs_dists)
         {
           long num_entries_per_thread = 15625; //250000;
           int dim = 40 * 3;
@@ -146,27 +143,21 @@ def cuda_init(data, query_data):
                     diff = data[dim_index + k * dim] - arr[dim_index];
                     dist = dist + abs(diff);
                 }
-
-                if (dist < min_dist)
-                {
-                    min_dist = dist;
-                    min_index = k;
-                }
+                abs_dists[k] = dist;
           }
-
-          min_dists[idx] = min_dist;
-          min_indices[idx] = min_index;
         }
         """)
     func = mod.get_function("knn_query")
     cuda.memcpy_htod(data_gpu, data)
-    cuda.memcpy_htod(min_dists_gpu, min_dists_tmp)
-    cuda.memcpy_htod(min_indices_gpu, min_indices_tmp)
+    cuda.memcpy_htod(abs_dists_gpu, abs_dists_tmp)
+    #cuda.memcpy_htod(min_dists_gpu, min_dists_tmp)
+    #cuda.memcpy_htod(min_indices_gpu, min_indices_tmp)
 
-    return data_gpu, arr_gpu, min_indices_gpu, min_indices_tmp, min_dists_gpu, min_dists_tmp, func
+    return data_gpu, arr_gpu, abs_dists_gpu, abs_dists_tmp, func
+
 
 #@profile
-def cuda_query(query_data, cuda_data_gpu, cuda_arr_gpu, func, b_doubled, data, min_indices_gpu, min_indices_tmp, min_dists_gpu, min_dists_tmp):
+def cuda_query(query_data, cuda_data_gpu, cuda_arr_gpu, func, b_doubled, data, abs_dists_gpu, abs_dists_tmp):
 
     # copying entire KNN table over again:
     # this slows down things a lot!
@@ -177,21 +168,16 @@ def cuda_query(query_data, cuda_data_gpu, cuda_arr_gpu, func, b_doubled, data, m
     print '<<< t0:', time.time() - st
 
     st = time.time()
-    func(cuda_data_gpu, cuda_arr_gpu, min_indices_gpu, min_dists_gpu, block=(16, 16, 1))
+    func(cuda_data_gpu, cuda_arr_gpu, abs_dists_gpu, block=(16, 16, 1))
     print '<<< t1:', time.time() - st
 
     st = time.time()
-    cuda.memcpy_dtoh(min_dists_tmp, min_dists_gpu)
+    cuda.memcpy_dtoh(abs_dists_tmp, abs_dists_gpu)
     print '<<< t2:', time.time() - st
-    st = time.time()
-    cuda.memcpy_dtoh(min_indices_tmp, min_indices_gpu)
-    print '<<< t3:', time.time() - st
 
     st = time.time()
-    argm = np.argmin(min_dists_tmp)
-
-    dist = min_dists_tmp[argm]
-    ind = min_indices_tmp[argm]
+    ind = np.argmin(abs_dists_tmp)
+    dist = abs_dists_tmp[ind]
     print '<<< t4:', time.time() - st
 
     return dist, ind
@@ -205,7 +191,7 @@ def run_cuda_test(test_seconds):
 
     query_data = np.random.random(dim).astype(np.float32)
     b_doubled = np.empty_like(query_data)
-    cuda_data_gpu, cuda_arr_gpu, min_indices_gpu, min_indices_tmp, min_dists_gpu, min_dists_tmp, cuda_func = cuda_init(data, query_data)
+    cuda_data_gpu, cuda_arr_gpu, abs_dists_gpu, abs_dists_tmp, cuda_func = cuda_init(data, query_data)
 
     start_time = time.time()
     last_time = time.time()
@@ -216,7 +202,7 @@ def run_cuda_test(test_seconds):
     np.random.seed(10)
     for frame in range(test_frames):
         query_data = np.random.random(dim).astype(np.float32)
-        dist, ind = cuda_query(query_data, cuda_data_gpu, cuda_arr_gpu, cuda_func, b_doubled, data, min_indices_gpu, min_indices_tmp, min_dists_gpu, min_dists_tmp)
+        dist, ind = cuda_query(query_data, cuda_data_gpu, cuda_arr_gpu, cuda_func, b_doubled, data, abs_dists_gpu, abs_dists_tmp)
 
         if frame == 0 or frame == 3:
             print '      *** frame ***', frame
