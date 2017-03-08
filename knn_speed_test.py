@@ -143,15 +143,7 @@ def cuda_init(data, query_data):
 
                 for (int dim_index = 0; dim_index < dim; dim_index++)
                 {
-                    // array length: max(k) * max(dim_index)
-                    //
                     diff = data[dim_index + k * dim] - arr[dim_index];
-                    //diff = -arr[dim_index];
-                    //diff = data[k][dim_index]; // THIS IS THE PROBLEM
-                    // http://stackoverflow.com/questions/19850836/how-do-i-pass-a-2-dimensional-array-into-a-kernel-in-pycuda
-                    // http://stackoverflow.com/questions/13282596/how-do-i-feed-a-2-dimensional-array-into-a-kernel-with-pycuda?noredirect=1&lq=1
-                    //diff = data[k + dim_index * lda];
-
                     dist = dist + abs(diff);
                 }
 
@@ -162,11 +154,8 @@ def cuda_init(data, query_data):
                 }
           }
 
-//          min_dists[idx] = idx; // works
-//          min_indices[idx] = idx; // works
-
-          min_dists[idx] = min_dist;  // does not work, depending
-          min_indices[idx] = min_index;  // does not work, depending
+          min_dists[idx] = min_dist;
+          min_indices[idx] = min_index;
         }
         """)
     func = mod.get_function("knn_query")
