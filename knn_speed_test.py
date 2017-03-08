@@ -123,13 +123,10 @@ def cuda_init(data, query_data):
         {
           long num_entries_per_thread = 15625; //250000;
           int dim = 40 * 3;
-          long lda = 4000000;
           int idx = threadIdx.x + threadIdx.y * 16; // 4;
 
           long r0 = idx * num_entries_per_thread;
           long r1 = r0 + num_entries_per_thread;
-          float min_dist = 9999.9;
-          long min_index = -1;
           float dist = 0.0;
           long k = 0;
           float diff = 0.0;
