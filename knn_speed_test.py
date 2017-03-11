@@ -126,12 +126,9 @@ def cuda_init(data, query_data):
     mod = SourceModule("""
         __global__ void knn_query(float *data, float *arr, float *abs_dists)
         {
-          int num_entries_per_thread = 15625; //250000;
+          //int num_entries_per_thread = 15625; //250000;
           int dim = 40 * 3;
           int idx = threadIdx.x + threadIdx.y * 16; // 4;
-
-          int stride = 16 * 16;
-
           int r0 = idx; //* num_entries_per_thread;
           //int r1 = r0 + num_entries_per_thread;
           float dist = 0.0;
@@ -139,26 +136,27 @@ def cuda_init(data, query_data):
           int dim_index = 0;
           float diff = 0.0;
 
-          for (k = r0; k < r0 + stride * num_entries_per_thread; k+=stride)
+          int stride = 16 * 16;
+          int num_entries_per_thread = 1875000; // FRAMES * DIM / (16 * 16)
+
+          for (k = idx; k < idx + stride * num_entries_per_thread; k += stride)
           {
-                dist = 0.0;
-
-                for (dim_index = 0; dim_index < dim; dim_index++)
-                {
-                    //diff = dim_index + k * dim - arr[dim_index];
-                    //diff = data[dim_index + k * dim] - dim_index;
-                    diff = data[dim_index + k * dim] - arr[dim_index];
-                    //diff = dim_index + k * dim - dim_index;
-
-                    dist = dist + abs(diff);
-                }
-                abs_dists[k] = dist;
+                // get diff
+                // k = C + R * dim
+                dim_index = k % dim;
+                //diff = data[k] - arr[dim_index];
+                // add abs(diff) to appropriate element of abs_dists
+                //abs_dists[(k - dim_index) / dim] += abs(diff);
+                diff = abs(data[k] - arr[dim_index]);
+                //abs_dists[(k - dim_index) / dim] = abs_dists[(k - dim_index) / dim] + abs(diff);
+                atomicAdd(&abs_dists[(k - dim_index) / dim], diff);
           }
         }
         """)
     func = mod.get_function("knn_query")
     cuda.memcpy_htod(data_gpu, data)
     cuda.memcpy_htod(abs_dists_gpu, abs_dists_tmp)
+
     #cuda.memcpy_htod(min_dists_gpu, min_dists_tmp)
     #cuda.memcpy_htod(min_indices_gpu, min_indices_tmp)
 
@@ -166,7 +164,7 @@ def cuda_init(data, query_data):
 
 
 #@profile
-def cuda_query(query_data, cuda_data_gpu, cuda_arr_gpu, func, b_doubled, data, abs_dists_gpu, abs_dists_tmp):
+def cuda_query(query_data, cuda_data_gpu, cuda_arr_gpu, func, data2, data, abs_dists_gpu, abs_dists_tmp):
 
     print_times = False
     run_function = True
@@ -177,6 +175,8 @@ def cuda_query(query_data, cuda_data_gpu, cuda_arr_gpu, func, b_doubled, data, a
 
     st = time.time()
     cuda.memcpy_htod(cuda_arr_gpu, query_data)
+    abs_dists_tmp[:] = 0.0
+    cuda.memcpy_htod(abs_dists_gpu, abs_dists_tmp)
     if print_times:
         print '<<< t0:', time.time() - st
 
@@ -188,10 +188,13 @@ def cuda_query(query_data, cuda_data_gpu, cuda_arr_gpu, func, b_doubled, data, a
 
     st = time.time()
     cuda.memcpy_dtoh(abs_dists_tmp, abs_dists_gpu)
+    #cuda.memcpy_dtoh(data2, cuda_data_gpu)
     if print_times:
         print '<<< t2:', time.time() - st
 
     st = time.time()
+    ind = None
+    dist = None
     ind = np.argmin(abs_dists_tmp)
     dist = abs_dists_tmp[ind]
     if print_times:
@@ -207,7 +210,7 @@ def run_cuda_test(test_seconds):
     print 'data first: ', data[0, 0], data[0, -1]
 
     query_data = np.random.random(dim).astype(np.float32)
-    b_doubled = np.empty_like(query_data)
+    data2 = np.empty_like(data)
     cuda_data_gpu, cuda_arr_gpu, abs_dists_gpu, abs_dists_tmp, cuda_func = cuda_init(data, query_data)
 
     start_time = time.time()
@@ -219,19 +222,20 @@ def run_cuda_test(test_seconds):
     np.random.seed(10)
     for frame in range(test_frames):
         query_data = np.random.random(dim).astype(np.float32)
-        dist, ind = cuda_query(query_data, cuda_data_gpu, cuda_arr_gpu, cuda_func, b_doubled, data, abs_dists_gpu, abs_dists_tmp)
+        dist, ind = cuda_query(query_data, cuda_data_gpu, cuda_arr_gpu, cuda_func, data2, data, abs_dists_gpu, abs_dists_tmp)
 
         if frame == 0 or frame == 3:
             print '      *** frame ***', frame
             print '      query data: ', query_data[0], query_data[-1]
             print '      results: ', dist, ind
-        if time.time() - last_time > 1:
+        if time.time() - last_time > 1 or time.time() - start_time > test_seconds:
             FPS = (frame - last_frame) * 1.0 / (time.time() - last_time)
             print 'frame: ', frame, 'FPS: ', FPS
             last_frame = frame
             last_time = time.time()
-        if time.time() - start_time > test_seconds:
-            return
+
+            if time.time() - start_time > test_seconds:
+                return
 
 
 def knn_save_test(optimized):
