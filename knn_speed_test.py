@@ -118,6 +118,11 @@ def cuda_init(data, query_data):
     # min_indices, min_values: storing result, one index is one result from one thread
     #   indexed by idx
 
+
+    # TODO debug slow
+    #   http://stackoverflow.com/questions/13511367/read-an-array-with-threads-in-cuda
+    #   would it helps to copy query data for each thread individually?
+
     mod = SourceModule("""
         __global__ void knn_query(float *data, float *arr, float *abs_dists)
         {
@@ -125,21 +130,27 @@ def cuda_init(data, query_data):
           int dim = 40 * 3;
           int idx = threadIdx.x + threadIdx.y * 16; // 4;
 
-          int r0 = idx * num_entries_per_thread;
-          int r1 = r0 + num_entries_per_thread;
+          int stride = 16 * 16;
+
+          int r0 = idx; //* num_entries_per_thread;
+          //int r1 = r0 + num_entries_per_thread;
           float dist = 0.0;
           int k = 0;
           int dim_index = 0;
           float diff = 0.0;
 
-          for (k = r0; k < r1; k++)
+          for (k = r0; k < r0 + stride * num_entries_per_thread; k+=stride)
           {
                 dist = 0.0;
 
                 for (dim_index = 0; dim_index < dim; dim_index++)
                 {
+                    //diff = dim_index + k * dim - arr[dim_index];
+                    //diff = data[dim_index + k * dim] - dim_index;
                     diff = data[dim_index + k * dim] - arr[dim_index];
-                    dist = dist + abs(diff);  // problem is not the abs
+                    //diff = dim_index + k * dim - dim_index;
+
+                    dist = dist + abs(diff);
                 }
                 abs_dists[k] = dist;
           }
