@@ -124,31 +124,42 @@ def cuda_init(data, query_data):
     #   would it helps to copy query data for each thread individually?
 
     mod = SourceModule("""
+          // int num_entries_per_thread = 15625; //250000;
+          // zero out the abs_dists
+          //for (k = idx; k < idx + stride * num_entries_per_thread; k += stride)
+          //{
+          //    abs_dists[k] = 0.0;
+          //}
+
+          //int r1 = r0 + num_entries_per_thread;
+          //int r0 = idx; //* num_entries_per_thread;
+                // get diff
+                // k = C + R * dim
+                //diff = data[k] - arr[dim_index];
+                // add abs(diff) to appropriate element of abs_dists
+                //abs_dists[(k - dim_index) / dim] += abs(diff);
+                //abs_dists[(k - dim_index) / dim] = abs_dists[(k - dim_index) / dim] + abs(diff);
+                //data[k] = diff;
+                //data[k] = 1.01 * data[k];
+
         __global__ void knn_query(float *data, float *arr, float *abs_dists)
         {
-          //int num_entries_per_thread = 15625; //250000;
           int dim = 40 * 3;
-          int idx = threadIdx.x + threadIdx.y * 16; // 4;
-          int r0 = idx; //* num_entries_per_thread;
-          //int r1 = r0 + num_entries_per_thread;
+          //int idx = threadIdx.x + threadIdx.y * 16; // 4;
+          int idx = threadIdx.x; //+ blockIdx.x* blockDim.x;
+
           float dist = 0.0;
           int k = 0;
           int dim_index = 0;
           float diff = 0.0;
 
-          int stride = 16 * 16;
-          int num_entries_per_thread = 1875000; // FRAMES * DIM / (16 * 16)
+          int stride = 256; //16 * 16;
+          int num_2d_entries_per_thread = 1875000; // FRAMES * DIM / (16 * 16)
 
-          for (k = idx; k < idx + stride * num_entries_per_thread; k += stride)
+          for (k = idx; k < idx + stride * num_2d_entries_per_thread; k += stride)
           {
-                // get diff
-                // k = C + R * dim
                 dim_index = k % dim;
-                //diff = data[k] - arr[dim_index];
-                // add abs(diff) to appropriate element of abs_dists
-                //abs_dists[(k - dim_index) / dim] += abs(diff);
                 diff = abs(data[k] - arr[dim_index]);
-                //abs_dists[(k - dim_index) / dim] = abs_dists[(k - dim_index) / dim] + abs(diff);
                 atomicAdd(&abs_dists[(k - dim_index) / dim], diff);
           }
         }
@@ -182,7 +193,7 @@ def cuda_query(query_data, cuda_data_gpu, cuda_arr_gpu, func, data2, data, abs_d
 
     st = time.time()
     if run_function:
-        func(cuda_data_gpu, cuda_arr_gpu, abs_dists_gpu, block=(16, 16, 1))
+        func(cuda_data_gpu, cuda_arr_gpu, abs_dists_gpu, block=(256, 1, 1))
     if print_times:
         print '<<< t1:', time.time() - st
 
