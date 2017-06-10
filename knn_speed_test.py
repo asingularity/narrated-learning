@@ -15,8 +15,8 @@ import pycuda.gpuarray as gpuarray
 import pycuda.cumath as cumath
 
 USERNAME = 'intec'
-FRAMES = 1000000 * 4
-DIM = 40 * 3
+FRAMES = 25600 #1000000 * 4
+DIM = 20 #40 * 3
 
 def run_test_incremental():
     frames = FRAMES
@@ -83,7 +83,7 @@ def run_cython_knn_test(test_seconds, parallel=False):
     last_time = time.time()
     last_frame = 0
 
-    test_frames = 10000
+    test_frames = 100000
 
     np.random.seed(10)
     for frame in range(test_frames):
@@ -144,23 +144,32 @@ def cuda_init(data, query_data):
 
         __global__ void knn_query(float *data, float *arr, float *abs_dists)
         {
-          int dim = 40 * 3;
+          int dim = """ + str(DIM) + """;
           //int idx = threadIdx.x + threadIdx.y * 16; // 4;
           int idx = threadIdx.x; //+ blockIdx.x* blockDim.x;
 
-          float dist = 0.0;
-          int k = 0;
-          int dim_index = 0;
-          float diff = 0.0;
-
-          int stride = 256; //16 * 16;
-          int num_2d_entries_per_thread = 1875000; // FRAMES * DIM / (16 * 16)
-
-          for (k = idx; k < idx + stride * num_2d_entries_per_thread; k += stride)
+          if (idx < dim)
           {
-                dim_index = k % dim;
-                diff = abs(data[k] - arr[dim_index]);
-                atomicAdd(&abs_dists[(k - dim_index) / dim], diff);
+              float dist = 0.0;
+              int k = 0;
+              int dim_index = 0;
+              float diff = 0.0;
+
+              int frames = """ + str(FRAMES) + """;
+
+              for (k = idx; k < idx + dim * frames; k += dim)
+              {
+                    int col = idx;
+                    int row = (k - col) / dim;
+
+                    //data[k] = row; // 9fps
+                    //data[k] = arr[col]; // 1.3fps
+                    //data[k] = diff;
+                    //diff = abs(data[k]);
+                    // CORRECT:
+                    diff = abs(data[k] - arr[col]);
+                    atomicAdd(&abs_dists[row], diff);
+              }
           }
         }
         """)
@@ -193,7 +202,7 @@ def cuda_query(query_data, cuda_data_gpu, cuda_arr_gpu, func, data2, data, abs_d
 
     st = time.time()
     if run_function:
-        func(cuda_data_gpu, cuda_arr_gpu, abs_dists_gpu, block=(256, 1, 1))
+        func(cuda_data_gpu, cuda_arr_gpu, abs_dists_gpu, block=(128, 1, 1))
     if print_times:
         print '<<< t1:', time.time() - st
 
@@ -300,5 +309,6 @@ if __name__ == '__main__':
         #print '--- cython ---'
         #run_cython_knn_test(test_seconds=test_seconds)
         np.random.seed(0)
+
         print '--- cython parallel ---'
         run_cython_knn_test(test_seconds=test_seconds, parallel=True)

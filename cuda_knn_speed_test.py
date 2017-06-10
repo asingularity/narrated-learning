@@ -71,6 +71,7 @@ class CudaQuery(object):
         self.func(self.input_data_gpu, self.query_data_gpu, self.tmp_data_gpu, block=(128, 1, 1))
 
         # TODO replace these with cuda-based sum routine
+        # this statement is slow (should be, but is not currently, the bottleneck):
         cuda.memcpy_dtoh(self.tmp_data, self.tmp_data_gpu)
         dists = np.sum(self.tmp_data.reshape(self.original_input_data_shape), axis=1)
         ind = np.argmin(dists)

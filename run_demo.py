@@ -72,10 +72,10 @@ def get_brain_params():
         ],
         'predictors_training_time_range': [0, MAX_HISTORY_LENGTH],
         'predictors_test_every_k_steps': None, #500,  # 500 for training
-        'predictors_save_every_k_steps': None,
+        'predictors_save_every_k_steps': 1000000,
         'predictors_enable_training': False,
-        'predictors_optimize_training': False,  # second step
-        'predictors_load_from_file': False,
+        'predictors_optimize_training': True,  # second step
+        'predictors_load_from_file': True,
         'predictors_load_filename': '/home/' + USERNAME + '/projects/NL/sim/2017-03-05T07:14:47.040189_predictor_inverse_level_0/predictors.pkl',
         # ************ inverse model ************
         'inverse_models': [
@@ -85,7 +85,7 @@ def get_brain_params():
         'inverse_test_every_k_steps': None, #500, #None,
         'inverse_save_every_k_steps': None, #4000000,
         'inverse_enable_training': False,
-        'inverse_load_from_file': True,
+        'inverse_load_from_file': False,
         'inverse_load_filename': '/home/' + USERNAME + '/projects/NL/sim/2017-03-05T07:14:47.040189_predictor_inverse_level_0/inverse.pkl',
     }
     return params
@@ -117,8 +117,8 @@ def get_evaluator_params():
 def get_visualizer_params():
     params = {
         'fps_display_interval': 3,
-        'image_display_frames': 1,  # 1000
-        'plot_brain_error_frames': 50000,
+        'image_display_frames': 100,  # 1000
+        'plot_brain_error_frames': 500,
         'waitKey_time': 1,  # 1
         'scale_topdown_factor': 10,
         'scale_camera_factor': 20,
@@ -129,7 +129,7 @@ def get_visualizer_params():
 
 def get_task_manager_params():
     params = {
-        'enabled': True,
+        'enabled': False,
         'constrain_to_params': True,
         'max_task_steps': 10,  # 64,  # 64 * 2
         'min_delta_theta': -pi/4.0,
@@ -153,7 +153,6 @@ def init_demo():
     }
 
 
-#@profile
 def run_demo(demo_components):
     robot_environment = demo_components['robot_environment']
     robot_brain = demo_components['robot_brain']
@@ -168,7 +167,7 @@ def run_demo(demo_components):
     task_manager_enabled = task_manager.get_enabled()
     new_task_chosen = False
     task_goal_states = None
-    random.seed(123)
+    random.seed(1233)  # change to make movement different, without different walls
     # TODO fix see through walls from left side of vertical wall viewing right
 
     while not perf_eval.finished():

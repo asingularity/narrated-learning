@@ -218,6 +218,7 @@ class Predictor(object):
             self.output_history[self.input_history_t, :] = net_output
             self.input_history_t += 1
 
+    #@profile
     def optimize_train(self, states_history, training_delay):
         '''
         Overwrites output state for closest entry to new (input, context), if output state is more "efficient"
@@ -237,6 +238,7 @@ class Predictor(object):
 
             net_output_predicted, dist, index = self.predict(input_state=input_state,
                                                              context_state=context_state)
+
             # replace based on minimum distance:
             #   |(output_predicted) - input_state| + |(output_predicted) - context_state|
             #       vs.
@@ -246,31 +248,18 @@ class Predictor(object):
             #   2. we only take distance vs. input_state, assuming predictor output is always same dim as input
             #           (always predicting its own input)
 
-            distance_predicted = np.mean(np.fabs(net_output_predicted - input_state))
-            distance_actual = np.mean(np.fabs(output_state - input_state))
+            distance_predicted = np.mean(np.fabs(net_output_predicted - input_state)) + np.mean(np.fabs(net_output_predicted - context_state))
+            distance_actual = np.mean(np.fabs(output_state - input_state)) + np.mean(np.fabs(output_state - context_state))
 
             if distance_actual < distance_predicted:
 
-                if self.error_t is None:
-                    self.error_t = 0
-
-                self.error_history[self.error_t] = np.mean(np.fabs(output_state - net_output_predicted))
-                self.error_t += 1
-
-                if self.error_t > self.error_average_steps:
-                    if self.mean_error_t is None:
-                        self.mean_error_t = 0
-                    mean_error = np.mean(self.error_history[self.error_t - self.error_average_steps:self.error_t])
-                    self.mean_error_history[self.mean_error_t] = mean_error
-                    self.mean_error_t += 1
-
-                #print 'replacing: (actual < predicted) ', distance_actual, ' < ', distance_predicted
+                print 'replacing: (actual < predicted) ', distance_actual, ' < ', distance_predicted
                 # replace only output (near term prediction)
                 net_output = output_state
                 self.output_history[index, :] = net_output
             else:
                 pass
-                #print 'not replacing: (actual > predicted) ', distance_actual, ' > ', distance_predicted
+                print 'not replacing: (actual > predicted) ', distance_actual, ' > ', distance_predicted
 
     def predict(self, input_state, context_state):
         net_input = np.concatenate((input_state, context_state)).astype(np.float32)
