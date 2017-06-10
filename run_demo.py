@@ -1,8 +1,8 @@
 
 import random
 import numpy as np
-random.seed(0)
-np.random.seed(0)
+random.seed(1)
+np.random.seed(1)
 
 from robot_brain import RobotBrain
 from robot_model import RobotModel
@@ -16,9 +16,9 @@ import time
 from math import pi
 
 
-MAX_HISTORY_LENGTH = 4000000 + 1
+MAX_HISTORY_LENGTH = 200000 + 1
 USERNAME = 'intec'
-NUM_INPUT_RAYS = 40
+NUM_INPUT_RAYS = 8
 INPUT_DIM = NUM_INPUT_RAYS * 3
 
 
@@ -51,7 +51,7 @@ def get_brain_params():
     params = {
         # ************ general ************
         'max_history_length': MAX_HISTORY_LENGTH,
-        'error_average_steps': 1000,  # 1000
+        'error_average_steps': 5000,  # 1000
         'predictors_enable': True,
         'training_delay': 128,
         # ************ autoencoders ************
@@ -61,47 +61,48 @@ def get_brain_params():
             {'num_inputs': INPUT_DIM / 4, 'num_hidden': INPUT_DIM / 8, 'learning_rate': 0.01}
         ],
         'autoencoders_training_time_range': [0, MAX_HISTORY_LENGTH],
-        'autoencoders_save_every_k_steps': None,
+        'autoencoders_save_every_k_steps': None,  # 50000,
         'autoencoders_enable_training': False,
         'autoencoders_load_from_file': True,
-        'autoencoders_load_filename': '/home/' + USERNAME + '/projects/NL/sim/2017-02-19T16:01:29.835767_autoencoders/autoencoders.pkl',
+        'autoencoders_load_filename': '/home/' + USERNAME + '/projects/NL/sim/2017-06-10T13:40:24.988732_autoencoders/autoencoders.pkl',
         # ************ predictors ************
         'predictors': [
             {'state_index_input': 0, 'state_index_context': 0, 'state_index_output': 0,
                                      'dt_context': 2,          'dt_output': 1}
         ],
         'predictors_training_time_range': [0, MAX_HISTORY_LENGTH],
-        'predictors_test_every_k_steps': None, #500,  # 500 for training
-        'predictors_save_every_k_steps': 1000000,
-        'predictors_enable_training': False,
-        'predictors_optimize_training': True,  # second step
-        'predictors_load_from_file': True,
-        'predictors_load_filename': '/home/' + USERNAME + '/projects/NL/sim/2017-03-05T07:14:47.040189_predictor_inverse_level_0/predictors.pkl',
+        'predictors_test_every_k_steps': None,  # 500 for training
+        'predictors_save_every_k_steps': None,  # 1000000
+        'predictors_enable_training': False,  # first step
+        'predictors_optimize_training': False,  # second step
+        'predictors_load_from_file': False,
+        'predictors_load_filename': '/home/' + USERNAME + '/projects/NL/sim/<>_predictor_inverse_level_0/predictors.pkl',
         # ************ inverse model ************
         'inverse_models': [
             {'state_index_current': 0, 'state_index_future': 0, 'dt': 1}
         ],
         'inverse_training_time_range': [0, MAX_HISTORY_LENGTH],
-        'inverse_test_every_k_steps': None, #500, #None,
-        'inverse_save_every_k_steps': None, #4000000,
+        'inverse_test_every_k_steps': None,  # 10,
+        'inverse_save_every_k_steps': None,  # 50000,
         'inverse_enable_training': False,
-        'inverse_load_from_file': False,
-        'inverse_load_filename': '/home/' + USERNAME + '/projects/NL/sim/2017-03-05T07:14:47.040189_predictor_inverse_level_0/inverse.pkl',
+        'inverse_load_from_file': True,
+        'inverse_load_filename': '/home/' + USERNAME + '/projects/NL/sim/2017-06-10T13:44:54.973466_inverse_level_0/inverse.pkl',
     }
     return params
 
 
 def get_environment_params():
     params = {
-        'width': 40,
-        'height': 40,
-        'min_num_walls': 20,
-        'max_num_walls': 20,
-        'wall_min_length': 1,
-        'wall_max_length': 20,
+        'width': 10,
+        'height': 10,
+        'add_random_color_boundary_walls': True,
+        'min_num_walls': 1,
+        'max_num_walls': 1,
+        'wall_min_length': 2,
+        'wall_max_length': 2,
         'min_space_between_walls': 2,
-        'init_robot_x': 25,
-        'init_robot_y': 25,
+        'init_robot_x': 5,
+        'init_robot_y': 5,
         'init_robot_theta': 45
     }
     return params
@@ -117,9 +118,9 @@ def get_evaluator_params():
 def get_visualizer_params():
     params = {
         'fps_display_interval': 3,
-        'image_display_frames': 100,  # 1000
-        'plot_brain_error_frames': 500,
-        'waitKey_time': 1,  # 1
+        'image_display_frames': 1,  # 1000
+        'plot_brain_error_frames': 10000,
+        'waitKey_time': 100,  # 1, 100
         'scale_topdown_factor': 10,
         'scale_camera_factor': 20,
         'no_wall_ray_color': (0.1, 0.1, 0.1),
@@ -129,13 +130,13 @@ def get_visualizer_params():
 
 def get_task_manager_params():
     params = {
-        'enabled': False,
+        'enabled': True,
         'constrain_to_params': True,
-        'max_task_steps': 10,  # 64,  # 64 * 2
-        'min_delta_theta': -pi/4.0,
-        'max_delta_theta': pi/4.0,
-        'min_distance': 3,
-        'max_distance': 3
+        'max_task_steps': 5,  # 64,  # 64 * 2
+        'min_delta_theta': -pi/6.0,
+        'max_delta_theta': pi/6.0,
+        'min_distance': 2,
+        'max_distance': 2
     }
     return params
 

@@ -10,6 +10,7 @@ class RobotEnvironment(object):
     def __init__(self, params):
         self.W = params['width']  # Width/Height
         self.H = params['height']
+        self.add_random_color_boundary_walls = params['add_random_color_boundary_walls']
 
         self.r_x = params['init_robot_x']
         self.r_y = params['init_robot_y']
@@ -31,15 +32,42 @@ class RobotEnvironment(object):
         env_map = np.zeros((self.H, self.W, 3))
         overlap_map = np.zeros((self.H, self.W, 3))
 
-        # TODO put walls along edges first?
+        if self.add_random_color_boundary_walls:
+            wall_x_starts = [0 + 1,      0 + 1,          0,          self.W - 1]
+            wall_y_starts = [0,      self.H - 1, 1 + 1,          1 + 1]
+            wall_orients =  [0,      0,          1,          1]
+            wall_lengths =  [self.W - 2, self.W - 2,     self.H - 4, self.H - 4]
+
+            for k in range(4):
+                wall_length = wall_lengths[k]
+                wall_color = np.array([random.random(), random.random(), random.random()])
+                wall_orient = wall_orients[k]
+                wall_x_start = wall_x_starts[k]
+                wall_y_start = wall_y_starts[k]
+
+                wall_placed, env_map, overlap_map = self._attempt_place_wall(wall_color,
+                                                                             wall_orient,
+                                                                             wall_length,
+                                                                             wall_x_start,
+                                                                             wall_y_start,
+                                                                             overlap_map,
+                                                                             env_map,
+                                                                             self.W,
+                                                                             self.H,
+                                                                             0)
+                assert wall_placed, 'wall not placed!: ' + str(k)
 
         for w in range(num_walls):
             wall_placed = False
             while not wall_placed:
                 wall_length = random.randint(wall_min_length, wall_max_length)
                 wall_color = np.array([random.random(), random.random(), random.random()])
-                wall_x_start = random.randint(0, self.W - 1)
-                wall_y_start = random.randint(0, self.H - 1)
+                if self.add_random_color_boundary_walls:
+                    wall_x_start = random.randint(2, self.W - 3)
+                    wall_y_start = random.randint(2, self.H - 3)
+                else:
+                    wall_x_start = random.randint(0, self.W - 1)
+                    wall_y_start = random.randint(0, self.H - 1)
                 wall_orient = random.randint(0, 1)
 
                 wall_placed, env_map, overlap_map = self._attempt_place_wall(wall_color,
