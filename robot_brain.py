@@ -28,6 +28,7 @@ class RobotBrain(object):
         self.dist_2 = 0
         self.dist_1 = 0
         self.dist_0 = 0
+        self.always_random_motor_out = False
 
     def _init_config(self, params):
         config = {}
@@ -166,7 +167,7 @@ class RobotBrain(object):
                                   models_save_folder=models_save_folder
                                   )
 
-        if goal_states is not None:
+        if (goal_states is not None) and (not self.always_random_motor_out):
 
             use_recurrence = False
             if use_recurrence:
@@ -193,6 +194,9 @@ class RobotBrain(object):
             self.motor_out = None
 
         self.t += 1
+
+    def set_always_random_motor(self, setting):
+        self.always_random_motor_out = setting
 
     def reset_for_new_task(self):
         self.last_time_set_8 = -9e4

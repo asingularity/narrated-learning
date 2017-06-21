@@ -8,7 +8,6 @@ from robot_brain import RobotBrain
 from robot_model import RobotModel
 from robot_sensors import RobotSensors
 from robot_environment import RobotEnvironment
-from performance_evaluator import PerformanceEvaluator
 from visualizer import Visualizer
 from sim_folder_manager import SimFolderManager
 from task_manager import TaskManager
@@ -108,13 +107,6 @@ def get_environment_params():
     return params
 
 
-def get_evaluator_params():
-    params = {
-        'run_time': MAX_HISTORY_LENGTH
-    }
-    return params
-
-
 def get_visualizer_params():
     params = {
         'fps_display_interval': 3,
@@ -130,13 +122,18 @@ def get_visualizer_params():
 
 def get_task_manager_params():
     params = {
+        'run_steps_if_task_mode_disabled': MAX_HISTORY_LENGTH,
         'enabled': True,
+        'num_trials_per_set': 10,
+        'sleep_every_trial': 0.2,
         'constrain_to_params': True,
-        'max_task_steps': 5,  # 64,  # 64 * 2
+        'max_trial_steps': 5,  # 64,  # 64 * 2
         'min_delta_theta': -pi/6.0,
         'max_delta_theta': pi/6.0,
         'min_distance': 2,
-        'max_distance': 2
+        'max_distance': 2,
+        'sets_param_name': 'brain.random_motor_out',
+        'sets_param_values': [True, False]
     }
     return params
 
@@ -147,7 +144,6 @@ def init_demo():
         'robot_brain': RobotBrain(get_brain_params()),
         'robot_model': RobotModel(get_model_params()),
         'robot_sensors': RobotSensors(get_sensors_params()),
-        'perf_eval': PerformanceEvaluator(get_evaluator_params()),
         'visualizer': Visualizer(get_visualizer_params()),
         'sim_folder_manager': SimFolderManager(get_sim_folder_manager_params()),
         'task_manager': TaskManager(get_task_manager_params())
@@ -159,77 +155,57 @@ def run_demo(demo_components):
     robot_brain = demo_components['robot_brain']
     robot_model = demo_components['robot_model']
     robot_sensors = demo_components['robot_sensors']
-    perf_eval = demo_components['perf_eval']
     visualizer = demo_components['visualizer']
     sim_folder_manager = demo_components['sim_folder_manager']
     task_manager = demo_components['task_manager']
 
     use_keyboard_input = False
-    task_manager_enabled = task_manager.get_enabled()
-    new_task_chosen = False
-    task_goal_states = None
     random.seed(1233)  # change to make movement different, without different walls
+
     # TODO fix see through walls from left side of vertical wall viewing right
+    # TODO is this fixed?
 
-    while not perf_eval.finished():
+    while not task_manager.finished_sim():
 
-        if task_manager_enabled:
-            time.sleep(0.3)
-            task_manager.choose_new_task_goal(topdown_info=robot_environment.get_topdown_info())
-            task_goal_nonzero_tiles = robot_environment.get_nonzero_tiles(robot_position_angle=task_manager.get_current_goal_position_angle())
-            task_goal_rays = robot_sensors.get_rays(nonzero_tiles=task_goal_nonzero_tiles,
-                                                    robot_position_angle=task_manager.get_current_goal_position_angle())
-            task_goal_sensory_input = task_goal_rays['ray_colors']
-            task_goal_states = robot_brain.get_autoencoder_states_for_input(net_input=task_goal_sensory_input)
-            robot_brain.reset_for_new_task()
-            new_task_chosen = True
+        task_manager.do_step(topdown_info=robot_environment.get_topdown_info(),
+                             robot_environment=robot_environment,
+                             robot_sensors=robot_sensors,
+                             robot_brain=robot_brain)
 
-        finished_task = False
-        while not finished_task:
+        robot_sensors.read_input(nonzero_tiles=robot_environment.get_nonzero_tiles(),
+                                 robot_theta=robot_environment.get_robot_theta())
 
-            robot_sensors.read_input(nonzero_tiles=robot_environment.get_nonzero_tiles(),
-                                     robot_theta=robot_environment.get_robot_theta())
+        #   robot_sensors.rays updated from environment: STATE_T+1
+        #   robot_model.last_motor_command: CMD_T
 
-            #   robot_sensors.rays updated from environment: STATE_T+1
-            #   robot_model.last_motor_command: CMD_T
+        robot_brain.process_input(rays=robot_sensors.get_rays(),
+                                  last_motor_command=robot_model.get_last_motor_command(),
+                                  goal_states=task_manager.get_task_goal_states(),
+                                  models_save_folder=sim_folder_manager.get_models_save_folder())
 
-            robot_brain.process_input(rays=robot_sensors.get_rays(),
-                                      last_motor_command=robot_model.get_last_motor_command(),
-                                      goal_states=task_goal_states,
-                                      models_save_folder=sim_folder_manager.get_models_save_folder())
+        robot_model.act_upon_processing(motor_command=robot_brain.get_motor_output())
 
-            robot_model.act_upon_processing(motor_command=robot_brain.get_motor_output())
+        if use_keyboard_input:
+            linear_speed, angular_speed = visualizer.get_linear_angular_speed()
+        else:
+            linear_speed, angular_speed = robot_model.get_delta_configuration()
 
-            if use_keyboard_input:
-                linear_speed, angular_speed = visualizer.get_linear_angular_speed()
-            else:
-                linear_speed, angular_speed = robot_model.get_delta_configuration()
+        robot_environment.step_environment(linear_speed=linear_speed,
+                                           angular_speed=angular_speed)
 
-            robot_environment.step_environment(linear_speed=linear_speed,
-                                               angular_speed=angular_speed)
+        #   robot_model.last_motor_command updated to new random command CMD_T
+        #   robot_environment state updated with motor cmd CMD_T: STATE_T -> STATE_T+1
 
-            #   robot_model.last_motor_command updated to new random command CMD_T
-            #   robot_environment state updated with motor cmd CMD_T: STATE_T -> STATE_T+1
-
-            visualizer.visualize(rays=robot_sensors.get_rays(),
-                                 robot_brain=robot_brain,  # get_autoenc_images, get_predictor_images, get_error_names_histories
-                                 topdown_info=robot_environment.get_topdown_info(),
-                                 plots_save_folder=sim_folder_manager.get_plots_save_folder(),
-                                 current_goal_position_angle=task_manager.get_current_goal_position_angle())
-
-            if task_manager_enabled:
-                if new_task_chosen:
-                    time.sleep(0.3)
-                    new_task_chosen = False
-                finished_task = task_manager.finished_task()
-            else:
-                finished_task = True
-
-            perf_eval.step()
-
-        perf_eval.evaluate()
+        visualizer.visualize(rays=robot_sensors.get_rays(),
+                             robot_brain=robot_brain,  # get_autoenc_images, get_predictor_images, get_error_names_histories
+                             topdown_info=robot_environment.get_topdown_info(),
+                             plots_save_folder=sim_folder_manager.get_plots_save_folder(),
+                             current_goal_position_angle=task_manager.get_current_goal_position_angle())
 
     print 'Finished Simulation.'
+
+    task_manager.evaluate(plots_save_folder=sim_folder_manager.get_plots_save_folder())
+    print 'Finished Evaluation.'
 
 
 def demo():
