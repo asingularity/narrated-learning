@@ -110,7 +110,7 @@ def get_environment_params():
 def get_visualizer_params():
     params = {
         'fps_display_interval': 3,
-        'image_display_frames': 10,  # 1  # 1000
+        'image_display_frames': 100,  # 1  # 1000
         'plot_brain_error_frames': 10000,
         'waitKey_time': 1,  # 1, 100
         'scale_topdown_factor': 20,
