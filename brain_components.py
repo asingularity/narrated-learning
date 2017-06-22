@@ -414,7 +414,7 @@ class InverseModel(object):
         net_input = np.concatenate((current_state, goal_states[self.state_index_future].astype(np.float32)))
         dist, ind = knn_parallel_query(data_set, net_input, tmp, data_frames, dim)
         net_output_predicted = self.output_history[ind, :]
-        print 'lookup_motor_to_goal: net_output_predicted ', net_output_predicted
+        #print 'lookup_motor_to_goal: net_output_predicted ', net_output_predicted
         return net_output_predicted
 
     def test_newest_point_and_store_error(self, states_history, motor_history):

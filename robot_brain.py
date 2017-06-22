@@ -182,13 +182,13 @@ class RobotBrain(object):
                 inv = self.inverse_list[0]  # TODO select inverse model here
                 self.motor_out = inv.lookup_motor_to_goal(goal_states=proximal_goal_states,
                                                           states_history=self.states_history)
-                print 'motor_out, no index: ', self.motor_out
+                #print 'motor_out, no index: ', self.motor_out
                 self.motor_out = self.motor_out[1]  # [v, w; v, w; v, w]
             else:
                 inv = self.inverse_list[0]  # TODO select inverse model here
                 self.motor_out = inv.lookup_motor_to_goal(goal_states=goal_states,
                                                           states_history=self.states_history)
-                print 'motor_out, no index: ', self.motor_out
+                #print 'motor_out, no index: ', self.motor_out
                 self.motor_out = self.motor_out[1]  # [v, w; v, w; v, w]
         else:
             self.motor_out = None

@@ -1,8 +1,12 @@
 
-from math import pi, sin, cos
+from math import pi, sin, cos, sqrt
 import numpy as np
 import random
 import time
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+
 
 class TaskManager(object):
     def __init__(self, params):
@@ -57,7 +61,7 @@ class TaskManager(object):
                 if self.goal_r_theta is not None:  # not first trial of sim
                     self._add_trial_end_data(topdown_info)
 
-                if self.trial >= self.num_trials_per_set or self.goal_r_theta is None:  # need to start new set
+                if self.trial >= self.num_trials_per_set - 1 or self.goal_r_theta is None:  # need to start new set
                     self.trial = 0
                     if self.goal_r_theta is not None:
                         self.set += 1
@@ -65,7 +69,6 @@ class TaskManager(object):
                         self.all_sets_done = True
                         return
                     else:  # not finished with all sets yet
-                        # TODO sets params in robot_brain or other class according to self.sets_param_name and self.sets_param_values
                         if self.sets_param_name == 'brain.random_motor_out':
                             print 'setting ', self.sets_param_name, 'to value:', self.sets_param_values[self.set]
                             robot_brain.set_always_random_motor(self.sets_param_values[self.set])
@@ -114,7 +117,21 @@ class TaskManager(object):
         :param plots_save_folder:
         :return:
         '''
-        pass
+        if self.task_mode_enabled:
+            fig = plt.figure(figsize=(10, 10))
+            ax = fig.add_subplot(1, 1, 0)
+
+            ax.cla()
+            #ax.set_ylim([0, 0.12])
+            ax.plot(self.position_errors_by_set_and_trial.flatten(), 'r.-')
+            ax.set_title(str([np.mean(self.position_errors_by_set_and_trial[0, :]), np.mean(self.position_errors_by_set_and_trial[1, :])]))
+            fig.savefig(plots_save_folder + '/position_errors.png', dpi=100)
+
+            ax.cla()
+            #ax.set_ylim([0, 0.12])
+            ax.plot(self.theta_errors_by_set_and_trial.flatten(), 'r.-')
+            ax.set_title(str([np.mean(self.theta_errors_by_set_and_trial[0, :]), np.mean(self.theta_errors_by_set_and_trial[1, :])]))
+            fig.savefig(plots_save_folder + '/theta_errors.png', dpi=100)
 
     def get_task_goal_states(self):
         return self.task_goal_states
@@ -130,17 +147,22 @@ class TaskManager(object):
     # *********************************** PRIVATE *************************************
 
     def _add_trial_end_data(self, topdown_info):
-        if False:
-            goal_p_x = goal_state[0]
-            goal_p_y = goal_state[1]
-            goal_theta = goal_state[2]
+        '''
 
-            robot_p_x = robot_state[0]
-            robot_p_y = robot_state[1]
-            robot_theta = robot_state[2]
+        self.position_errors_by_set_and_trial = np.zeros((self.num_sets, self.num_trials_per_set))
+        self.theta_errors_by_set_and_trial = np.zeros((self.num_sets, self.num_trials_per_set))
 
-            self.position_errors_per_trial.append(sqrt(pow(goal_p_x - robot_p_x, 2) + pow(goal_p_y - robot_p_y, 2)))
-            self.theta_errors_per_trial.append(min(min(abs(robot_theta - goal_theta), abs(robot_theta + 2 * pi - goal_theta)), abs(robot_theta - 2 * pi - goal_theta)))
+        :param topdown_info:
+        :return:
+        '''
+
+        td_info = topdown_info
+        r_x = td_info['robot_x']
+        r_y = td_info['robot_y']
+        robot_theta = td_info['robot_theta']
+
+        self.position_errors_by_set_and_trial[self.set, self.trial] = sqrt(pow(r_x - self.goal_r_x, 2) + pow(r_y - self.goal_r_y, 2))
+        self.theta_errors_by_set_and_trial[self.set, self.trial] = min(min(abs(robot_theta - self.goal_r_theta), abs(robot_theta + 2 * pi - self.goal_r_theta)), abs(robot_theta - 2 * pi - self.goal_r_theta))
 
     def _choose_new_trial_goal(self, topdown_info):
         '''
@@ -180,8 +202,8 @@ class TaskManager(object):
             while goal_r_theta < 0:
                 goal_r_theta += 2 * pi
 
-            goal_r_x = r_x + distance * cos(goal_r_theta)
-            goal_r_y = r_y + distance * sin(goal_r_theta)
+            goal_r_x = min(W - 1.0, max(1.0, r_x + distance * cos(goal_r_theta)))
+            goal_r_y = min(H - 1.0, max(1.0, r_y + distance * sin(goal_r_theta)))
         else:
             goal_r_theta = random.random() * 2.0 * pi
             goal_r_x = 2.0 + random.random() * (W - 4.0)

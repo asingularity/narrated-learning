@@ -110,10 +110,10 @@ def get_environment_params():
 def get_visualizer_params():
     params = {
         'fps_display_interval': 3,
-        'image_display_frames': 1,  # 1000
+        'image_display_frames': 10,  # 1  # 1000
         'plot_brain_error_frames': 10000,
-        'waitKey_time': 100,  # 1, 100
-        'scale_topdown_factor': 10,
+        'waitKey_time': 1,  # 1, 100
+        'scale_topdown_factor': 20,
         'scale_camera_factor': 20,
         'no_wall_ray_color': (0.1, 0.1, 0.1),
     }
@@ -124,16 +124,16 @@ def get_task_manager_params():
     params = {
         'run_steps_if_task_mode_disabled': MAX_HISTORY_LENGTH,
         'enabled': True,
-        'num_trials_per_set': 10,
-        'sleep_every_trial': 0.2,
+        'num_trials_per_set': 300,
+        'sleep_every_trial': 0.0,  #  0.2,  # to be able to see the next goal
         'constrain_to_params': True,
-        'max_trial_steps': 5,  # 64,  # 64 * 2
+        'max_trial_steps': 2,
         'min_delta_theta': -pi/6.0,
         'max_delta_theta': pi/6.0,
-        'min_distance': 2,
-        'max_distance': 2,
+        'min_distance': 1,
+        'max_distance': 1,
         'sets_param_name': 'brain.random_motor_out',
-        'sets_param_values': [True, False]
+        'sets_param_values': [False, True]
     }
     return params
 
