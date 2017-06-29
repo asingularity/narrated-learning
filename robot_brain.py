@@ -2,7 +2,7 @@ import pickle
 import numpy as np
 np.set_printoptions(suppress=True)
 from fast_save_matrix import savetxt
-from brain_components import Autoencoder, StatesHistory, MotorHistory, Predictor, InverseModel
+from brain_components import Autoencoder, StatesHistory, MotorHistory, Predictor, InverseModel, DebugTopdownInfoHistory
 
 
 class RobotBrain(object):
@@ -13,6 +13,7 @@ class RobotBrain(object):
         if self.predictors_enable:
             self.predictors_list = self._init_predictors(params)
             self.states_history = self._init_states_history(params, states_dim_list)
+            self.debug_topdown_info_history = self._init_debug_topdown_info_history(params)
             self.motor_history = self._init_motor_history(params)
             self.inverse_list = self._init_inverse(params)
 
@@ -102,6 +103,12 @@ class RobotBrain(object):
         states_history = StatesHistory(states_history_params)
         return states_history
 
+    def _init_debug_topdown_info_history(self, params):
+        debug_topdown_info_history_params = {}
+        debug_topdown_info_history_params['max_history_length'] = params['max_history_length']
+        debug_topdown_info_history = DebugTopdownInfoHistory(debug_topdown_info_history_params)
+        return debug_topdown_info_history
+
     def _init_motor_history(self, params):
         motor_history_params = {}
         motor_history_params['max_history_length'] = params['max_history_length']
@@ -137,7 +144,7 @@ class RobotBrain(object):
 
     # ************ process ************
 
-    def process_input(self, rays, last_motor_command, goal_states, models_save_folder):
+    def process_input(self, rays, last_motor_command, goal_states, models_save_folder, debug_topdown_info):
 
         current_visual_input = self._process_sensors(rays=rays)
         # previous_motor_command was initiated at T-1, applied [T-1, T],
@@ -154,10 +161,14 @@ class RobotBrain(object):
             self._process_motor_history(newest_motor_command=last_motor_command,
                                         motor_history=self.motor_history)
 
+            self._process_debug_topdown_info_history(newest_topdown_info=debug_topdown_info,
+                                                     debug_topdown_info_history=self.debug_topdown_info_history)
+
             self._process_predictors(predictors_list=self.predictors_list,
                                      states_history=self.states_history,
                                      config=self.config,
-                                     models_save_folder=models_save_folder
+                                     models_save_folder=models_save_folder,
+                                     debug_topdown_info_history=self.debug_topdown_info_history
                                      )
 
             self._process_inverse(inverse_list=self.inverse_list,
@@ -370,7 +381,7 @@ class RobotBrain(object):
     def _process_states_history(self, newest_states_list, states_history):
         states_history.process_new_states(newest_states_list)
 
-    def _process_predictors(self, predictors_list, states_history, config, models_save_folder):
+    def _process_predictors(self, predictors_list, states_history, config, models_save_folder, debug_topdown_info_history):
         '''
             training_delay: delay such that testing points (at current time) are independent of recent training
                 it is otherwise possible to "cheat" if testing on the point the network was just trained on.
@@ -380,7 +391,7 @@ class RobotBrain(object):
 
         for predictor in predictors_list:
             if self.predictors_enable_training:
-                predictor.train(states_history, training_delay)
+                predictor.train(states_history, training_delay, debug_topdown_info_history)
             elif self.predictors_optimize_training:
                 predictor.optimize_train(states_history, training_delay)
 
@@ -397,6 +408,9 @@ class RobotBrain(object):
 
     def _process_motor_history(self, newest_motor_command, motor_history):
         motor_history.process_new_motor_command(newest_motor_command)
+
+    def _process_debug_topdown_info_history(self, newest_topdown_info, debug_topdown_info_history):
+        debug_topdown_info_history.process_new_topdown_info(newest_topdown_info)
 
     def _process_inverse(self, inverse_list, states_history, motor_history, config, models_save_folder):
 

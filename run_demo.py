@@ -15,7 +15,7 @@ import time
 from math import pi
 
 
-MAX_HISTORY_LENGTH = 200000 + 1
+MAX_HISTORY_LENGTH = 1000000 + 1
 USERNAME = 'intec'
 NUM_INPUT_RAYS = 8
 INPUT_DIM = NUM_INPUT_RAYS * 3
@@ -66,13 +66,15 @@ def get_brain_params():
         'autoencoders_load_filename': '/home/' + USERNAME + '/projects/NL/sim/2017-06-10T13:40:24.988732_autoencoders/autoencoders.pkl',
         # ************ predictors ************
         'predictors': [
-            {'state_index_input': 0, 'state_index_context': 0, 'state_index_output': 0,
-                                     'dt_context': 2,          'dt_output': 1}
+            {'state_index_input': 0, 'state_index_context': 0, 'state_index_output': 0, 'dt_context': 2, 'dt_output': 1},
+            {'state_index_input': 0, 'state_index_context': 0, 'state_index_output': 0, 'dt_context': 4, 'dt_output': 2},
+            {'state_index_input': 0, 'state_index_context': 0, 'state_index_output': 0, 'dt_context': 8, 'dt_output': 4},
+            {'state_index_input': 0, 'state_index_context': 0, 'state_index_output': 0, 'dt_context': 16, 'dt_output': 8},
         ],
         'predictors_training_time_range': [0, MAX_HISTORY_LENGTH],
         'predictors_test_every_k_steps': None,  # 500 for training
-        'predictors_save_every_k_steps': None,  # 1000000
-        'predictors_enable_training': False,  # first step
+        'predictors_save_every_k_steps': 1000000,  # 1000000
+        'predictors_enable_training': True,  # first step
         'predictors_optimize_training': False,  # second step
         'predictors_load_from_file': False,
         'predictors_load_filename': '/home/' + USERNAME + '/projects/NL/sim/<>_predictor_inverse_level_0/predictors.pkl',
@@ -82,9 +84,9 @@ def get_brain_params():
         ],
         'inverse_training_time_range': [0, MAX_HISTORY_LENGTH],
         'inverse_test_every_k_steps': None,  # 10,
-        'inverse_save_every_k_steps': None,  # 50000,
-        'inverse_enable_training': False,
-        'inverse_load_from_file': True,
+        'inverse_save_every_k_steps': 100000,  # 50000,
+        'inverse_enable_training': True,
+        'inverse_load_from_file': False,
         'inverse_load_filename': '/home/' + USERNAME + '/projects/NL/sim/2017-06-10T13:44:54.973466_inverse_level_0/inverse.pkl',
     }
     return params
@@ -110,8 +112,8 @@ def get_environment_params():
 def get_visualizer_params():
     params = {
         'fps_display_interval': 3,
-        'image_display_frames': 100,  # 1  # 1000
-        'plot_brain_error_frames': 10000,
+        'image_display_frames': 1000,  # 1  # 1000
+        'plot_brain_error_frames': 100000,
         'waitKey_time': 1,  # 1, 100
         'scale_topdown_factor': 20,
         'scale_camera_factor': 20,
@@ -123,7 +125,7 @@ def get_visualizer_params():
 def get_task_manager_params():
     params = {
         'run_steps_if_task_mode_disabled': MAX_HISTORY_LENGTH,
-        'enabled': True,
+        'enabled': False,
         'num_trials_per_set': 300,
         'sleep_every_trial': 0.0,  #  0.2,  # to be able to see the next goal
         'constrain_to_params': True,
@@ -181,7 +183,8 @@ def run_demo(demo_components):
         robot_brain.process_input(rays=robot_sensors.get_rays(),
                                   last_motor_command=robot_model.get_last_motor_command(),
                                   goal_states=task_manager.get_task_goal_states(),
-                                  models_save_folder=sim_folder_manager.get_models_save_folder())
+                                  models_save_folder=sim_folder_manager.get_models_save_folder(),
+                                  debug_topdown_info=robot_environment.get_topdown_info())  # for storing robot position, angle for debugging planning
 
         robot_model.act_upon_processing(motor_command=robot_brain.get_motor_output())
 

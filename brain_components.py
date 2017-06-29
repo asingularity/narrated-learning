@@ -3,3 +3,4 @@ from brain_components_classes.states_history import StatesHistory
 from brain_components_classes.motor_history import MotorHistory
 from brain_components_classes.predictor import Predictor
 from brain_components_classes.inverse_model import InverseModel
+from brain_components_classes.debug_topdown_info_history import DebugTopdownInfoHistory

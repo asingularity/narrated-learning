@@ -19,6 +19,10 @@ class Predictor(object):
         self.output_history = None
         self.input_history_t = None
 
+        self.debug_input_td_info_history = None
+        self.debug_context_td_info_history = None
+        self.debug_output_td_info_history = None
+
         self.error_t = None
         self.mean_error_t = None
 
@@ -55,7 +59,13 @@ class Predictor(object):
         output_state = states_history.get_state(state_index=self.state_index_output, delay=training_delay + self.dt_context - self.dt_output)
         return input_state, context_state, output_state
 
-    def train(self, states_history, training_delay):
+    def _get_td_info_input_context_output(self, debug_topdown_info_history, training_delay):
+        input_td_info = debug_topdown_info_history.get_td_info(delay=training_delay + self.dt_context)
+        context_td_info = debug_topdown_info_history.get_td_info(delay=training_delay + 0)
+        output_td_info = debug_topdown_info_history.get_td_info(delay=training_delay + self.dt_context - self.dt_output)
+        return input_td_info, context_td_info, output_td_info
+
+    def train(self, states_history, training_delay, debug_topdown_info_history):
         '''
         predictor must decide if it has enough history to train
         training: sets part of proper states_history array to its own knn data
@@ -78,10 +88,26 @@ class Predictor(object):
             if self.input_history is None:
                 self.input_history = np.zeros((self.max_history_length, net_input.shape[0])).astype(np.float32)
                 self.output_history = np.zeros((self.max_history_length, net_output.shape[0])).astype(np.float32)
+
+                # hard-coded 3: robot_x, robot_y, robot_z
+                self.debug_input_td_info_history = np.zeros((self.max_history_length, 3)).astype(np.float32)
+                self.debug_context_td_info_history = np.zeros((self.max_history_length, 3)).astype(np.float32)
+                self.debug_output_td_info_history = np.zeros((self.max_history_length, 3)).astype(np.float32)
+
                 self.input_history_t = 0
+
 
             self.input_history[self.input_history_t, :] = net_input
             self.output_history[self.input_history_t, :] = net_output
+
+            # TODO get robot position & angle for input, context, and output
+            input_td_info, context_td_info, output_td_info = self._get_td_info_input_context_output(debug_topdown_info_history=debug_topdown_info_history,
+                                                                                                    training_delay=training_delay)
+            # TODO store here
+            self.debug_input_td_info_history[self.input_history_t, :] = input_td_info
+            self.debug_context_td_info_history[self.input_history_t, :] = context_td_info
+            self.debug_output_td_info_history[self.input_history_t, :] = output_td_info
+
             self.input_history_t += 1
 
     #@profile
