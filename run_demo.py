@@ -73,21 +73,21 @@ def get_brain_params():
         ],
         'predictors_training_time_range': [0, MAX_HISTORY_LENGTH],
         'predictors_test_every_k_steps': None,  # 500 for training
-        'predictors_save_every_k_steps': 1000000,  # 1000000
-        'predictors_enable_training': True,  # first step
+        'predictors_save_every_k_steps': None,  # 1000000
+        'predictors_enable_training': False,  # first step
         'predictors_optimize_training': False,  # second step
-        'predictors_load_from_file': False,
-        'predictors_load_filename': '/home/' + USERNAME + '/projects/NL/sim/<>_predictor_inverse_level_0/predictors.pkl',
+        'predictors_load_from_file': True,
+        'predictors_load_filename': '/home/' + USERNAME + '/projects/NL/sim/2017-06-27T21:41:22.358599_predictors_with_debug_info_and_inverse/predictors.pkl',
         # ************ inverse model ************
         'inverse_models': [
             {'state_index_current': 0, 'state_index_future': 0, 'dt': 1}
         ],
         'inverse_training_time_range': [0, MAX_HISTORY_LENGTH],
         'inverse_test_every_k_steps': None,  # 10,
-        'inverse_save_every_k_steps': 100000,  # 50000,
-        'inverse_enable_training': True,
-        'inverse_load_from_file': False,
-        'inverse_load_filename': '/home/' + USERNAME + '/projects/NL/sim/2017-06-10T13:44:54.973466_inverse_level_0/inverse.pkl',
+        'inverse_save_every_k_steps': None,  # 50000,
+        'inverse_enable_training': False,
+        'inverse_load_from_file': True,
+        'inverse_load_filename': '/home/' + USERNAME + '/projects/NL/sim/2017-06-27T21:41:22.358599_predictors_with_debug_info_and_inverse/inverse.pkl',
     }
     return params
 
@@ -125,7 +125,7 @@ def get_visualizer_params():
 def get_task_manager_params():
     params = {
         'run_steps_if_task_mode_disabled': MAX_HISTORY_LENGTH,
-        'enabled': False,
+        'enabled': True,
         'num_trials_per_set': 300,
         'sleep_every_trial': 0.0,  #  0.2,  # to be able to see the next goal
         'constrain_to_params': True,
