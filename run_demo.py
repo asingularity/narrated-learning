@@ -112,9 +112,9 @@ def get_environment_params():
 def get_visualizer_params():
     params = {
         'fps_display_interval': 3,
-        'image_display_frames': 1000,  # 1  # 1000
+        'image_display_frames': 1,  # 1  # 1000
         'plot_brain_error_frames': 100000,
-        'waitKey_time': 1,  # 1, 100
+        'waitKey_time': 5000,  # 1, 100
         'scale_topdown_factor': 20,
         'scale_camera_factor': 20,
         'no_wall_ray_color': (0.1, 0.1, 0.1),
@@ -127,15 +127,15 @@ def get_task_manager_params():
         'run_steps_if_task_mode_disabled': MAX_HISTORY_LENGTH,
         'enabled': True,
         'num_trials_per_set': 300,
-        'sleep_every_trial': 0.0,  #  0.2,  # to be able to see the next goal
-        'constrain_to_params': True,
+        'sleep_every_trial': 0.5,  #  0.2,  # to be able to see the next goal
+        'constrain_to_params': False,
         'max_trial_steps': 2,
         'min_delta_theta': -pi/6.0,
         'max_delta_theta': pi/6.0,
-        'min_distance': 1,
-        'max_distance': 1,
+        'min_distance': 5,
+        'max_distance': 5,
         'sets_param_name': 'brain.random_motor_out',
-        'sets_param_values': [False, True]
+        'sets_param_values': [False]  # [False, True]
     }
     return params
 
@@ -203,7 +203,9 @@ def run_demo(demo_components):
                              robot_brain=robot_brain,  # get_autoenc_images, get_predictor_images, get_error_names_histories
                              topdown_info=robot_environment.get_topdown_info(),
                              plots_save_folder=sim_folder_manager.get_plots_save_folder(),
-                             current_goal_position_angle=task_manager.get_current_goal_position_angle())
+                             current_goal_position_angle=task_manager.get_current_goal_position_angle(),
+                             plan_position_angle_list=robot_brain.get_plan_position_angle_list(rays=robot_sensors.get_rays(),
+                                                                                               goal_states=task_manager.get_task_goal_states()))
 
     print 'Finished Simulation.'
 

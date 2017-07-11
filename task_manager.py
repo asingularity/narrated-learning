@@ -80,9 +80,6 @@ class TaskManager(object):
                 self.global_trial += 1
                 self.t_trial = 0
 
-                if self.sleep_every_trial > 0:
-                    time.sleep(self.sleep_every_trial)
-
                 self.goal_r_x, self.goal_r_y, self.goal_r_theta = self._choose_new_trial_goal(topdown_info=topdown_info)
 
                 task_goal_nonzero_tiles = robot_environment.get_nonzero_tiles(robot_position_angle=(self.goal_r_x, self.goal_r_y, self.goal_r_theta))
@@ -94,6 +91,9 @@ class TaskManager(object):
                 robot_brain.reset_for_new_task()
             else:  # don't need to start new trial
                 self.t_trial += 1
+
+                if self.sleep_every_trial > 0 and self.t_trial == 1:
+                    time.sleep(self.sleep_every_trial)
 
         self.step += 1
 

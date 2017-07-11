@@ -39,7 +39,7 @@ class Visualizer(object):
             self.last_FPS_time = time.time()
         self.fps_frames += 1
 
-    def _display_graphic_map(self, rays, robot_brain, topdown_info, current_goal_position_angle):
+    def _display_graphic_map(self, rays, robot_brain, topdown_info, current_goal_position_angle, plan_position_angle_list):
         im = topdown_info['env_map_copy']
         robot_x = topdown_info['robot_x']
         robot_y = topdown_info['robot_y']
@@ -75,19 +75,68 @@ class Visualizer(object):
 
         # TODO rays should be drawn on resized image? so always width 1
 
+        if plan_position_angle_list is not None:
+
+            input_td_info = plan_position_angle_list[0]
+            context_td_info = plan_position_angle_list[1]
+            output_td_info = plan_position_angle_list[2]
+
+            br = 1.0
+            for td_info in [input_td_info, context_td_info]: #, output_td_info]:
+                r_x = td_info[0]
+                r_y = td_info[1]
+                r_theta = td_info[2]
+
+                cv2.circle(img=resized_image,
+                           center=(int(r_x * self.scale_topdown_factor), int(r_y * self.scale_topdown_factor)),
+                           radius=5,
+                           color=(1.0 * br, 1.0 * br, 1.0 * br),
+                           thickness=3)
+                g2_x = r_x + 0.5 * cos(r_theta)
+                g2_y = r_y + 0.5 * sin(r_theta)
+                cv2.line(resized_image,
+                         pt1=(int(r_x * self.scale_topdown_factor), int(r_y * self.scale_topdown_factor)),
+                         pt2=(int(g2_x * self.scale_topdown_factor), int(g2_y * self.scale_topdown_factor)),
+                         color=(0.5, 0.5, 0),
+                         thickness=2)
+                br *= 0.5
+
+            # plan
+            if False:
+                br = 1.0
+                for td_info in plan_position_angle_list:
+                    r_x = td_info[0]
+                    r_y = td_info[1]
+                    r_theta = td_info[2]
+
+                    cv2.circle(img=resized_image,
+                               center=(int(r_x * self.scale_topdown_factor), int(r_y * self.scale_topdown_factor)),
+                               radius=5,
+                               color=(1.0 * br, 1.0 * br, 1.0 * br),
+                               thickness=3)
+                    g2_x = r_x + 0.5 * cos(r_theta)
+                    g2_y = r_y + 0.5 * sin(r_theta)
+                    cv2.line(resized_image,
+                             pt1=(int(r_x * self.scale_topdown_factor), int(r_y * self.scale_topdown_factor)),
+                             pt2=(int(g2_x * self.scale_topdown_factor), int(g2_y * self.scale_topdown_factor)),
+                             color=(0.5 * br, 0.5 * br, 0),
+                             thickness=2)
+
+                    br *= 0.5
+
         goal_x, goal_y, goal_theta = current_goal_position_angle
         if goal_x is not None:
             cv2.circle(img=resized_image,
                        center=(int(goal_x * self.scale_topdown_factor), int(goal_y * self.scale_topdown_factor)),
                        radius=5,
-                       color=(255, 0, 0),
+                       color=(1.0, 0, 1.0),
                        thickness=3)
             g2_x = goal_x + 2. * cos(goal_theta)
             g2_y = goal_y + 2. * sin(goal_theta)
             cv2.line(resized_image,
                      pt1=(int(goal_x * self.scale_topdown_factor), int(goal_y * self.scale_topdown_factor)),
                      pt2=(int(g2_x * self.scale_topdown_factor), int(g2_y * self.scale_topdown_factor)),
-                     color=(255, 255, 0),
+                     color=(1.0, 1.0, 0),
                      thickness=2)
 
         for k in range(ray_colors.shape[0]):
@@ -175,10 +224,10 @@ class Visualizer(object):
                 self.ax.plot(error_history, 'b-')
                 self.fig.savefig(plots_save_folder + '/' + error_name + '.png', dpi=100)
 
-    def visualize(self, rays, robot_brain, topdown_info, plots_save_folder, current_goal_position_angle):
+    def visualize(self, rays, robot_brain, topdown_info, plots_save_folder, current_goal_position_angle, plan_position_angle_list):
         if self.image_display_frames is not None:
             if self.frames % self.image_display_frames == 0:
-                self._display_graphic_map(rays, robot_brain, topdown_info, current_goal_position_angle)
+                self._display_graphic_map(rays, robot_brain, topdown_info, current_goal_position_angle, plan_position_angle_list)
 
         if self.frames % self.plot_brain_error_frames == 0:
             self._plot_brain_errors(robot_brain, plots_save_folder)

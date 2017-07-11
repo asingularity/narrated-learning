@@ -164,6 +164,13 @@ class Predictor(object):
         net_output_predicted = self.output_history[ind, :]
         return net_output_predicted, dist, ind
 
+    def predict_and_get_debug_td_info(self, input_state, context_state):
+        net_output_predicted, dist, ind = self.predict(input_state, context_state)
+        input_td_info = self.debug_input_td_info_history[ind, :]
+        context_td_info = self.debug_context_td_info_history[ind, :]
+        output_td_info = self.debug_output_td_info_history[ind, :]
+        return net_output_predicted, dist, ind, input_td_info, context_td_info, output_td_info
+
     def test_newest_point_and_store_error(self, states_history):
         '''
         predictor must decide if it has enough history to test

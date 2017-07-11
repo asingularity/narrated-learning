@@ -206,6 +206,48 @@ class RobotBrain(object):
 
         self.t += 1
 
+    def get_plan_position_angle_list(self, rays, goal_states):
+        '''
+        compute plan here
+
+        procedure:
+        for each predictor, starting from farthest in time:
+            current input, farthest prediction -> get nearer prediction
+            get px, py, theta for nearer prediction
+            set nearer prediction as (farthest prediction) for next iteration
+
+        :param rays: current visual input
+        :param goal_states: [goal visual input, goal autoencoder level 0, level 1, ...]
+        :return: list: [[px, py, theta], [px, py, theta], ...]
+        '''
+
+        if goal_states is None:
+            return None
+
+        states_history = self.states_history
+        current_visual_input = self._process_sensors(rays=rays)
+
+        predictor_2_1 = self.predictors_list[0]
+        predictor_4_2 = self.predictors_list[1]
+        predictor_8_4 = self.predictors_list[2]
+        predictor_16_8 = self.predictors_list[3]
+
+        new_goal, dist, ind, input_td_info_8, context_td_info_8, output_td_info_8 = predictor_16_8.predict_and_get_debug_td_info(input_state=states_history.get_state(state_index=0, delay=0),
+                                                                                                                                 context_state=goal_states[0])
+
+        return [list(input_td_info_8), list(context_td_info_8), list(output_td_info_8)]
+
+        #new_goal, dist, ind, output_td_info_4 = predictor_16_8.predict_and_get_debug_td_info(input_state=states_history.get_state(state_index=0, delay=0),
+        #                                                                                     context_state=new_goal)
+
+        #new_goal, dist, ind, output_td_info_2 = predictor_16_8.predict_and_get_debug_td_info(input_state=states_history.get_state(state_index=0, delay=0),
+        #                                                                                     context_state=new_goal)
+
+        #new_goal, dist, ind, output_td_info_1 = predictor_16_8.predict_and_get_debug_td_info(input_state=states_history.get_state(state_index=0, delay=0),
+        #                                                                                     context_state=new_goal)
+
+        #return [list(output_td_info_8), list(output_td_info_4), list(output_td_info_2), list(output_td_info_1)]
+
     def set_always_random_motor(self, setting):
         self.always_random_motor_out = setting
 
