@@ -439,6 +439,8 @@ class RobotBrain(object):
 
             if self.predictors_test_every_k_steps is not None:
                 if self.t % self.predictors_test_every_k_steps == 0:
+                    # TODO clean this up: make option
+                    # predictor.test_on_random_task_and_store_error()
                     predictor.test_newest_point_and_store_error(states_history)
 
         if self.predictors_save_every_k_steps is not None:

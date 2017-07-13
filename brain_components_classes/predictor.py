@@ -212,6 +212,12 @@ class Predictor(object):
                     self.mean_error_history[self.mean_error_t] = mean_error
                     self.mean_error_t += 1
 
+    def test_on_random_task_and_store_error(self):
+        pass
+        # (1) pick a random task - random input & context
+        # (2) do lookup, get closest input&context match
+        # (3) store match error
+
     def get_mean_error_history(self):
         return self.mean_error_history[0:self.mean_error_t]
 
