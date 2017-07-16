@@ -37,7 +37,7 @@ def knn_query(
         for dim_index in range(dim):
             diff = X[pt_index, dim_index] - input_vector[dim_index]
 
-            dist = dist + c_fabs(diff)
+            dist = dist + diff * diff
 
         tmp[pt_index] = dist
 
