@@ -18,12 +18,19 @@ class Visualizer(object):
         self.fps_display_interval = params['fps_display_interval']
         self.scale_topdown_factor = params['scale_topdown_factor']
         self.scale_camera_factor = params['scale_camera_factor']
-        self.image_display_frames = params['image_display_frames']
+
         self.plot_brain_error_frames =params['plot_brain_error_frames']
-        self.waitKey_time = params['waitKey_time']
         self.no_wall_ray_color = params['no_wall_ray_color']
+        self.waitKey_time_slow = params['waitKey_time_slow']
+        self.image_display_frames_slow = params['image_display_frames_slow']
+        self.waitKey_time_fast = params['waitKey_time_fast']
+        self.image_display_frames_fast = params['image_display_frames_fast']
+        self.auto_switch_to_slow_disp_time = params['auto_switch_to_slow_disp_time']
         self.linear_speed_from_key = 0.0
         self.angular_speed_from_key = 0.0
+        self.toggle_viewer_slow = False
+        self.image_display_frames = self.image_display_frames_fast
+        self.waitKey_time = self.waitKey_time_fast
 
         self.fig = plt.figure(figsize=(10, 10))
         self.ax = self.fig.add_subplot(1, 1, 0)
@@ -168,12 +175,22 @@ class Visualizer(object):
         BACK = 115
         LEFT = 97
         RIGHT = 100
+        ENTER = 10
 
         if k == -1:
             self.linear_speed_from_key = 0.0
             self.angular_speed_from_key = 0.0
         else:
-            #print 'KEY PRESSED: ' + str(k)
+            print 'KEY PRESSED: ' + str(k)
+            if k == ENTER:
+                self.toggle_viewer_slow = not self.toggle_viewer_slow
+                if self.toggle_viewer_slow:
+                    self.image_display_frames = self.image_display_frames_slow
+                    self.waitKey_time = self.waitKey_time_slow
+                else:
+                    self.image_display_frames = self.image_display_frames_fast
+                    self.waitKey_time = self.waitKey_time_fast
+
             if k == FWD:
                 self.linear_speed_from_key = 0.25
             if k == BACK:
@@ -235,3 +252,7 @@ class Visualizer(object):
         self._display_fps()
 
         self.frames += 1
+        if self.frames == self.auto_switch_to_slow_disp_time:
+            self.toggle_viewer_slow = True
+            self.image_display_frames = self.image_display_frames_slow
+            self.waitKey_time = self.waitKey_time_slow

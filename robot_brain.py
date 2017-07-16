@@ -21,7 +21,9 @@ class RobotBrain(object):
         self.t = 0
         self.motor_out = None
         self.predictors_enable = params['predictors_enable']
-
+        self.use_advanced_exploration = params['use_advanced_exploration']
+        self.max_history_length = params['max_history_length']  # only needed for experimental exploration
+        self.explore_mode_switch_time = params['explore_mode_switch_time']
         # for task
         self.last_time_set_8 = -9e4
         self.last_time_set_16 = -9e4
@@ -202,9 +204,97 @@ class RobotBrain(object):
                 #print 'motor_out, no index: ', self.motor_out
                 self.motor_out = self.motor_out[1]  # [v, w; v, w; v, w]
         else:
-            self.motor_out = None
+            if self.use_advanced_exploration:
+                self.motor_out = self._get_advanced_exploration_motor_out()
+            else:
+                # this informs robot model to apply random movement
+                self.motor_out = None
 
         self.t += 1
+
+    def _get_advanced_exploration_motor_out(self):
+        '''
+        use method 2 in:
+            Note from 2017-07-12 20:30:07.515 exploration policy
+        :return:
+        '''
+        # num_predictors = 4
+
+        # allocate certain amount of steps to train each predictor
+        # steps_per_predictor = self.max_history_length / num_predictors
+
+        # predictor_0: (t, t+2 -> t+1)
+        # predictor_1: (t, t+4 -> t+2)
+
+        num_closest_matches = 5
+
+        predictor_0 = self.predictors_list[0]
+        predictor_1 = self.predictors_list[1]
+
+        states_history = self.states_history
+        motor_history = self.motor_history
+
+        explore_switch_time = self.explore_mode_switch_time #1000000
+
+        if self.t < explore_switch_time:  # steps_per_predictor:
+            # use random movements
+            motor_out = None
+            return motor_out
+        else:
+            if self.t == explore_switch_time:
+                print 'Switching to advanced exploration...'
+            # (1) look ahead to S'(t+2) using P[(t,t+2) -> (t+1)]
+            #   generate list of K closest S'(t+2) based on S(t)
+
+            #print 'm hist: ', self.motor_history.get_sequence(delay_start=20, delay_end=0)
+
+            possible_context_list, possible_output_list = predictor_0.look_ahead_get_context_output_list(input_state=states_history.get_state(state_index=0, delay=0),
+                                                                                                         num_closest_matches=num_closest_matches)
+            input_context_error_array = np.zeros(num_closest_matches)
+            ind = 0
+
+            # (2) for each S'(t+2) in list
+            for possible_context in possible_context_list:
+                # set input "S(t)" (same for each) as historical state S(t + 2 - 4)
+                temp_input_state = states_history.get_state(state_index=0, delay=2)
+
+                # set context "S(t+4)" as S'(t+2)
+                temp_context_state = possible_context
+
+                # get input&context error from P[(t, t+4) -> (t+8)]
+                input_context_error = predictor_1.get_input_context_error(input_state=temp_input_state,
+                                                                          context_state=temp_context_state)
+                input_context_error_array[ind] = input_context_error
+                ind += 1
+
+            # (3) choose S'(t+2) with highest input&context error
+            max_error_ind = np.argmax(input_context_error_array)
+            goal_state_t_p_2 = possible_context_list[max_error_ind]
+
+            # (4) get motor action toward it, by using appropriate trained predictors and finally inverse model:
+            # S(t), S'(t+2) -> P -> S'(t+1)
+            #goal_state_t_p_1, _, _ = predictor_0.predict(input_state=states_history.get_state(state_index=0, delay=0),
+            #                                             context_state=goal_state_t_p_2)
+            goal_state_t_p_1 = possible_output_list[max_error_ind]
+
+            # S(t), S'(t+1) -> Inv -> M(t)
+            inv = self.inverse_list[0]  # TODO select inverse model here
+            motor_out = inv.lookup_motor_to_goal(goal_states=[goal_state_t_p_1],
+                                                 states_history=self.states_history)
+            motor_out = motor_out[1]  # [v, w; v, w; v, w]
+
+            return motor_out
+
+        # elif self.t < steps_per_predictor * 2:
+        # training_predictor = 1
+        #    pass
+        # elif self.t < steps_per_predictor * 3:
+        # training third predictor: (t, t+8 -> t+4)
+        # training_predictor = 2
+        # else:
+        # training fourth predictor: (t, t+16 -> t+8)
+        # training_predictor = 3
+        # return motor_out
 
     def get_plan_position_angle_list(self, rays, goal_states):
         '''

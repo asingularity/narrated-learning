@@ -6,7 +6,6 @@ np.set_printoptions(suppress=True)
 from fast_save_matrix import savetxt
 from knn_parallel import knn_query as knn_parallel_query
 
-
 class Predictor(object):
     def __init__(self, params):
         self.dt_output = params['dt_output']
@@ -170,6 +169,35 @@ class Predictor(object):
         context_td_info = self.debug_context_td_info_history[ind, :]
         output_td_info = self.debug_output_td_info_history[ind, :]
         return net_output_predicted, dist, ind, input_td_info, context_td_info, output_td_info
+
+    def look_ahead_get_context_output_list(self, input_state, num_closest_matches):
+        net_input_no_context = input_state.copy().astype(np.float32)
+        data_set = self.input_history
+        data_frames = self.input_history_t
+        dim_no_context = data_set.shape[1] / 2  # /2 because ignore context (second half)!
+        self.temp_array[:] = 0
+        tmp = self.temp_array
+        top_k = num_closest_matches
+
+        # don't need this: can just get tmp back (distance from each)
+        # can use original parallel query
+        _, _ = knn_parallel_query(data_set, net_input_no_context, tmp, data_frames, dim_no_context)
+        # then find top K here:
+
+        ind_list = np.argsort(tmp[0:data_frames])[0:top_k]
+        #print 'tmp[ind_list]', tmp[ind_list]
+        #print 't', self.input_history_t, 'ind_list', np.array(ind_list)
+        possible_context_list = []
+        possible_output_list = []
+        for k in range(top_k):
+            possible_context_list.append(self.input_history[ind_list[k], data_set.shape[1] / 2::])
+            possible_output_list.append(self.output_history[ind_list[k]])
+
+        return possible_context_list, possible_output_list
+
+    def get_input_context_error(self, input_state, context_state):
+        _, error, _ = self.predict(input_state, context_state)
+        return error
 
     def test_newest_point_and_store_error(self, states_history):
         '''

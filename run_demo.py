@@ -15,10 +15,11 @@ import time
 from math import pi
 
 
-MAX_HISTORY_LENGTH = 1000000 + 1
+MAX_HISTORY_LENGTH = 200000 + 1
 USERNAME = 'intec'
 NUM_INPUT_RAYS = 8
 INPUT_DIM = NUM_INPUT_RAYS * 3
+EXPLORE_MODE_SWITCH_TIME = 100000  # 1000000
 
 
 def get_model_params():
@@ -53,41 +54,43 @@ def get_brain_params():
         'error_average_steps': 5000,  # 1000
         'predictors_enable': True,
         'training_delay': 128,
+        'use_advanced_exploration': True,
+        'explore_mode_switch_time': EXPLORE_MODE_SWITCH_TIME,
         # ************ autoencoders ************
         'autoencoders': [
-            {'num_inputs': INPUT_DIM, 'num_hidden': INPUT_DIM / 2, 'learning_rate': 0.01},
-            {'num_inputs': INPUT_DIM / 2, 'num_hidden': INPUT_DIM / 4, 'learning_rate': 0.01},
-            {'num_inputs': INPUT_DIM / 4, 'num_hidden': INPUT_DIM / 8, 'learning_rate': 0.01}
+            {'num_inputs': INPUT_DIM, 'num_hidden': INPUT_DIM / 2, 'learning_rate': 0.01}
+            #{'num_inputs': INPUT_DIM / 2, 'num_hidden': INPUT_DIM / 4, 'learning_rate': 0.01},
+            #{'num_inputs': INPUT_DIM / 4, 'num_hidden': INPUT_DIM / 8, 'learning_rate': 0.01}
         ],
         'autoencoders_training_time_range': [0, MAX_HISTORY_LENGTH],
-        'autoencoders_save_every_k_steps': None,  # 50000,
-        'autoencoders_enable_training': False,
-        'autoencoders_load_from_file': True,
-        'autoencoders_load_filename': '/home/' + USERNAME + '/projects/NL/sim/2017-06-10T13:40:24.988732_autoencoders/autoencoders.pkl',
+        'autoencoders_save_every_k_steps': MAX_HISTORY_LENGTH - 1,  # 50000,
+        'autoencoders_enable_training': True,
+        'autoencoders_load_from_file': False,
+        'autoencoders_load_filename': '/home/' + USERNAME + '/projects/NL/sim//autoencoders.pkl',
         # ************ predictors ************
         'predictors': [
             {'state_index_input': 0, 'state_index_context': 0, 'state_index_output': 0, 'dt_context': 2, 'dt_output': 1},
-            {'state_index_input': 0, 'state_index_context': 0, 'state_index_output': 0, 'dt_context': 4, 'dt_output': 2},
-            {'state_index_input': 0, 'state_index_context': 0, 'state_index_output': 0, 'dt_context': 8, 'dt_output': 4},
-            {'state_index_input': 0, 'state_index_context': 0, 'state_index_output': 0, 'dt_context': 16, 'dt_output': 8},
+            {'state_index_input': 0, 'state_index_context': 0, 'state_index_output': 0, 'dt_context': 4, 'dt_output': 2}
+            #{'state_index_input': 0, 'state_index_context': 0, 'state_index_output': 0, 'dt_context': 8, 'dt_output': 4},
+            #{'state_index_input': 0, 'state_index_context': 0, 'state_index_output': 0, 'dt_context': 16, 'dt_output': 8},
         ],
         'predictors_training_time_range': [0, MAX_HISTORY_LENGTH],
         'predictors_test_every_k_steps': None,  # 500 for training
-        'predictors_save_every_k_steps': None,  # 1000000
-        'predictors_enable_training': False,  # first step
+        'predictors_save_every_k_steps': MAX_HISTORY_LENGTH - 1,  # 1000000
+        'predictors_enable_training': True,  # first step
         'predictors_optimize_training': False,  # second step
-        'predictors_load_from_file': True,
-        'predictors_load_filename': '/home/' + USERNAME + '/projects/NL/sim/2017-06-27T21:41:22.358599_predictors_with_debug_info_and_inverse/predictors.pkl',
+        'predictors_load_from_file': False,
+        'predictors_load_filename': '/home/' + USERNAME + '/projects/NL/sim//predictors.pkl',
         # ************ inverse model ************
         'inverse_models': [
             {'state_index_current': 0, 'state_index_future': 0, 'dt': 1}
         ],
         'inverse_training_time_range': [0, MAX_HISTORY_LENGTH],
         'inverse_test_every_k_steps': None,  # 10,
-        'inverse_save_every_k_steps': None,  # 50000,
-        'inverse_enable_training': False,
-        'inverse_load_from_file': True,
-        'inverse_load_filename': '/home/' + USERNAME + '/projects/NL/sim/2017-06-27T21:41:22.358599_predictors_with_debug_info_and_inverse/inverse.pkl',
+        'inverse_save_every_k_steps': MAX_HISTORY_LENGTH - 1,  # 50000,
+        'inverse_enable_training': True,
+        'inverse_load_from_file': False,
+        'inverse_load_filename': '/home/' + USERNAME + '/projects/NL/sim/inverse.pkl',
     }
     return params
 
@@ -112,12 +115,15 @@ def get_environment_params():
 def get_visualizer_params():
     params = {
         'fps_display_interval': 3,
-        'image_display_frames': 1,  # 1  # 1000
         'plot_brain_error_frames': 100000,
-        'waitKey_time': 5000,  # 1, 100
+        'image_display_frames_fast': 100,  # 1  # 1000
+        'waitKey_time_fast': 1,  # 1, 100, 5000
+        'image_display_frames_slow': 1,  # 1  # 1000
+        'waitKey_time_slow': 10,  # 1, 100, 5000
         'scale_topdown_factor': 20,
         'scale_camera_factor': 20,
         'no_wall_ray_color': (0.1, 0.1, 0.1),
+        'auto_switch_to_slow_disp_time': EXPLORE_MODE_SWITCH_TIME  # None
     }
     return params
 
@@ -125,7 +131,7 @@ def get_visualizer_params():
 def get_task_manager_params():
     params = {
         'run_steps_if_task_mode_disabled': MAX_HISTORY_LENGTH,
-        'enabled': True,
+        'enabled': False,
         'num_trials_per_set': 300,
         'sleep_every_trial': 0.5,  #  0.2,  # to be able to see the next goal
         'constrain_to_params': False,
