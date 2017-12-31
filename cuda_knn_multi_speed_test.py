@@ -23,7 +23,7 @@ else:
 
 
 class CudaQuery(object):
-    def __init__(self, input_data):
+    def __init__(self, input_data, num_simul_lookups):
         self.original_input_data_shape = input_data.shape
         query_data = np.zeros(input_data.shape[1], np.float32)
 
@@ -39,7 +39,7 @@ class CudaQuery(object):
 
         #cuda.memcpy_htod(self.input_data_gpu, self.input_data)
 
-        self.X = np.zeros((1, DIM)).astype(np.float32)
+        self.X = np.zeros((num_simul_lookups, DIM)).astype(np.float32)
         self.input_data_transpose = np.ascontiguousarray(np.transpose(self.input_data))
 
         self.term_2 = np.sum(self.input_data ** 2, axis=1)
@@ -81,7 +81,8 @@ class CudaQuery(object):
 
     def query(self, query_data):
         X = self.X
-        X[0, :] = query_data[:]
+        #X[0, :] = query_data[:]
+        X[:, :] = query_data[:, :]
 
         start_all = time.time()
         i_d_t_gpu = self.i_d_t_gpu
@@ -106,25 +107,29 @@ class CudaQuery(object):
         term_3 = np.sum(X ** 2, axis=1)[:, np.newaxis]
 
         dists = term_1 + term_2 + term_3  # 25%
+        #print 'dists'
+        #print dists.shape  # (5, 2000000)
 
+        # TODO enable these, but per simul lookup!
         ind = np.argmin(dists)  # <= 10%
-
         dist = dists[0, ind]
-        end_all = time.time() - start_all
+        #end_all = time.time() - start_all
 
+        #dist = 0
+        #ind = 0
         # print 'ratio of time spent in dot product: ', end_1 / end_all
         # print 'ratio of time spent in 2: ', end_2 / end_all
         return dist, ind
 
 
-def run_cuda_test(test_seconds):
+def run_cuda_test(test_seconds, num_simul_lookups):
     data_frames = FRAMES
     dim = DIM
     data = np.random.random((data_frames, dim)).astype(np.float32)
     print 'data first: ', data[0, 0], data[0, -1]
 
     # --- start specific data init ---
-    cuda_query = CudaQuery(input_data=data)
+    cuda_query = CudaQuery(input_data=data, num_simul_lookups=num_simul_lookups)
     # --- end specific data init ---
 
     start_time = time.time()
@@ -134,13 +139,14 @@ def run_cuda_test(test_seconds):
     np.random.seed(10)
     for frame in range(test_frames):
 
-        query_data = np.random.random(dim).astype(np.float32)
+        #query_data = np.random.random(dim).astype(np.float32)
+        query_data = np.random.random((num_simul_lookups, dim)).astype(np.float32)
 
         dist, ind = cuda_query.query(query_data=query_data)
 
         if frame == 0 or frame == 3:
             print '      *** frame ***', frame
-            print '      query data: ', query_data[0], query_data[-1]
+            print '      query data: ', query_data[0, 0], query_data[0, -1]
             print '      results: ', dist, ind
         if time.time() - last_time > 1 or time.time() - start_time > test_seconds:
             FPS = (frame - last_frame) * 1.0 / (time.time() - last_time)
@@ -226,6 +232,7 @@ def run_brute_force_knn_test(test_seconds):
 if __name__ == '__main__':
 
     test_seconds = 10
+    simul_lookups = 1
 
     # print '--- cython single core ---'
     # print 'OUT OF DATE'
@@ -235,7 +242,7 @@ if __name__ == '__main__':
     print
     print '--- cuda ---'
     np.random.seed(2)
-    run_cuda_test(test_seconds=test_seconds)
+    run_cuda_test(test_seconds=test_seconds, num_simul_lookups=simul_lookups)
 
     #print
     #print '--- numpy ---'

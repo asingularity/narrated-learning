@@ -161,6 +161,12 @@ class Predictor(object):
 
         dist, ind = knn_parallel_query(data_set, net_input, tmp, data_frames, dim)
         net_output_predicted = self.output_history[ind, :]
+        if False: #dist == 0.0:
+            print '*** DIST IS 0 ***'
+            print 'net input: ', net_input
+            print 'matching input history: ', self.input_history[ind, :]
+            print 'predictor::predict: dist, ind:', dist, ind
+            print 'predictor::predict: net_output_predicted: ', net_output_predicted
         return net_output_predicted, dist, ind
 
     def predict_and_get_debug_td_info(self, input_state, context_state):

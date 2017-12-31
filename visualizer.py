@@ -252,7 +252,8 @@ class Visualizer(object):
         self._display_fps()
 
         self.frames += 1
-        if self.frames == self.auto_switch_to_slow_disp_time:
-            self.toggle_viewer_slow = True
-            self.image_display_frames = self.image_display_frames_slow
-            self.waitKey_time = self.waitKey_time_slow
+        if self.auto_switch_to_slow_disp_time is not None:
+            if self.frames == self.auto_switch_to_slow_disp_time:
+                self.toggle_viewer_slow = True
+                self.image_display_frames = self.image_display_frames_slow
+                self.waitKey_time = self.waitKey_time_slow

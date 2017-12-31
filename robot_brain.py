@@ -33,6 +33,10 @@ class RobotBrain(object):
         self.dist_0 = 0
         self.always_random_motor_out = False
 
+        self.sum_p1_errors_for_task = 0.0
+        self.num_p1_errors_for_task = 0
+
+
     def _init_config(self, params):
         config = {}
         config['training_delay'] = params['training_delay']
@@ -198,11 +202,36 @@ class RobotBrain(object):
                 #print 'motor_out, no index: ', self.motor_out
                 self.motor_out = self.motor_out[1]  # [v, w; v, w; v, w]
             else:
+
+                # todo test predictor here?
+                p1_error_for_task = self.predictors_list[1].get_input_context_error(input_state=self.states_history.get_state(state_index=0, delay=0),
+                                                                                    context_state=goal_states[0])
+                #print 'input state: ', self.states_history.get_state(state_index=0, delay=0)
+                #print 'context state: ', goal_states[0]
+                #print 'p1_error_for_task: ', p1_error_for_task
+                self.sum_p1_errors_for_task += p1_error_for_task
+                self.num_p1_errors_for_task += 1
+
+                #print 'mean p1 error: ', self.sum_p1_errors_for_task / self.num_p1_errors_for_task
+
                 inv = self.inverse_list[0]  # TODO select inverse model here
                 self.motor_out = inv.lookup_motor_to_goal(goal_states=goal_states,
                                                           states_history=self.states_history)
                 #print 'motor_out, no index: ', self.motor_out
                 self.motor_out = self.motor_out[1]  # [v, w; v, w; v, w]
+        elif (goal_states is not None) and self.always_random_motor_out:
+            # todo test predictor here?
+            p1_error_for_task = self.predictors_list[1].get_input_context_error(
+                input_state=self.states_history.get_state(state_index=0, delay=0),
+                context_state=goal_states[0])
+            # print 'input state: ', self.states_history.get_state(state_index=0, delay=0)
+            # print 'context state: ', goal_states[0]
+            # print 'p1_error_for_task: ', p1_error_for_task
+            self.sum_p1_errors_for_task += p1_error_for_task
+            self.num_p1_errors_for_task += 1
+            #print 'mean p1 error: ', self.sum_p1_errors_for_task / self.num_p1_errors_for_task
+
+            self.motor_out = None
         else:
             if self.use_advanced_exploration:
                 self.motor_out = self._get_advanced_exploration_motor_out()
@@ -310,6 +339,10 @@ class RobotBrain(object):
         :param goal_states: [goal visual input, goal autoencoder level 0, level 1, ...]
         :return: list: [[px, py, theta], [px, py, theta], ...]
         '''
+
+        plan_position_angle = False
+        if not plan_position_angle:
+            return None
 
         if goal_states is None:
             return None
