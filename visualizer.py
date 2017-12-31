@@ -33,7 +33,7 @@ class Visualizer(object):
         self.waitKey_time = self.waitKey_time_fast
 
         self.fig = plt.figure(figsize=(10, 10))
-        self.ax = self.fig.add_subplot(1, 1, 0)
+        self.ax = self.fig.add_subplot(1, 1, 1)
 
     def get_linear_angular_speed(self):
         return self.linear_speed_from_key, self.angular_speed_from_key

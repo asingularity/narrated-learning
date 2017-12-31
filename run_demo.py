@@ -67,7 +67,7 @@ def get_brain_params():
         'autoencoders_training_time_range': [0, MAX_HISTORY_LENGTH],
         'autoencoders_save_every_k_steps': MAX_HISTORY_LENGTH - 1,  # 50000,
         'autoencoders_enable_training': False,
-        'autoencoders_load_from_file': True,
+        'autoencoders_load_from_file': False,
         'autoencoders_load_filename': '/home/' + USERNAME + '/projects/NL/sim/' + SIM_LOAD_NAME + '/autoencoders.pkl',
         # ************ predictors ************
         'predictors': [
@@ -81,7 +81,7 @@ def get_brain_params():
         'predictors_save_every_k_steps': MAX_HISTORY_LENGTH - 1,  # 1000000
         'predictors_enable_training': False,  # first step
         'predictors_optimize_training': False,  # second step
-        'predictors_load_from_file': True,
+        'predictors_load_from_file': False,
         'predictors_load_filename': '/home/' + USERNAME + '/projects/NL/sim/' + SIM_LOAD_NAME + '/predictors.pkl',
         # ************ inverse model ************
         'inverse_models': [
@@ -91,7 +91,7 @@ def get_brain_params():
         'inverse_test_every_k_steps': None,  # 10,
         'inverse_save_every_k_steps': MAX_HISTORY_LENGTH - 1,  # 50000,
         'inverse_enable_training': False,
-        'inverse_load_from_file': True,
+        'inverse_load_from_file': False,
         'inverse_load_filename': '/home/' + USERNAME + '/projects/NL/sim/' + SIM_LOAD_NAME + '/inverse.pkl',
     }
     return params
@@ -118,7 +118,7 @@ def get_visualizer_params():
     params = {
         'fps_display_interval': 3,
         'plot_brain_error_frames': 100000,
-        'image_display_frames_fast': 10,  # 1  # 1000
+        'image_display_frames_fast': 100,  # 1  # 1000
         'waitKey_time_fast': 1,  # 1, 100, 5000
         'image_display_frames_slow': 1,  # 1  # 1000
         'waitKey_time_slow': 10,  # 1, 100, 5000
@@ -133,17 +133,17 @@ def get_visualizer_params():
 def get_task_manager_params():
     params = {
         'run_steps_if_task_mode_disabled': MAX_HISTORY_LENGTH,
-        'enabled': True,
+        'enabled': False,
         'num_trials_per_set': 5000,
-        'sleep_every_trial': 0,  #  0.5,  # to be able to see the next goal
+        'sleep_every_trial': 0.5,  #  0.5,  # to be able to see the next goal
         'constrain_to_params': True,
-        'max_trial_steps': 1,
-        'min_delta_theta': -pi/4.0,
-        'max_delta_theta': pi/4.0,
+        'max_trial_steps': 2,
+        'min_delta_theta': -pi/6.0,
+        'max_delta_theta': pi/6.0,
         'min_distance': 5,
         'max_distance': 5,
         'sets_param_name': 'brain.random_motor_out',
-        'sets_param_values': [True]  # [False, True]
+        'sets_param_values': [False]  # [False, True]
     }
     return params
 
