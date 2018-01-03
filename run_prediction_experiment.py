@@ -31,14 +31,26 @@ def _get_mlp_OLD(num_inputs, num_hidden, num_outputs, learning_rate):
 
 class EnsembleNet(object):
     def __init__(self, params):
-        self.bases = np.random.random((params['num_branches'], params['num_inputs']))
-        self.stored_prediction = np.random.random(params['num_outputs'])
+
+        uniform_init = False
+        if uniform_init:
+            self.bases = np.ones((params['num_branches'], params['num_inputs']))
+            self.stored_prediction = np.ones(params['num_outputs'])
+        else:
+            self.bases = np.random.random((params['num_branches'], params['num_inputs']))
+            self.stored_prediction = np.random.random(params['num_outputs'])
         self.learning_rate = params['learning_rate']
 
+        self.trained_num = 0
+        self.last_trained = time.time()
         # print self.bases.shape, self.stored_prediction.shape
         # (10, 48) (24,)
+        self.params = params
 
     def train(self, net_input, net_output):
+        self.trained_num += 1
+        self.last_trained = time.time()
+
         self.stored_prediction = self.learning_rate * net_output + (1.0 - self.learning_rate) * self.stored_prediction
         df = self.bases - net_input
         df_sum = np.sum(np.fabs(df), axis=1)
@@ -46,6 +58,12 @@ class EnsembleNet(object):
         self.bases[best_branch] = self.learning_rate * net_input + (1.0 - self.learning_rate) * self.bases[best_branch]
 
     def evaluate(self, net_input):
+
+        if self.trained_num == 0: #or time.time() - self.last_trained > 0.1:
+            params = self.params
+            self.bases = np.random.random((params['num_branches'], params['num_inputs']))
+            self.stored_prediction = np.random.random(params['num_outputs'])
+
         return self.stored_prediction
 
 
@@ -54,14 +72,14 @@ def _get_mlp(num_inputs, num_hidden, num_outputs, learning_rate):
     params = {'num_inputs': num_inputs,
               'num_outputs': num_outputs,
               'learning_rate': learning_rate,
-              'num_branches': 10}
+              'num_branches': 100}  # 50
 
     return EnsembleNet(params)
 
 
 def _load_states_history():
-    data_file = '/home/intec/NL-sim/24DIMx4M_states_saved_2017-12-30T16:59:11.615393/states_history_0.pkl'
-    #data_file = '/home/intec/NL-sim/48DIMx4M_states_saved_2017-12-31T11:02:04.272824/states_history_0.pkl'
+    #data_file = '/home/intec/NL-sim/24DIMx4M_states_saved_2017-12-30T16:59:11.615393/states_history_0.pkl'
+    data_file = '/home/intec/NL-sim/48DIMx4M_states_saved_2017-12-31T11:02:04.272824/states_history_0.pkl'
 
     print 'loading states history...'
     f = open(data_file, 'r')
@@ -79,10 +97,10 @@ def run_experiment():
     dim = states_history.shape[1]
     max_history_length = states_history.shape[0]
     scale_camera_factor = 32
-    num_mlp = 100  # 500
+    num_mlp = 200  # 100
     do_display = False
-    learning_rate = 0.1  # 0.01 * 0.5
-    error_average_steps = 100
+    learning_rate = 0.01  # 0.01  # 0.01 * 0.5
+    error_average_steps = 1000
     do_training = True
 
     fig = plt.figure(figsize=(10, 10))
@@ -111,6 +129,9 @@ def run_experiment():
     last_time = time.time()
 
     for k in range(3, max_history_length):
+        #if k > 10000:
+        #    do_training = False
+
         if do_display:
             autoenc_images = np.zeros((3, dim))
             autoenc_images[0, :] = states_history[k - 2, :]
