@@ -1,8 +1,8 @@
 
 import random
 import numpy as np
-random.seed(1)
-np.random.seed(1)
+random.seed(6)
+np.random.seed(6)
 
 from robot_brain import RobotBrain
 from robot_model import RobotModel
@@ -15,14 +15,15 @@ import time
 from math import pi
 
 
-MAX_HISTORY_LENGTH = 200000 + 1
+MAX_HISTORY_LENGTH = 4000000 + 1
 USERNAME = 'intec'
-NUM_INPUT_RAYS = 8
+NUM_INPUT_RAYS = 16
 INPUT_DIM = NUM_INPUT_RAYS * 3
 EXPLORE_MODE_SWITCH_TIME = None  # 100000
 
-SIM_LOAD_NAME = '2017-07-16T10:36:42.494275_random_exploration_200K'
+SIM_LOAD_NAME = 'None'  # '2017-07-16T10:36:42.494275_random_exploration_200K'
 #SIM_LOAD_NAME = '2017-07-15T22:37:55.349559_advanced_exploration_200K'
+
 
 def get_model_params():
     params = {
@@ -99,13 +100,13 @@ def get_brain_params():
 
 def get_environment_params():
     params = {
-        'width': 10,
-        'height': 10,
-        'add_random_color_boundary_walls': True,
-        'min_num_walls': 1,
-        'max_num_walls': 1,
-        'wall_min_length': 2,
-        'wall_max_length': 2,
+        'width': 30,
+        'height': 30,
+        'add_random_color_boundary_walls': False,
+        'min_num_walls': 8,
+        'max_num_walls': 8,
+        'wall_min_length': 8,
+        'wall_max_length': 10,
         'min_space_between_walls': 2,
         'init_robot_x': 5,
         'init_robot_y': 5,
@@ -118,7 +119,7 @@ def get_visualizer_params():
     params = {
         'fps_display_interval': 3,
         'plot_brain_error_frames': 100000,
-        'image_display_frames_fast': 100,  # 1  # 1000
+        'image_display_frames_fast': 1000,  # 1  # 1000
         'waitKey_time_fast': 1,  # 1, 100, 5000
         'image_display_frames_slow': 1,  # 1  # 1000
         'waitKey_time_slow': 10,  # 1, 100, 5000
@@ -217,6 +218,7 @@ def run_demo(demo_components):
 
     print 'Finished Simulation.'
 
+    robot_brain.save_states_history(plots_save_folder=sim_folder_manager.get_plots_save_folder(), state_indices_list=[0])
     task_manager.evaluate(plots_save_folder=sim_folder_manager.get_plots_save_folder())
     print 'Finished Evaluation.'
 

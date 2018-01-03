@@ -653,7 +653,9 @@ class RobotBrain(object):
     def get_predictor_images(self):
         return self.ctx_predictor_debug_images
 
-
+    def save_states_history(self, plots_save_folder, state_indices_list):
+        print 'saving states history...'
+        self.states_history.save_states(plots_save_folder, state_indices_list)
 
 
 
