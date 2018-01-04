@@ -57,9 +57,9 @@ class EnsembleNet(object):
         best_branch = np.argmin(df_sum)
         self.bases[best_branch] = self.learning_rate * net_input + (1.0 - self.learning_rate) * self.bases[best_branch]
 
-    def evaluate(self, net_input):
+    def evaluate(self, net_input, randomize=False):
 
-        if self.trained_num == 0: #or time.time() - self.last_trained > 0.1:
+        if self.trained_num == 0 or (randomize and (time.time() - self.last_trained > 0.1)):
             params = self.params
             self.bases = np.random.random((params['num_branches'], params['num_inputs']))
             self.stored_prediction = np.random.random(params['num_outputs'])
@@ -159,7 +159,7 @@ def run_experiment():
         net_i = 0
         output_errors = np.zeros(num_mlp)
         for net in mlp_list:
-            output_eval = net.evaluate(net_input.copy())
+            output_eval = net.evaluate(net_input.copy(), randomize=False) #(k < 20000))
 
             error = output_eval - net_output
             error = np.mean(np.fabs(error))
