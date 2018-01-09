@@ -10,7 +10,7 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 
-def _get_mlp_OLD(num_inputs, num_hidden, num_outputs, learning_rate):
+def _get_mlp(num_inputs, num_hidden, num_outputs, learning_rate):
     state = {}
     state['layers'] = [
         {'activation': np.zeros((num_inputs + 1,)), 'error': np.zeros((num_inputs + 1,)), 'delta': np.zeros((num_inputs + 1,))},
@@ -29,130 +29,20 @@ def _get_mlp_OLD(num_inputs, num_hidden, num_outputs, learning_rate):
     return MLP.MLP(state)
 
 
-class EnsembleUnit(object):
-    def __init__(self, params):
-
-        uniform_init = False
-        if uniform_init:
-            self.bases = np.ones((params['num_branches'], params['num_inputs']))
-            self.stored_prediction = np.ones(params['num_outputs'])
-        else:
-            self.bases = np.random.random((params['num_branches'], params['num_inputs']))
-            self.stored_prediction = np.random.random(params['num_outputs'])
-        self.learning_rate = params['learning_rate']
-
-        self.trained_num = 0
-        self.last_trained = time.time()
-        # print self.bases.shape, self.stored_prediction.shape
-        # (10, 48) (24,)
-        self.params = params
-
-    def train(self, net_input, net_output):
-        self.trained_num += 1
-        self.last_trained = time.time()
-
-        self.stored_prediction = self.learning_rate * net_output + (1.0 - self.learning_rate) * self.stored_prediction
-        df = self.bases - net_input
-        df_sum = np.sum(np.fabs(df), axis=1)
-        best_branch = np.argmin(df_sum)
-        self.bases[best_branch] = self.learning_rate * net_input + (1.0 - self.learning_rate) * self.bases[best_branch]
-
-    def evaluate(self, net_input, randomize=False):
-
-        if self.trained_num == 0 or (randomize and (time.time() - self.last_trained > 0.1)):
-            params = self.params
-            self.bases = np.random.random((params['num_branches'], params['num_inputs']))
-            self.stored_prediction = np.random.random(params['num_outputs'])
-
-        return self.stored_prediction
-
-
-class EnsembleNet(object):
-    '''
-
-        evaluate:
-            every unit returns "stored prediction vector" and input-vector-branch-based confidence
-            return max confidence unit's prediction
-
-        train:
-            compute which unit's "stored prediction vector" is closest to training_output
-
-
-        use knn_parallel_query to find which branch should learn
-            it should receive and process only view of that unit's weights
-    '''
-
-    def __init__(self, params):
-        uniform_init = False
-        self.num_units = params['num_units']
-
-        if uniform_init:
-            self.bases = np.ones((self.num_units * params['num_branches'], params['num_inputs']))
-            self.stored_predictions = np.ones((self.num_units, params['num_outputs']))
-        else:
-            self.bases = np.random.random((self.num_units * params['num_branches'], params['num_inputs']))
-            self.stored_prediction = np.random.random((self.num_units, params['num_outputs']))
-
-        self.learning_rate = params['learning_rate']
-
-        self.trained_num = 0
-        self.last_trained = time.time()
-        # print self.bases.shape, self.stored_prediction.shape
-        # (10, 48) (24,)
-        self.params = params
-
-    def train(self, net_input, net_output):
-        '''
-
-        1. find which stored_prediction closest to net_output
-        2. for that unit: find which branch closest to net_input
-        3. modify stored_prediction, bases found above towards net_output, net_input
-
-        :param net_input:
-        :param net_output:
-        :return:
-        '''
-
-        # 1. find which stored_prediction closest to net_output
-
-
-
-        # 2. for that unit: find which branch closest to net_input
-        # 3. modify stored_prediction, bases found above towards net_output, net_input
-
-    def evaluate(self, net_input):
-        '''
-
-        1. find which branch or all stored branches is closest to net_input
-        2. return that unit's stored_prediction
-
-        :param net_input:
-        :return:
-        '''
-
-        pass
-
-
-def _get_mlp(num_inputs, num_hidden, num_outputs, learning_rate, num_branches=20):
-
-    params = {'num_inputs': num_inputs,
-              'num_outputs': num_outputs,
-              'learning_rate': learning_rate,
-              'num_branches': num_branches}  # 50
-
-    return EnsembleUnit(params)
-
-
 def _load_states_history():
-    data_file = '/home/intec/NL-sim/24DIMx4M_states_saved_2017-12-30T16:59:11.615393/states_history_0.pkl'
-    #data_file = '/home/intec/NL-sim/48DIMx4M_states_saved_2017-12-31T11:02:04.272824/states_history_0.pkl'
+    #data_file = '/home/intec/NL-sim/24DIMx4M_states_saved_2017-12-30T16:59:11.615393/states_history_0.pkl'
+    data_file = '/home/intec/NL-sim/48DIMx4M_states_saved_2017-12-31T11:02:04.272824/states_history_0.pkl'
 
     print 'loading states history...'
     f = open(data_file, 'r')
     states_history = pickle.load(f)
     f.close()
-    print states_history.shape
+    print states_history.shape  # (4000001, 48)
     return states_history
+
+
+def _get_features(input_arr):
+    return input_arr
 
 
 def run_experiment():
@@ -164,9 +54,8 @@ def run_experiment():
     max_history_length = states_history.shape[0]
     scale_camera_factor = 32
     num_mlp = 20  # 100
-    num_branches_per_mlp = 10
-    do_display = False
-    learning_rate = 0.01  # 0.01  # 0.01 * 0.5
+    do_display = True
+    learning_rate = 0.01 * 0.2  # 0.01  # 0.01 * 0.5
     error_average_steps = 1000
     do_training = True
 
@@ -176,11 +65,11 @@ def run_experiment():
     print 'initializing mlp list...'
     mlp_list = []
     for k in range(num_mlp):
-        mlp_list.append(_get_mlp(num_inputs=dim * 2, num_hidden=dim, num_outputs=dim, learning_rate=learning_rate, num_branches=num_branches_per_mlp))
+        mlp_list.append(_get_mlp(num_inputs=dim * 2, num_hidden=dim * 4, num_outputs=dim, learning_rate=learning_rate))
 
     nets_trained_hist = np.zeros(num_mlp)
 
-    single_mlp = _get_mlp(num_inputs=dim * 2, num_hidden=dim, num_outputs=dim, learning_rate=learning_rate, num_branches=num_branches_per_mlp)
+    single_mlp = _get_mlp(num_inputs=dim * 2, num_hidden=dim * 4, num_outputs=dim, learning_rate=learning_rate)
 
     error_histories = np.zeros((num_mlp, max_history_length))
     mean_error_histories = np.zeros((num_mlp, max_history_length))
@@ -195,15 +84,44 @@ def run_experiment():
 
     last_time = time.time()
 
-    for k in range(3, max_history_length):
+    k_to_train = np.arange(3, max_history_length)
+
+    k = -1
+    for t in np.random.permutation(k_to_train).tolist():
+        k += 1
         #if k > 10000:
         #    do_training = False
 
-        if do_display:
+        net_input = np.concatenate((states_history[t - 2, :], states_history[t - 0, :]))
+        net_output = states_history[t - 1, :]
+
+        # *** multi ***
+        best_net_output = None
+        best_err = np.inf
+
+        net_i = 0
+        output_errors = np.zeros(num_mlp)
+        for net in mlp_list:
+            output_eval = net.evaluate(net_input.copy())
+
+            error = output_eval - net_output
+            error = np.mean(np.fabs(error))
+
+            if error < best_err:
+                best_net_output = output_eval.copy()
+                best_err = error
+
+            output_errors[net_i] = error
+            net_i += 1
+
+        net_to_train = np.argmin(output_errors)
+
+        if do_display and k % 2000 == 0:
+            print 'net_to_train:', net_to_train
             autoenc_images = np.zeros((3, dim))
-            autoenc_images[0, :] = states_history[k - 2, :]
-            autoenc_images[1, :] = states_history[k - 1, :]
-            autoenc_images[2, :] = states_history[k - 0, :]
+            autoenc_images[0, :] = states_history[t - 2, :]
+            autoenc_images[1, :] = states_history[t - 1, :]
+            autoenc_images[2, :] = states_history[t - 0, :]
 
             autoenc_images_color = np.zeros((autoenc_images.shape[0], autoenc_images.shape[1] / 3, 3))
 
@@ -215,26 +133,29 @@ def run_experiment():
 
             resized_autoenc = cv2.resize(src=autoenc_images_color, dsize=(0, 0), fx=scale_camera_factor,
                                          fy=scale_camera_factor, interpolation=cv2.INTER_NEAREST)
-            cv2.imshow('autoenc', resized_autoenc)
+            cv2.imshow('actual', resized_autoenc)
+
+            autoenc_images = np.zeros((3, dim))
+            autoenc_images[0, :] = states_history[t - 2, :]
+            autoenc_images[1, :] = states_history[t - 1, :]
+            autoenc_images[2, :] = states_history[t - 0, :]
+
+            autoenc_images_color = np.zeros((autoenc_images.shape[0], autoenc_images.shape[1] / 3, 3))
+
+            for r in range(autoenc_images.shape[0]):
+                if r == 1:
+                    tmp = best_net_output.reshape(autoenc_images.shape[1] / 3, 3)
+                else:
+                    tmp = autoenc_images[r, :].reshape(autoenc_images.shape[1] / 3, 3)
+                autoenc_images_color[r, :, 0] = tmp[:, 0]
+                autoenc_images_color[r, :, 1] = tmp[:, 1]
+                autoenc_images_color[r, :, 2] = tmp[:, 2]
+
+            resized_autoenc = cv2.resize(src=autoenc_images_color, dsize=(0, 0), fx=scale_camera_factor,
+                                         fy=scale_camera_factor, interpolation=cv2.INTER_NEAREST)
+            cv2.imshow('predicted (middle)', resized_autoenc)
             cv2.waitKey(1)
 
-        net_input = np.concatenate((states_history[k - 2, :], states_history[k - 0, :]))
-        net_output = states_history[k - 1, :]
-
-        # *** multi ***
-
-        net_i = 0
-        output_errors = np.zeros(num_mlp)
-        for net in mlp_list:
-            output_eval = net.evaluate(net_input.copy(), randomize=False) #(k < 20000))
-
-            error = output_eval - net_output
-            error = np.mean(np.fabs(error))
-
-            output_errors[net_i] = error
-            net_i += 1
-
-        net_to_train = np.argmin(output_errors)
         error_histories[net_to_train, error_steps[net_to_train]] = output_errors[net_to_train]
 
         mean_index_0 = max(0, error_steps[net_to_train] - error_average_steps)
@@ -287,8 +208,7 @@ def run_experiment():
             for tmp in range(min(num_mlp, 10)):
                 net_index = sorted_net_indices[tmp]
 
-                #print net_index, mlp_list[net_index].stored_prediction
-                if True:
+                if False:
 
                     stored_prediction_image = np.zeros((1, dim / 3, 3))
                     tmp2 = mlp_list[net_index].stored_prediction.reshape(dim / 3, 3)
