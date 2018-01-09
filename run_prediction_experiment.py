@@ -29,7 +29,7 @@ def _get_mlp_OLD(num_inputs, num_hidden, num_outputs, learning_rate):
     return MLP.MLP(state)
 
 
-class EnsembleNet(object):
+class EnsembleUnit(object):
     def __init__(self, params):
 
         uniform_init = False
@@ -67,19 +67,85 @@ class EnsembleNet(object):
         return self.stored_prediction
 
 
-def _get_mlp(num_inputs, num_hidden, num_outputs, learning_rate):
+class EnsembleNet(object):
+    '''
+
+        evaluate:
+            every unit returns "stored prediction vector" and input-vector-branch-based confidence
+            return max confidence unit's prediction
+
+        train:
+            compute which unit's "stored prediction vector" is closest to training_output
+
+
+        use knn_parallel_query to find which branch should learn
+            it should receive and process only view of that unit's weights
+    '''
+
+    def __init__(self, params):
+        uniform_init = False
+        self.num_units = params['num_units']
+
+        if uniform_init:
+            self.bases = np.ones((self.num_units * params['num_branches'], params['num_inputs']))
+            self.stored_predictions = np.ones((self.num_units, params['num_outputs']))
+        else:
+            self.bases = np.random.random((self.num_units * params['num_branches'], params['num_inputs']))
+            self.stored_prediction = np.random.random((self.num_units, params['num_outputs']))
+
+        self.learning_rate = params['learning_rate']
+
+        self.trained_num = 0
+        self.last_trained = time.time()
+        # print self.bases.shape, self.stored_prediction.shape
+        # (10, 48) (24,)
+        self.params = params
+
+    def train(self, net_input, net_output):
+        '''
+
+        1. find which stored_prediction closest to net_output
+        2. for that unit: find which branch closest to net_input
+        3. modify stored_prediction, bases found above towards net_output, net_input
+
+        :param net_input:
+        :param net_output:
+        :return:
+        '''
+
+        # 1. find which stored_prediction closest to net_output
+
+
+
+        # 2. for that unit: find which branch closest to net_input
+        # 3. modify stored_prediction, bases found above towards net_output, net_input
+
+    def evaluate(self, net_input):
+        '''
+
+        1. find which branch or all stored branches is closest to net_input
+        2. return that unit's stored_prediction
+
+        :param net_input:
+        :return:
+        '''
+
+        pass
+
+
+def _get_mlp(num_inputs, num_hidden, num_outputs, learning_rate, num_branches=20):
 
     params = {'num_inputs': num_inputs,
               'num_outputs': num_outputs,
               'learning_rate': learning_rate,
-              'num_branches': 100}  # 50
+              'num_branches': num_branches}  # 50
 
-    return EnsembleNet(params)
+    return EnsembleUnit(params)
 
 
 def _load_states_history():
-    #data_file = '/home/intec/NL-sim/24DIMx4M_states_saved_2017-12-30T16:59:11.615393/states_history_0.pkl'
-    data_file = '/home/intec/NL-sim/48DIMx4M_states_saved_2017-12-31T11:02:04.272824/states_history_0.pkl'
+    data_file = '/home/intec/NL-sim/24DIMx4M_states_saved_2017-12-30T16:59:11.615393/states_history_0.pkl'
+    #data_file = '/home/intec/NL-sim/48DIMx4M_states_saved_2017-12-31T11:02:04.272824/states_history_0.pkl'
 
     print 'loading states history...'
     f = open(data_file, 'r')
@@ -97,7 +163,8 @@ def run_experiment():
     dim = states_history.shape[1]
     max_history_length = states_history.shape[0]
     scale_camera_factor = 32
-    num_mlp = 200  # 100
+    num_mlp = 20  # 100
+    num_branches_per_mlp = 10
     do_display = False
     learning_rate = 0.01  # 0.01  # 0.01 * 0.5
     error_average_steps = 1000
@@ -109,11 +176,11 @@ def run_experiment():
     print 'initializing mlp list...'
     mlp_list = []
     for k in range(num_mlp):
-        mlp_list.append(_get_mlp(num_inputs=dim * 2, num_hidden=dim, num_outputs=dim, learning_rate=learning_rate))
+        mlp_list.append(_get_mlp(num_inputs=dim * 2, num_hidden=dim, num_outputs=dim, learning_rate=learning_rate, num_branches=num_branches_per_mlp))
 
     nets_trained_hist = np.zeros(num_mlp)
 
-    single_mlp = _get_mlp(num_inputs=dim * 2, num_hidden=dim, num_outputs=dim, learning_rate=learning_rate)
+    single_mlp = _get_mlp(num_inputs=dim * 2, num_hidden=dim, num_outputs=dim, learning_rate=learning_rate, num_branches=num_branches_per_mlp)
 
     error_histories = np.zeros((num_mlp, max_history_length))
     mean_error_histories = np.zeros((num_mlp, max_history_length))
@@ -201,7 +268,7 @@ def run_experiment():
         if do_training:
             single_mlp.train(net_input.copy(), net_output.copy())
 
-        if k % 5000 == 0:
+        if k % 10000 == 0:
             print time.time() - last_time, k
             last_time = time.time()
 
@@ -216,9 +283,46 @@ def run_experiment():
             ax.get_yaxis().get_major_formatter().set_scientific(False)
             ax.bar(np.arange(num_mlp), nets_trained_hist[sorted_net_indices])
             fig.savefig(plots_save_folder + '/' + 'mlp_use_hist_step_' + '_' + str(k) + '.png', dpi=100)
-
+            #print '*****************************'
             for tmp in range(min(num_mlp, 10)):
                 net_index = sorted_net_indices[tmp]
+
+                #print net_index, mlp_list[net_index].stored_prediction
+                if True:
+
+                    stored_prediction_image = np.zeros((1, dim / 3, 3))
+                    tmp2 = mlp_list[net_index].stored_prediction.reshape(dim / 3, 3)
+                    stored_prediction_image[0, :, 0] = tmp2[:, 0]
+                    stored_prediction_image[0, :, 1] = tmp2[:, 1]
+                    stored_prediction_image[0, :, 2] = tmp2[:, 2]
+
+                    resized_im = cv2.resize(src=stored_prediction_image, dsize=(0, 0), fx=scale_camera_factor,
+                                            fy=scale_camera_factor, interpolation=cv2.INTER_NEAREST)
+                    cv2.imshow('stored prediction ', resized_im)
+
+                    branch_im = np.zeros((1, dim / 3, 3))
+                    tmp2 = mlp_list[net_index].bases[0, 0:dim].reshape(dim / 3, 3)
+                    branch_im[0, :, 0] = tmp2[:, 0]
+                    branch_im[0, :, 1] = tmp2[:, 1]
+                    branch_im[0, :, 2] = tmp2[:, 2]
+
+                    resized_im = cv2.resize(src=branch_im, dsize=(0, 0), fx=scale_camera_factor,
+                                            fy=scale_camera_factor, interpolation=cv2.INTER_NEAREST)
+                    cv2.imshow('branch in ', resized_im)
+
+                    branch_im = np.zeros((1, dim / 3, 3))
+                    tmp2 = mlp_list[net_index].bases[0, dim::].reshape(dim / 3, 3)
+                    branch_im[0, :, 0] = tmp2[:, 0]
+                    branch_im[0, :, 1] = tmp2[:, 1]
+                    branch_im[0, :, 2] = tmp2[:, 2]
+
+                    resized_im = cv2.resize(src=branch_im, dsize=(0, 0), fx=scale_camera_factor,
+                                            fy=scale_camera_factor, interpolation=cv2.INTER_NEAREST)
+                    cv2.imshow('branch context ', resized_im)
+
+
+                    cv2.waitKey(100)
+
                 ax.cla()
                 ax.get_xaxis().get_major_formatter().set_scientific(False)
                 ax.get_yaxis().get_major_formatter().set_scientific(False)
