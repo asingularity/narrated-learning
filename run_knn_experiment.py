@@ -85,7 +85,13 @@ class PredictorEnsemble(object):
         self.effectiveness_sum = np.zeros(self.entries)
         self.effectiveness_num = np.ones(self.entries)
 
+        self.row_ages = np.zeros(self.entries)
+
+        self.t = 0
+        self.last_replacement_t = 0
+
     def step(self, last_input_state, input_state, learn=True):
+        self.t += 1
         if self.last_input_state is not None:
             predictor_output = input_state
             predictor_input = last_input_state
@@ -94,6 +100,8 @@ class PredictorEnsemble(object):
 
             dist, ind = knn_parallel_query(self.table, new_entry, self.temp_array, self.table.shape[0], self.table.shape[1])
             self.table_use_hist[ind] += 1
+
+            self.row_ages[:] = self.row_ages[:] + 1
 
             # find second best
             sorted_dist_indices = np.argsort(self.temp_array)
@@ -111,68 +119,38 @@ class PredictorEnsemble(object):
             if learn:
 
                 # initialize with random entries (for easy initial comparison)
-                if True:
-                    if self.tmp_ind < self.table.shape[0]:
-                        self.table[self.tmp_ind, :] = new_entry[:]
-                        self.tmp_ind += 1
-                    else:
-                        pass
-                        #print dist
+                if self.tmp_ind < self.table.shape[0]:
+                    self.table[self.tmp_ind, :] = new_entry[:]
+                    self.tmp_ind += 1
+                else:
+                    pass
 
                 best_second_diff_current = dist2 - dist
                 self.effectiveness_num[ind] += 1
                 self.effectiveness_sum[ind] += best_second_diff_current
 
-                if False: #best_second_diff_current < 0.5: #dist > 3.0: #best_second_diff_current < 0.2:  # TODO need criteria
-                    effectiveness_mean = np.divide(self.effectiveness_sum, self.effectiveness_num)
-
-                    #replacement_candidate_index = ind
-                    #if effectiveness_mean[ind] < np.mean(effectiveness_mean):
-                    #    self.table[replacement_candidate_index, :] = new_entry[:]
-                    #    self.effectiveness_sum[replacement_candidate_index] = dist2 - 0  # TODO initialize this
-                    #    self.effectiveness_num[replacement_candidate_index] = 1
-
-                    replacement_candidate_index = np.argmin(effectiveness_mean)
-                    #if effectiveness_mean[ind] < np.mean(effectiveness_mean):
-                    self.table[replacement_candidate_index, :] = new_entry[:]
-                    self.effectiveness_sum[replacement_candidate_index] = dist - 0  # TODO initialize this
-                    self.effectiveness_num[replacement_candidate_index] = 1
-
-                    #print 'REPLACE', replacement_candidate_index, effectiveness_mean[replacement_candidate_index]
-                else:
-                    pass
-                    #print 'NOT'
-
                 # simple best learns:
                 self.table[ind, :] = 0.9 * self.table[ind, :] + 0.1 * new_entry
 
-                #self.table[ind2, :] = 0.99 * self.table[ind2, :] + 0.01 * new_entry
-                #self.table[ind3, :] = 0.99 * self.table[ind3, :] + 0.01 * new_entry
+                do_replacements = True
+                min_replaced_row_age = 1000
+                replacement_every_k_steps = 100
 
-                # simple least used:
-                #   equivalent to random point initialization
-                #least_used_ind = np.argmin(self.table_use_hist)
-                #self.table[least_used_ind, :] = new_entry[:]
-                #self.table_use_hist[least_used_ind] = 1
+                if do_replacements:
+                    row_replace_candidates = np.nonzero(self.row_ages > min_replaced_row_age)[0]
+                    effectiveness_mean = np.divide(self.effectiveness_sum, self.effectiveness_num)
 
-                #r = 0.9999
-                #r2 = 1.0 - r
-                #self.table[:, :] = r * self.table[:, :] + r2 * new_entry
+                    if len(row_replace_candidates) > 0 and self.t > self.last_replacement_t + replacement_every_k_steps:
+                        r_r_c_ind = np.argmin(effectiveness_mean[row_replace_candidates])
+                        r_r_ind = row_replace_candidates[r_r_c_ind]
+                        #print r_r_ind
+                        self.table_use_hist[r_r_ind] = 0
+                        self.row_ages[r_r_ind] = 0
+                        self.effectiveness_sum[r_r_ind] = 0.0
+                        self.effectiveness_num[r_r_ind] = 0
+                        self.table[r_r_ind, :] = new_entry[:]
 
-            if False:
-                if dist > self.min_dist and learn:
-                    # arbitraily choose first of the pair
-                    index_replace = self.min_dist_pair[0]
-                    self.table[index_replace, :] = new_entry[:]
-                    self.table_dist[index_replace, :] = self.temp_array[:]
-                    self.table_dist[:, index_replace] = self.temp_array[:]
-                    self.table_dist[index_replace, index_replace] = np.inf
-                    # only need to do this if table has changed, to find newest closest entry pair:
-                    k = np.argmin(self.table_dist)
-                    k2 = np.unravel_index(k, self.table_dist.shape)
-                    self.min_dist_pair = (k2[0], k2[1])
-                    self.min_dist = self.table_dist[k2]
-                    #print 'replaced:', index_replace, 'new min pair:', self.min_dist_pair, self.min_dist
+                        self.last_replacement_t = self.t
 
         self.last_input_state = input_state.copy()
 
@@ -189,10 +167,6 @@ class PredictorEnsemble(object):
         C = np.empty((A.shape[0] + B.shape[0], A.shape[1]))
         C[::2, :] = A
         C[1::2, :] = B
-
-        #im_left = np.reshape(im_left, (im_left.shape[0], im_left.shape[1] / 3, 3))
-        #im_right = np.reshape(im_right, (im_right.shape[0], im_right.shape[1] / 3, 3))
-        #im = np.concatenate((im_left, im_right), axis=1)
         C = np.reshape(C, (C.shape[0], C.shape[1] / 3, 3))
 
         im = C
@@ -247,7 +221,7 @@ def run_experiment():
     ensemble = PredictorEnsemble(params={'max_history_length': max_history_length,
                                          'plots_save_folder': plots_save_folder,
                                          'error_average_steps': 500,
-                                         'entries': 400 * 2,  # 4000
+                                         'entries': 800,  # now "ensemble" is half (800)
                                          'dim': dim})
 
     k_to_train = np.arange(3, max_history_length)[start_step_offset::]
@@ -292,8 +266,6 @@ def run_experiment():
             print 'plotting error', time.time()
             ensemble.plot_error(fig, ax)
             last_plot_time = time.time()
-            #print ensemble.table_use_hist
-            #print np.mean(np.divide(ensemble.effectiveness_sum, ensemble.effectiveness_num))
         t += 1
 
 if __name__ == '__main__':
