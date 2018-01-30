@@ -51,9 +51,15 @@ class PredictorEnsemble(object):
     def __init__(self, params):
         print 'initializing ensemble...'
 
+        self.do_random_init = params['do_random_init']  # False  # initialize with random (first) entries
+        self.do_adaptation = params['do_adaptation']  # True  # WTA-based learning
+        self.do_replacements = params['do_replacements']  # True  # replace low effectiveness over time
+
         self.max_history_length = params['max_history_length']
         self.error_history = np.zeros(params['max_history_length'])
         self.mean_error_history = np.zeros(params['max_history_length'])
+
+        self.plots_prefix = params['plots_prefix']
         self.error_step = 0
 
         self.entries = params['entries']
@@ -118,8 +124,11 @@ class PredictorEnsemble(object):
 
             if learn:
 
-                # initialize with random entries (for easy initial comparison)
-                if self.tmp_ind < self.table.shape[0]:
+                do_random_init = self.do_random_init  # initialize with random entries
+                do_adaptation = self.do_adaptation  # WTA-based learning
+                do_replacements = self.do_replacements  # replace low effectiveness over time
+
+                if do_random_init and self.tmp_ind < self.table.shape[0]:
                     self.table[self.tmp_ind, :] = new_entry[:]
                     self.tmp_ind += 1
                 else:
@@ -130,9 +139,9 @@ class PredictorEnsemble(object):
                 self.effectiveness_sum[ind] += best_second_diff_current
 
                 # simple best learns:
-                self.table[ind, :] = 0.9 * self.table[ind, :] + 0.1 * new_entry
+                if do_adaptation:
+                    self.table[ind, :] = 0.9 * self.table[ind, :] + 0.1 * new_entry
 
-                do_replacements = True
                 min_replaced_row_age = 1000
                 replacement_every_k_steps = 100
 
@@ -142,6 +151,9 @@ class PredictorEnsemble(object):
 
                     if len(row_replace_candidates) > 0 and self.t > self.last_replacement_t + replacement_every_k_steps:
                         r_r_c_ind = np.argmin(effectiveness_mean[row_replace_candidates])
+                        r_r_c_eff = effectiveness_mean[row_replace_candidates][r_r_c_ind]
+
+                        #if r_r_c_eff < 0.2 or np.isnan(r_r_c_eff):
                         r_r_ind = row_replace_candidates[r_r_c_ind]
                         #print r_r_ind
                         self.table_use_hist[r_r_ind] = 0
@@ -151,6 +163,9 @@ class PredictorEnsemble(object):
                         self.table[r_r_ind, :] = new_entry[:]
 
                         self.last_replacement_t = self.t
+                        #    print 'replacing: ', r_r_c_eff
+                        #else:
+                        #    print 'NOT replacing: ', r_r_c_eff
 
         self.last_input_state = input_state.copy()
 
@@ -180,16 +195,17 @@ class PredictorEnsemble(object):
         ax.get_yaxis().get_major_formatter().set_scientific(False)
         ax.set_ylim([0.0, 10.0])
         ax.set_yticks(np.arange(0, 10, 0.5))
+        ax.axhline(y=1.5, color='g')
         thing_to_plot = self.mean_error_history[0:self.error_step]
         ax.plot(thing_to_plot, 'b-')
-        fig.savefig(self.plots_save_folder + '/' + 'error_history' + '.png', dpi=100)
+        fig.savefig(self.plots_save_folder + '/' + self.plots_prefix + '_' + 'error_history' + '.png', dpi=100)
 
         ax.cla()
         ax.get_xaxis().get_major_formatter().set_scientific(False)
         ax.get_yaxis().get_major_formatter().set_scientific(False)
         sorted_net_indices = np.argsort(self.table_use_hist)[::-1]
         ax.bar(np.arange(self.table_use_hist.shape[0]), self.table_use_hist[sorted_net_indices])
-        fig.savefig(self.plots_save_folder + '/' + 'table_use_hist' + '.png', dpi=100)
+        fig.savefig(self.plots_save_folder + '/' + self.plots_prefix + '_' + 'table_use_hist' + '.png', dpi=100)
 
         ax.cla()
         ax.get_xaxis().get_major_formatter().set_scientific(False)
@@ -197,7 +213,7 @@ class PredictorEnsemble(object):
         effectiveness_mean = np.divide(self.effectiveness_sum, self.effectiveness_num)
         sorted_effectiveness = np.argsort(effectiveness_mean)[::-1]
         ax.bar(np.arange(effectiveness_mean.shape[0]), effectiveness_mean[sorted_effectiveness])
-        fig.savefig(self.plots_save_folder + '/' + 'effectiveness_hist' + '.png', dpi=100)
+        fig.savefig(self.plots_save_folder + '/' + self.plots_prefix + '_' + 'effectiveness_hist' + '.png', dpi=100)
 
 
 def run_experiment():
@@ -210,19 +226,23 @@ def run_experiment():
     max_history_length = states_history.shape[0]
     scale_camera_factor = 32
     do_display = False
-    do_random_permute_train = True
     plot_error_every_k_seconds = 10
     imshow_every_k_seconds = 1
-
-    learning_off_time = np.inf
-    #learning_off_time = 100000
     start_step_offset = 0
+
+    do_random_permute_train = True
+    #learning_off_time = np.inf
+    learning_off_time = 300000
 
     ensemble = PredictorEnsemble(params={'max_history_length': max_history_length,
                                          'plots_save_folder': plots_save_folder,
                                          'error_average_steps': 500,
-                                         'entries': 800,  # now "ensemble" is half (800)
-                                         'dim': dim})
+                                         'entries': 800,
+                                         'dim': dim,
+                                         'do_random_init': False,
+                                         'do_adaptation': True,
+                                         'do_replacements': True,
+                                         'plots_prefix': 'init_False_adapt_True_repl_True_800_entries_learn_off_300K'})
 
     k_to_train = np.arange(3, max_history_length)[start_step_offset::]
 
