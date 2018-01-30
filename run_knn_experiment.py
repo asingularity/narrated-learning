@@ -145,6 +145,7 @@ class PredictorEnsemble(object):
 
                 # simple best learns:
                 self.table[ind, :] = 0.9 * self.table[ind, :] + 0.1 * new_entry
+
                 #self.table[ind2, :] = 0.99 * self.table[ind2, :] + 0.01 * new_entry
                 #self.table[ind3, :] = 0.99 * self.table[ind3, :] + 0.01 * new_entry
 
@@ -209,6 +210,21 @@ class PredictorEnsemble(object):
         ax.plot(thing_to_plot, 'b-')
         fig.savefig(self.plots_save_folder + '/' + 'error_history' + '.png', dpi=100)
 
+        ax.cla()
+        ax.get_xaxis().get_major_formatter().set_scientific(False)
+        ax.get_yaxis().get_major_formatter().set_scientific(False)
+        sorted_net_indices = np.argsort(self.table_use_hist)[::-1]
+        ax.bar(np.arange(self.table_use_hist.shape[0]), self.table_use_hist[sorted_net_indices])
+        fig.savefig(self.plots_save_folder + '/' + 'table_use_hist' + '.png', dpi=100)
+
+        ax.cla()
+        ax.get_xaxis().get_major_formatter().set_scientific(False)
+        ax.get_yaxis().get_major_formatter().set_scientific(False)
+        effectiveness_mean = np.divide(self.effectiveness_sum, self.effectiveness_num)
+        sorted_effectiveness = np.argsort(effectiveness_mean)[::-1]
+        ax.bar(np.arange(effectiveness_mean.shape[0]), effectiveness_mean[sorted_effectiveness])
+        fig.savefig(self.plots_save_folder + '/' + 'effectiveness_hist' + '.png', dpi=100)
+
 
 def run_experiment():
     plots_save_folder = '/home/intec/NL-tmp/'
@@ -221,7 +237,7 @@ def run_experiment():
     scale_camera_factor = 32
     do_display = False
     do_random_permute_train = True
-    plot_error_every_k_seconds = 20
+    plot_error_every_k_seconds = 10
     imshow_every_k_seconds = 1
 
     learning_off_time = np.inf
