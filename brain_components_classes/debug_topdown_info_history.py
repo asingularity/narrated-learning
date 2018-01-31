@@ -1,4 +1,5 @@
 
+import pickle
 import numpy as np
 np.set_printoptions(suppress=True)
 
@@ -31,3 +32,8 @@ class DebugTopdownInfoHistory(object):
             return td_info
         else:
             return None
+
+    def save_history(self, plots_save_folder):
+        f = open(plots_save_folder + '/debug_td_info_history.pkl', 'w')
+        pickle.dump(self.td_info_array[0:self.t, :], f)
+        f.close()

@@ -15,14 +15,13 @@ import time
 from math import pi
 
 
-MAX_HISTORY_LENGTH = 4000000 + 1
+MAX_HISTORY_LENGTH = 1000000 + 1
 USERNAME = 'intec'
 NUM_INPUT_RAYS = 16
 INPUT_DIM = NUM_INPUT_RAYS * 3
 EXPLORE_MODE_SWITCH_TIME = None  # 100000
 
 SIM_LOAD_NAME = 'None'  # '2017-07-16T10:36:42.494275_random_exploration_200K'
-#SIM_LOAD_NAME = '2017-07-15T22:37:55.349559_advanced_exploration_200K'
 
 
 def get_model_params():
@@ -44,7 +43,7 @@ def get_sensors_params():
 def get_sim_folder_manager_params():
     params = {
         'sim_prefix': 'test',
-        'sim_folders_path': '/home/' + USERNAME + '/projects/NL/sim/',
+        'sim_folders_path': '/home/' + USERNAME + '/NL-sim/',
         'scripts_folder_path': '/home/' + USERNAME + '/projects/NL/'
     }
     return params
@@ -69,7 +68,7 @@ def get_brain_params():
         'autoencoders_save_every_k_steps': MAX_HISTORY_LENGTH - 1,  # 50000,
         'autoencoders_enable_training': False,
         'autoencoders_load_from_file': False,
-        'autoencoders_load_filename': '/home/' + USERNAME + '/projects/NL/sim/' + SIM_LOAD_NAME + '/autoencoders.pkl',
+        'autoencoders_load_filename': '/home/' + USERNAME + '/NL-sim/' + SIM_LOAD_NAME + '/autoencoders.pkl',
         # ************ predictors ************
         'predictors': [
             {'state_index_input': 0, 'state_index_context': 0, 'state_index_output': 0, 'dt_context': 2, 'dt_output': 1},
@@ -83,7 +82,7 @@ def get_brain_params():
         'predictors_enable_training': False,  # first step
         'predictors_optimize_training': False,  # second step
         'predictors_load_from_file': False,
-        'predictors_load_filename': '/home/' + USERNAME + '/projects/NL/sim/' + SIM_LOAD_NAME + '/predictors.pkl',
+        'predictors_load_filename': '/home/' + USERNAME + '/NL-sim/' + SIM_LOAD_NAME + '/predictors.pkl',
         # ************ inverse model ************
         'inverse_models': [
             {'state_index_current': 0, 'state_index_future': 0, 'dt': 1}
@@ -93,7 +92,7 @@ def get_brain_params():
         'inverse_save_every_k_steps': MAX_HISTORY_LENGTH - 1,  # 50000,
         'inverse_enable_training': False,
         'inverse_load_from_file': False,
-        'inverse_load_filename': '/home/' + USERNAME + '/projects/NL/sim/' + SIM_LOAD_NAME + '/inverse.pkl',
+        'inverse_load_filename': '/home/' + USERNAME + '/NL-sim/' + SIM_LOAD_NAME + '/inverse.pkl',
     }
     return params
 
@@ -195,6 +194,8 @@ def run_demo(demo_components):
                                   models_save_folder=sim_folder_manager.get_models_save_folder(),
                                   debug_topdown_info=robot_environment.get_topdown_info())  # for storing robot position, angle for debugging planning
 
+        #print 'DEBUG: ', robot_brain.debug_topdown_info_history.t, robot_brain.states_history.t
+
         robot_model.act_upon_processing(motor_command=robot_brain.get_motor_output())
 
         if use_keyboard_input:
@@ -219,6 +220,7 @@ def run_demo(demo_components):
     print 'Finished Simulation.'
 
     robot_brain.save_states_history(plots_save_folder=sim_folder_manager.get_plots_save_folder(), state_indices_list=[0])
+    robot_brain.save_debug_topdown_info_history(plots_save_folder=sim_folder_manager.get_plots_save_folder())
     task_manager.evaluate(plots_save_folder=sim_folder_manager.get_plots_save_folder())
     print 'Finished Evaluation.'
 

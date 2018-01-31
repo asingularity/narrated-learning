@@ -657,6 +657,10 @@ class RobotBrain(object):
         print 'saving states history...'
         self.states_history.save_states(plots_save_folder, state_indices_list)
 
+    def save_debug_topdown_info_history(self, plots_save_folder):
+        print 'saving debug topdown info history...'
+        self.debug_topdown_info_history.save_history(plots_save_folder)
+
 
 
 

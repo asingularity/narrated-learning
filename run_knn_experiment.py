@@ -12,8 +12,7 @@ from knn_parallel import knn_query as knn_parallel_query
 
 
 def _load_states_history():
-    #data_file = '/home/intec/NL-sim/24DIMx4M_states_saved_2017-12-30T16:59:11.615393/states_history_0.pkl'
-    data_file = '/home/intec/NL-sim/48DIMx4M_states_saved_2017-12-31T11:02:04.272824/states_history_0.pkl'
+    data_file = '/home/intec/NL-sim/48DIMx1M_states_positions_saved_2018-01-31T13:09:15.676826/states_history_0.pkl'
 
     print 'loading states history...'
     f = open(data_file, 'r')
@@ -21,6 +20,17 @@ def _load_states_history():
     f.close()
     print states_history.shape  # (4000001, 48)
     return states_history
+
+
+def _load_td_info_history():
+    data_file = '/home/intec/NL-sim/48DIMx1M_states_positions_saved_2018-01-31T13:09:15.676826/debug_td_info_history.pkl'
+
+    print 'loading td info history...'
+    f = open(data_file, 'r')
+    td_info_history = pickle.load(f)
+    f.close()
+    print td_info_history.shape  # (4000001, 48)
+    return td_info_history
 
 
 def _do_display(input_state, dim, scale_camera_factor):
@@ -60,10 +70,14 @@ class PredictorEnsemble(object):
         self.mean_error_history = np.zeros(params['max_history_length'])
 
         self.plots_prefix = params['plots_prefix']
+        self.env_width_height = params['env_width_height']
         self.error_step = 0
 
         self.entries = params['entries']
         self.dim = params['dim']
+
+        self.debug_x_y_theta_output = np.zeros((self.entries, 3))
+        self.debug_x_y_theta_input = np.zeros((self.entries, 3))
 
         self.table = np.zeros((self.entries, self.dim * 2)).astype(np.float32)
         #self.table_dist = np.zeros((self.entries, self.entries))  # max 10k * 10k
@@ -74,7 +88,6 @@ class PredictorEnsemble(object):
         self.min_dist_pair = (0, 1)  # doesn't matter since they all start 0
         self.min_dist = 0
 
-        self.last_input_state = None
         self.temp_array = np.zeros(self.entries).astype(np.float32)
         print 'finished initializing ensemble.'
 
@@ -96,78 +109,84 @@ class PredictorEnsemble(object):
         self.t = 0
         self.last_replacement_t = 0
 
-    def step(self, last_input_state, input_state, learn=True):
+    def step(self, last_input_state, input_state, last_x_y_theta, x_y_theta, learn=True):
         self.t += 1
-        if self.last_input_state is not None:
-            predictor_output = input_state
-            predictor_input = last_input_state
-            # 1. find input+output (IO) error
-            new_entry = np.concatenate((predictor_input, predictor_output))
 
-            dist, ind = knn_parallel_query(self.table, new_entry, self.temp_array, self.table.shape[0], self.table.shape[1])
-            self.table_use_hist[ind] += 1
+        predictor_output = input_state
+        predictor_input = last_input_state
+        # 1. find input+output (IO) error
+        new_entry = np.concatenate((predictor_input, predictor_output))
 
-            self.row_ages[:] = self.row_ages[:] + 1
+        dist, ind = knn_parallel_query(self.table, new_entry, self.temp_array, self.table.shape[0], self.table.shape[1])
+        self.table_use_hist[ind] += 1
 
-            # find second best
-            sorted_dist_indices = np.argsort(self.temp_array)
-            assert self.temp_array[sorted_dist_indices[0]] == dist
-            ind2 = sorted_dist_indices[1]
-            ind3 = sorted_dist_indices[2]
-            dist2 = self.temp_array[ind2]
+        self.row_ages[:] = self.row_ages[:] + 1
 
-            self.error_history[self.error_step] = dist
-            mean_index_0 = max(0, self.error_step - self.error_average_steps)
-            mean_index_1 = self.error_step
-            self.mean_error_history[self.error_step] = np.mean(self.error_history[mean_index_0:mean_index_1])
-            self.error_step += 1
+        # find second best
+        sorted_dist_indices = np.argsort(self.temp_array)
+        assert self.temp_array[sorted_dist_indices[0]] == dist
+        ind2 = sorted_dist_indices[1]
+        ind3 = sorted_dist_indices[2]
+        dist2 = self.temp_array[ind2]
 
-            if learn:
+        self.error_history[self.error_step] = dist
+        mean_index_0 = max(0, self.error_step - self.error_average_steps)
+        mean_index_1 = self.error_step
+        self.mean_error_history[self.error_step] = np.mean(self.error_history[mean_index_0:mean_index_1])
+        self.error_step += 1
 
-                do_random_init = self.do_random_init  # initialize with random entries
-                do_adaptation = self.do_adaptation  # WTA-based learning
-                do_replacements = self.do_replacements  # replace low effectiveness over time
+        if learn:
 
-                if do_random_init and self.tmp_ind < self.table.shape[0]:
-                    self.table[self.tmp_ind, :] = new_entry[:]
-                    self.tmp_ind += 1
-                else:
-                    pass
+            do_random_init = self.do_random_init  # initialize with random entries
+            do_adaptation = self.do_adaptation  # WTA-based learning
+            do_replacements = self.do_replacements  # replace low effectiveness over time
 
-                best_second_diff_current = dist2 - dist
-                self.effectiveness_num[ind] += 1
-                self.effectiveness_sum[ind] += best_second_diff_current
+            if do_random_init and self.tmp_ind < self.table.shape[0]:
+                self.table[self.tmp_ind, :] = new_entry[:]
+                self.debug_x_y_theta_output[self.tmp_ind, :] = x_y_theta[:]
+                self.debug_x_y_theta_input[self.tmp_ind, :] = last_x_y_theta[:]
+                self.tmp_ind += 1
+            else:
+                pass
 
-                # simple best learns:
-                if do_adaptation:
-                    self.table[ind, :] = 0.9 * self.table[ind, :] + 0.1 * new_entry
+            best_second_diff_current = dist2 - dist
+            self.effectiveness_num[ind] += 1
+            self.effectiveness_sum[ind] += best_second_diff_current
 
-                min_replaced_row_age = 1000
-                replacement_every_k_steps = 100
+            # simple best learns:
+            if do_adaptation:
+                self.table[ind, :] = 0.9 * self.table[ind, :] + 0.1 * new_entry
+                # for theta: could be weird... discontinuities
+                self.debug_x_y_theta_output[ind, :] = 0.9 * self.debug_x_y_theta_output[ind, :] + 0.1 * x_y_theta[:]
+                self.debug_x_y_theta_input[ind, :] = 0.9 * self.debug_x_y_theta_input[ind, :] + 0.1 * last_x_y_theta[:]
 
-                if do_replacements:
-                    row_replace_candidates = np.nonzero(self.row_ages > min_replaced_row_age)[0]
-                    effectiveness_mean = np.divide(self.effectiveness_sum, self.effectiveness_num)
+            min_replaced_row_age = 1000
+            replacement_every_k_steps = 100
 
-                    if len(row_replace_candidates) > 0 and self.t > self.last_replacement_t + replacement_every_k_steps:
-                        r_r_c_ind = np.argmin(effectiveness_mean[row_replace_candidates])
-                        r_r_c_eff = effectiveness_mean[row_replace_candidates][r_r_c_ind]
+            if do_replacements:
+                row_replace_candidates = np.nonzero(self.row_ages > min_replaced_row_age)[0]
+                effectiveness_mean = np.divide(self.effectiveness_sum, self.effectiveness_num)
 
-                        #if r_r_c_eff < 0.2 or np.isnan(r_r_c_eff):
-                        r_r_ind = row_replace_candidates[r_r_c_ind]
-                        #print r_r_ind
-                        self.table_use_hist[r_r_ind] = 0
-                        self.row_ages[r_r_ind] = 0
-                        self.effectiveness_sum[r_r_ind] = 0.0
-                        self.effectiveness_num[r_r_ind] = 0
-                        self.table[r_r_ind, :] = new_entry[:]
+                if len(row_replace_candidates) > 0 and self.t > self.last_replacement_t + replacement_every_k_steps:
+                    r_r_c_ind = np.argmin(effectiveness_mean[row_replace_candidates])
+                    r_r_c_eff = effectiveness_mean[row_replace_candidates][r_r_c_ind]
 
-                        self.last_replacement_t = self.t
-                        #    print 'replacing: ', r_r_c_eff
-                        #else:
-                        #    print 'NOT replacing: ', r_r_c_eff
+                    #if r_r_c_eff < 0.2 or np.isnan(r_r_c_eff):
+                    r_r_ind = row_replace_candidates[r_r_c_ind]
+                    #print r_r_ind
+                    self.table_use_hist[r_r_ind] = 0
+                    self.row_ages[r_r_ind] = 0
+                    self.effectiveness_sum[r_r_ind] = 0.0
+                    self.effectiveness_num[r_r_ind] = 0
 
-        self.last_input_state = input_state.copy()
+                    self.table[r_r_ind, :] = new_entry[:]
+                    self.debug_x_y_theta_output[r_r_ind, :] = x_y_theta[:]
+                    self.debug_x_y_theta_input[r_r_ind, :] = last_x_y_theta[:]
+
+                    self.last_replacement_t = self.t
+                    #    print 'replacing: ', r_r_c_eff
+                    #else:
+                    #    print 'NOT replacing: ', r_r_c_eff
 
     def get_table_im(self):
 
@@ -215,11 +234,22 @@ class PredictorEnsemble(object):
         ax.bar(np.arange(effectiveness_mean.shape[0]), effectiveness_mean[sorted_effectiveness])
         fig.savefig(self.plots_save_folder + '/' + self.plots_prefix + '_' + 'effectiveness_hist' + '.png', dpi=100)
 
+        ax.cla()
+        ax.get_xaxis().get_major_formatter().set_scientific(False)
+        ax.get_yaxis().get_major_formatter().set_scientific(False)
+        ax.set_xlim([0 - 0.1, self.env_width_height + 0.1])
+        ax.set_ylim([0 - 0.1, self.env_width_height + 0.1])
+        ax.plot(self.debug_x_y_theta_input[:, 0],  self.debug_x_y_theta_input[:, 1], 'go')
+        #ax.plot(self.debug_x_y_theta_output[:, 0],  self.debug_x_y_theta_output[:, 1], 'ro')
+        ax.set_title(str(np.count_nonzero(self.debug_x_y_theta_input[:, 0]) * 1.0 / self.debug_x_y_theta_input.shape[0]))
+        fig.savefig(self.plots_save_folder + '/' + self.plots_prefix + '_' + 'debug_td_info' + '.png', dpi=100)
+
 
 def run_experiment():
     plots_save_folder = '/home/intec/NL-tmp/'
 
     states_history = _load_states_history()
+    td_info_history = _load_td_info_history()
 
     dim = states_history.shape[1]
 
@@ -229,6 +259,7 @@ def run_experiment():
     plot_error_every_k_seconds = 10
     imshow_every_k_seconds = 1
     start_step_offset = 0
+    env_width_height = 30
 
     do_random_permute_train = True
     #learning_off_time = np.inf
@@ -242,6 +273,7 @@ def run_experiment():
                                          'do_random_init': False,
                                          'do_adaptation': True,
                                          'do_replacements': True,
+                                         'env_width_height': env_width_height,  # for plotting positions
                                          'plots_prefix': 'init_False_adapt_True_repl_True_800_entries_learn_off_300K'})
 
     k_to_train = np.arange(3, max_history_length)[start_step_offset::]
@@ -269,12 +301,19 @@ def run_experiment():
             last_fps_time = time.time()
 
         last_input_state = states_history[k - 1, :]
+        last_x_y_theta = td_info_history[k - 1, :]
+
         input_state = states_history[k, :]
+        x_y_theta = td_info_history[k, :]
 
         if do_display:
             _do_display(input_state, dim, scale_camera_factor)
 
-        ensemble.step(last_input_state=last_input_state, input_state=input_state, learn=(t < learning_off_time))
+        ensemble.step(last_input_state=last_input_state,
+                      input_state=input_state,
+                      last_x_y_theta=last_x_y_theta,
+                      x_y_theta=x_y_theta,
+                      learn=(t < learning_off_time))
 
         if time.time() > last_imshow_time + imshow_every_k_seconds:
             im = ensemble.get_table_im()
