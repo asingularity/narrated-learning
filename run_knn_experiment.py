@@ -69,6 +69,8 @@ class PredictorEnsemble(object):
         self.error_history = np.zeros(params['max_history_length'])
         self.mean_error_history = np.zeros(params['max_history_length'])
 
+        self.use_context_in_knn_diff = params['use_context_in_knn_diff']
+
         self.plots_prefix = params['plots_prefix']
         self.env_width_height = params['env_width_height']
         self.error_step = 0
@@ -79,7 +81,8 @@ class PredictorEnsemble(object):
         self.debug_x_y_theta_output = np.zeros((self.entries, 3))
         self.debug_x_y_theta_input = np.zeros((self.entries, 3))
 
-        self.table = np.zeros((self.entries, self.dim * 2)).astype(np.float32)
+        # input (t), prediction (t+1), context (t+2)
+        self.table = np.zeros((self.entries, self.dim * 3)).astype(np.float32)
         #self.table_dist = np.zeros((self.entries, self.entries))  # max 10k * 10k
         #self.table_dist[np.arange(self.entries), np.arange(self.entries)] = np.inf
 
@@ -109,15 +112,22 @@ class PredictorEnsemble(object):
         self.t = 0
         self.last_replacement_t = 0
 
-    def step(self, last_input_state, input_state, last_x_y_theta, x_y_theta, learn=True):
+    def step(self, last_input_state, input_state, next_input_state, last_x_y_theta, x_y_theta, learn=True):
         self.t += 1
 
+        predictor_context = next_input_state
         predictor_output = input_state
         predictor_input = last_input_state
+
         # 1. find input+output (IO) error
         new_entry = np.concatenate((predictor_input, predictor_output))
+        new_entry = np.concatenate((new_entry, predictor_context))
 
-        dist, ind = knn_parallel_query(self.table, new_entry, self.temp_array, self.table.shape[0], self.table.shape[1])
+        if self.use_context_in_knn_diff:
+            dist, ind = knn_parallel_query(self.table, new_entry, self.temp_array, self.table.shape[0], self.dim * 3)
+        else:
+            dist, ind = knn_parallel_query(self.table, new_entry, self.temp_array, self.table.shape[0], self.dim * 2)
+
         self.table_use_hist[ind] += 1
 
         self.row_ages[:] = self.row_ages[:] + 1
@@ -188,23 +198,40 @@ class PredictorEnsemble(object):
                     #else:
                     #    print 'NOT replacing: ', r_r_c_eff
 
+    def save_table_and_debug_positions(self):
+        f = open(self.plots_save_folder + '/' + self.plots_prefix + '_' + '_I_O_C_table.pkl', 'w')
+        pickle.dump(self.table, f)
+        f.close()
+
+        f = open(self.plots_save_folder + '/' + self.plots_prefix + '_' + '_I_debug_x_y_theta.pkl', 'w')
+        pickle.dump(self.debug_x_y_theta_input, f)
+        f.close()
+
+        f = open(self.plots_save_folder + '/' + self.plots_prefix + '_' + '_O_debug_x_y_theta.pkl', 'w')
+        pickle.dump(self.debug_x_y_theta_output, f)
+        f.close()
+
     def get_table_im(self):
 
-        entries = 30
+        entries = 40
 
-        im_left = self.table[0:entries, 0:self.dim]
-        im_right = self.table[0:entries, self.dim::]
+        im_input = self.table[0:entries, 0:self.dim]
+        im_prediction = self.table[0:entries, self.dim:self.dim * 2]
+        im_context = self.table[0:entries, self.dim * 2::]
 
-        # interleave rows so prediction below input
-        A = im_left
-        B = im_right
-        C = np.empty((A.shape[0] + B.shape[0], A.shape[1]))
-        C[::2, :] = A
-        C[1::2, :] = B
-        C = np.reshape(C, (C.shape[0], C.shape[1] / 3, 3))
+        # interleave rows so context below prediction below input
+        A = im_input
+        B = im_prediction
+        C = im_context
+        D = np.empty((A.shape[0] + B.shape[0] + C.shape[0], A.shape[1]))
 
-        im = C
-        im = cv2.resize(im, dsize=(0,0), fx=20, fy=20, interpolation=cv2.INTER_NEAREST)
+        D[::3, :] = A
+        D[1::3, :] = B
+        D[2::3, :] = C
+        D = np.reshape(D, (D.shape[0], D.shape[1] / 3, 3))
+
+        im = D
+        im = cv2.resize(im, dsize=(0,0), fx=10, fy=10, interpolation=cv2.INTER_NEAREST)
 
         return im
 
@@ -270,13 +297,14 @@ def run_experiment():
                                          'error_average_steps': 500,
                                          'entries': 800,
                                          'dim': dim,
+                                         'use_context_in_knn_diff': True,  # if False, input+output only. no context.
                                          'do_random_init': False,
                                          'do_adaptation': True,
                                          'do_replacements': True,
                                          'env_width_height': env_width_height,  # for plotting positions
                                          'plots_prefix': 'init_False_adapt_True_repl_True_800_entries_learn_off_300K'})
 
-    k_to_train = np.arange(3, max_history_length)[start_step_offset::]
+    k_to_train = np.arange(3, max_history_length - 1)[start_step_offset::]
 
     if do_random_permute_train:
         k_to_train = np.random.permutation(k_to_train)
@@ -306,14 +334,21 @@ def run_experiment():
         input_state = states_history[k, :]
         x_y_theta = td_info_history[k, :]
 
+        next_input_state = states_history[k + 1, :]
+
         if do_display:
             _do_display(input_state, dim, scale_camera_factor)
 
         ensemble.step(last_input_state=last_input_state,
                       input_state=input_state,
+                      next_input_state=next_input_state,
                       last_x_y_theta=last_x_y_theta,
                       x_y_theta=x_y_theta,
                       learn=(t < learning_off_time))
+
+        if t == learning_off_time:
+            print 'SAVING TABLE AND POSITIONS'
+            ensemble.save_table_and_debug_positions()
 
         if time.time() > last_imshow_time + imshow_every_k_seconds:
             im = ensemble.get_table_im()
@@ -326,6 +361,7 @@ def run_experiment():
             ensemble.plot_error(fig, ax)
             last_plot_time = time.time()
         t += 1
+
 
 if __name__ == '__main__':
     run_experiment()
