@@ -148,7 +148,12 @@ def run_demo(demo_components):
                                                          robot_brain=robot_brain)
 
         if new_goal_chosen_this_step:
-            robot_brain.process_new_goal_states(goal_states=task_manager.get_task_goal_states())
+            robot_brain.process_new_goal_states(goal_states=task_manager.get_task_goal_states(),
+                                                # these parameters are needed for displaying planned paths:
+                                                visualizer=visualizer,
+                                                rays=robot_sensors.get_rays(),
+                                                topdown_info=robot_environment.get_topdown_info(),
+                                                current_goal_position_angle=task_manager.get_current_goal_position_angle())
 
         robot_sensors.read_input(nonzero_tiles=robot_environment.get_nonzero_tiles(),
                                  robot_theta=robot_environment.get_robot_theta())

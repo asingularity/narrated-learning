@@ -1,4 +1,6 @@
 import pickle
+import time
+import cv2
 import numpy as np
 np.set_printoptions(suppress=True)
 from fast_save_matrix import savetxt
@@ -80,14 +82,27 @@ class RobotBrain(object):
 
         self.t += 1
 
-    def process_new_goal_states(self, goal_states):
+    def process_new_goal_states(self, goal_states, visualizer, rays, topdown_info, current_goal_position_angle):
         self.goal_states = goal_states
+        starting_state = self.states_history.get_state(state_index=0, delay=0)
 
-        # TODO do planning here, display planned sequence of states and positions/angles
-        #   should be here (not visualizer) because we want to show plan as it converges, before sim moves on
-        print 'Processing new goal state:', goal_states
+        if starting_state is not None:
+            print 'planning...'
+            plan_position_angle_list = None
 
-        # TODO set self.goal_states (for later use in process_input)
+            #plan_position_angle_list = self.predictor_ensemble.plan_and_get_debug_position_angle_list(goal_states=goal_states,
+            #                                                                                          starting_state=starting_state)
+
+            print 'finished planning. showing plan for 5 seconds.'
+
+            # change this to public function. pass in plan_position_angle_list as computed here, and display here as planning converges:
+            im = visualizer._get_topdown_map(rays, topdown_info, current_goal_position_angle, plan_position_angle_list)
+            cv2.imshow('planned', im)
+            cv2.waitKey(1)
+            time.sleep(5)
+            # later, next motor command will be computed here or in process_input based on proximal states in the plan
+        else:
+            print 'starting state is None. skipping planning.'
 
     def get_plan_position_angle_list(self, rays, goal_states):
         '''

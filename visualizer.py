@@ -46,7 +46,7 @@ class Visualizer(object):
             self.last_FPS_time = time.time()
         self.fps_frames += 1
 
-    def _display_graphic_map(self, rays, robot_brain, topdown_info, current_goal_position_angle, plan_position_angle_list):
+    def _get_topdown_map(self, rays, topdown_info, current_goal_position_angle, plan_position_angle_list):
         im = topdown_info['env_map_copy']
         robot_x = topdown_info['robot_x']
         robot_y = topdown_info['robot_y']
@@ -62,7 +62,7 @@ class Visualizer(object):
 
         resized_image = cv2.resize(src=im, dsize=(0, 0), fx=self.scale_topdown_factor, fy=self.scale_topdown_factor, interpolation=cv2.INTER_NEAREST)
 
-        # TODO rays should be drawn on resized image? so always width 1
+        # rays should be drawn on resized image so always width 1
 
         if plan_position_angle_list is not None:
 
@@ -141,6 +141,12 @@ class Visualizer(object):
                      pt2=(int(pt2_x * self.scale_topdown_factor), int(pt2_y * self.scale_topdown_factor)),
                      color=(ray_color[0], ray_color[1], ray_color[2]),
                      thickness=1)
+
+        return resized_image
+
+    def _display_graphic_map(self, rays, robot_brain, topdown_info, current_goal_position_angle, plan_position_angle_list):
+        ray_colors = rays['ray_colors'].reshape((len(rays['ray_colors']) / 3, 3))
+        resized_image = self._get_topdown_map(rays, topdown_info, current_goal_position_angle, plan_position_angle_list)
 
         cv2.imshow('env_map', resized_image)
 

@@ -55,7 +55,7 @@ class RobotSensors(object):
         self.ray_degrees = np.linspace(-fov_degrees / 2.0, fov_degrees / 2.0, self.num_rays)
         self.ray_radians = (pi / 180.0) * self.ray_degrees
         self.relative_ray_radians = self.ray_radians.copy()
-        self.ray_colors = np.zeros(self.num_rays)
+        self.ray_colors = np.zeros(self.num_rays * 3)
         self.ray_lengths = np.zeros(self.num_rays)
 
         self.pool = mp.Pool(processes=num_processes)
