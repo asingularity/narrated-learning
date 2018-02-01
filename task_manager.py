@@ -37,10 +37,13 @@ class TaskManager(object):
         self.goal_r_y = None
         self.goal_r_theta = None
 
-        self.sets_param_name = params['sets_param_name']
-        self.sets_param_values = params['sets_param_values']
+        #'sets_param_name': 'brain.random_motor_out',
+        #'sets_param_values': [False]  # [False, True]
+        #self.sets_param_name = params['sets_param_name']
+        #self.sets_param_values = params['sets_param_values']
+        #self.num_sets = len(self.sets_param_values)
 
-        self.num_sets = len(self.sets_param_values)
+        self.num_sets = 1
         self.position_errors_by_set_and_trial = np.zeros((self.num_sets, self.num_trials_per_set))
         self.theta_errors_by_set_and_trial = np.zeros((self.num_sets, self.num_trials_per_set))
 
@@ -55,7 +58,7 @@ class TaskManager(object):
         self.task_goal_states = None
 
     def do_step(self, topdown_info, robot_environment, robot_sensors, robot_brain):
-
+        new_goal = False
         if self.task_mode_enabled:
             if self.t_trial >= self.t_trial_max or self.goal_r_theta is None:  # need to start new trial
                 if self.goal_r_theta is not None:  # not first trial of sim
@@ -67,13 +70,14 @@ class TaskManager(object):
                         self.set += 1
                     if self.set >= self.num_sets:
                         self.all_sets_done = True
-                        return
+                        return False
                     else:  # not finished with all sets yet
-                        if self.sets_param_name == 'brain.random_motor_out':
-                            print 'setting ', self.sets_param_name, 'to value:', self.sets_param_values[self.set]
-                            robot_brain.set_always_random_motor(self.sets_param_values[self.set])
-                        else:
-                            assert False, 'unsupported param name: ' + str(self.sets_param_name)
+                        pass
+                        #if self.sets_param_name == 'brain.random_motor_out':
+                        #    print 'setting ', self.sets_param_name, 'to value:', self.sets_param_values[self.set]
+                        #    robot_brain.set_always_random_motor(self.sets_param_values[self.set])
+                        #else:
+                        #    assert False, 'unsupported param name: ' + str(self.sets_param_name)
                 else:  # new trial, but same set
                     self.trial += 1
 
@@ -86,9 +90,8 @@ class TaskManager(object):
                 task_goal_rays = robot_sensors.get_rays(nonzero_tiles=task_goal_nonzero_tiles,
                                                         robot_position_angle=(self.goal_r_x, self.goal_r_y, self.goal_r_theta))
                 task_goal_sensory_input = task_goal_rays['ray_colors']
-                self.task_goal_states = robot_brain.get_autoencoder_states_for_input(net_input=task_goal_sensory_input)
-
-                robot_brain.reset_for_new_task()
+                self.task_goal_states = task_goal_sensory_input
+                new_goal = True
             else:  # don't need to start new trial
                 self.t_trial += 1
 
@@ -96,6 +99,7 @@ class TaskManager(object):
                     time.sleep(self.sleep_every_trial)
 
         self.step += 1
+        return new_goal
 
     def finished_sim(self):
         '''

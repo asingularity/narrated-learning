@@ -1,4 +1,3 @@
-
 import random
 import numpy as np
 random.seed(6)
@@ -19,9 +18,8 @@ MAX_HISTORY_LENGTH = 1000000 + 1
 USERNAME = 'intec'
 NUM_INPUT_RAYS = 16
 INPUT_DIM = NUM_INPUT_RAYS * 3
-EXPLORE_MODE_SWITCH_TIME = None  # 100000
 
-SIM_LOAD_NAME = 'None'  # '2017-07-16T10:36:42.494275_random_exploration_200K'
+SIM_LOAD_NAME = None
 
 
 def get_model_params():
@@ -53,46 +51,14 @@ def get_brain_params():
     params = {
         # ************ general ************
         'max_history_length': MAX_HISTORY_LENGTH,
-        'error_average_steps': 5000,  # 1000
-        'predictors_enable': True,
+        'error_average_steps': 1000,
         'training_delay': 128,
-        'use_advanced_exploration': False,
-        'explore_mode_switch_time': EXPLORE_MODE_SWITCH_TIME,
-        # ************ autoencoders ************
-        'autoencoders': [
-            {'num_inputs': INPUT_DIM, 'num_hidden': INPUT_DIM / 2, 'learning_rate': 0.01}
-            #{'num_inputs': INPUT_DIM / 2, 'num_hidden': INPUT_DIM / 4, 'learning_rate': 0.01},
-            #{'num_inputs': INPUT_DIM / 4, 'num_hidden': INPUT_DIM / 8, 'learning_rate': 0.01}
-        ],
-        'autoencoders_training_time_range': [0, MAX_HISTORY_LENGTH],
-        'autoencoders_save_every_k_steps': MAX_HISTORY_LENGTH - 1,  # 50000,
-        'autoencoders_enable_training': False,
-        'autoencoders_load_from_file': False,
-        'autoencoders_load_filename': '/home/' + USERNAME + '/NL-sim/' + SIM_LOAD_NAME + '/autoencoders.pkl',
-        # ************ predictors ************
-        'predictors': [
-            {'state_index_input': 0, 'state_index_context': 0, 'state_index_output': 0, 'dt_context': 2, 'dt_output': 1},
-            {'state_index_input': 0, 'state_index_context': 0, 'state_index_output': 0, 'dt_context': 4, 'dt_output': 2}
-            #{'state_index_input': 0, 'state_index_context': 0, 'state_index_output': 0, 'dt_context': 8, 'dt_output': 4},
-            #{'state_index_input': 0, 'state_index_context': 0, 'state_index_output': 0, 'dt_context': 16, 'dt_output': 8},
-        ],
-        'predictors_training_time_range': [0, MAX_HISTORY_LENGTH],
-        'predictors_test_every_k_steps': None,  # 500 for training
-        'predictors_save_every_k_steps': MAX_HISTORY_LENGTH - 1,  # 1000000
-        'predictors_enable_training': False,  # first step
-        'predictors_optimize_training': False,  # second step
-        'predictors_load_from_file': False,
-        'predictors_load_filename': '/home/' + USERNAME + '/NL-sim/' + SIM_LOAD_NAME + '/predictors.pkl',
-        # ************ inverse model ************
-        'inverse_models': [
-            {'state_index_current': 0, 'state_index_future': 0, 'dt': 1}
-        ],
-        'inverse_training_time_range': [0, MAX_HISTORY_LENGTH],
-        'inverse_test_every_k_steps': None,  # 10,
-        'inverse_save_every_k_steps': MAX_HISTORY_LENGTH - 1,  # 50000,
-        'inverse_enable_training': False,
-        'inverse_load_from_file': False,
-        'inverse_load_filename': '/home/' + USERNAME + '/NL-sim/' + SIM_LOAD_NAME + '/inverse.pkl',
+        'input_dim': INPUT_DIM,
+
+        # ************ I-O-C predictor ensemble ************
+        # TO DO: add online training back in
+        'predictor_ensemble_load_from_file': False,
+        'predictor_ensemble_filename': None,
     }
     return params
 
@@ -117,7 +83,7 @@ def get_environment_params():
 def get_visualizer_params():
     params = {
         'fps_display_interval': 3,
-        'plot_brain_error_frames': 100000,
+        'plot_brain_error_frames': None,
         'image_display_frames_fast': 1000,  # 1  # 1000
         'waitKey_time_fast': 1,  # 1, 100, 5000
         'image_display_frames_slow': 1,  # 1  # 1000
@@ -125,7 +91,7 @@ def get_visualizer_params():
         'scale_topdown_factor': 20,
         'scale_camera_factor': 20,
         'no_wall_ray_color': (0.1, 0.1, 0.1),
-        'auto_switch_to_slow_disp_time': EXPLORE_MODE_SWITCH_TIME  # None
+        'auto_switch_to_slow_disp_time': None
     }
     return params
 
@@ -135,15 +101,13 @@ def get_task_manager_params():
         'run_steps_if_task_mode_disabled': MAX_HISTORY_LENGTH,
         'enabled': False,
         'num_trials_per_set': 5000,
-        'sleep_every_trial': 0.5,  #  0.5,  # to be able to see the next goal
+        'sleep_every_trial': 0.5,  # to be able to see the next goal
         'constrain_to_params': True,
         'max_trial_steps': 2,
         'min_delta_theta': -pi/6.0,
         'max_delta_theta': pi/6.0,
         'min_distance': 5,
-        'max_distance': 5,
-        'sets_param_name': 'brain.random_motor_out',
-        'sets_param_values': [False]  # [False, True]
+        'max_distance': 5
     }
     return params
 
@@ -177,10 +141,13 @@ def run_demo(demo_components):
 
     while not task_manager.finished_sim():
 
-        task_manager.do_step(topdown_info=robot_environment.get_topdown_info(),
-                             robot_environment=robot_environment,
-                             robot_sensors=robot_sensors,
-                             robot_brain=robot_brain)
+        new_goal_chosen_this_step = task_manager.do_step(topdown_info=robot_environment.get_topdown_info(),
+                                                         robot_environment=robot_environment,
+                                                         robot_sensors=robot_sensors,
+                                                         robot_brain=robot_brain)
+
+        if new_goal_chosen_this_step:
+            robot_brain.process_new_goal_states(goal_states=task_manager.get_task_goal_states())
 
         robot_sensors.read_input(nonzero_tiles=robot_environment.get_nonzero_tiles(),
                                  robot_theta=robot_environment.get_robot_theta())
@@ -190,11 +157,8 @@ def run_demo(demo_components):
 
         robot_brain.process_input(rays=robot_sensors.get_rays(),
                                   last_motor_command=robot_model.get_last_motor_command(),
-                                  goal_states=task_manager.get_task_goal_states(),
                                   models_save_folder=sim_folder_manager.get_models_save_folder(),
                                   debug_topdown_info=robot_environment.get_topdown_info())  # for storing robot position, angle for debugging planning
-
-        #print 'DEBUG: ', robot_brain.debug_topdown_info_history.t, robot_brain.states_history.t
 
         robot_model.act_upon_processing(motor_command=robot_brain.get_motor_output())
 

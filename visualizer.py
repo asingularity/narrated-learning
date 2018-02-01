@@ -58,24 +58,6 @@ class Visualizer(object):
         ray_colors = rays['ray_colors'].reshape((len(rays['ray_colors']) / 3, 3))
         ray_lengths = rays['ray_lengths']
 
-        autoenc_images = robot_brain.get_autoenc_images()
-        autoenc_images_color = np.zeros((autoenc_images.shape[0], autoenc_images.shape[1] / 3, 3))
-        for r in range(autoenc_images.shape[0]):
-            tmp = autoenc_images[r, :].reshape(autoenc_images.shape[1] / 3, 3)
-            autoenc_images_color[r, :, 0] = tmp[:, 0]
-            autoenc_images_color[r, :, 1] = tmp[:, 1]
-            autoenc_images_color[r, :, 2] = tmp[:, 2]
-
-        resized_autoenc = cv2.resize(src=autoenc_images_color, dsize=(0, 0), fx=self.scale_camera_factor, fy=self.scale_camera_factor, interpolation=cv2.INTER_NEAREST)
-        cv2.imshow('autoenc', resized_autoenc)
-
-        enable_ctx_predictor_debug = False
-        if enable_ctx_predictor_debug:
-            predictor_debug_images = robot_brain.get_predictor_images()
-            resized_predictor_debug_images = cv2.resize(src=predictor_debug_images, dsize=(0, 0), fx=self.scale_camera_factor,
-                                         fy=self.scale_camera_factor, interpolation=cv2.INTER_NEAREST)
-            cv2.imshow('ctx_predictor_debug_images', resized_predictor_debug_images)
-
         im[round_y, round_x] = 1.0
 
         resized_image = cv2.resize(src=im, dsize=(0, 0), fx=self.scale_topdown_factor, fy=self.scale_topdown_factor, interpolation=cv2.INTER_NEAREST)
@@ -246,14 +228,14 @@ class Visualizer(object):
             if self.frames % self.image_display_frames == 0:
                 self._display_graphic_map(rays, robot_brain, topdown_info, current_goal_position_angle, plan_position_angle_list)
 
-        if self.frames % self.plot_brain_error_frames == 0:
+        if self.plot_brain_error_frames is not None and self.frames % self.plot_brain_error_frames == 0:
             self._plot_brain_errors(robot_brain, plots_save_folder)
 
         self._display_fps()
 
         self.frames += 1
         if self.auto_switch_to_slow_disp_time is not None:
-            if self.frames == self.auto_switch_to_slow_disp_time:
+            if self.frames >= self.auto_switch_to_slow_disp_time:
                 self.toggle_viewer_slow = True
                 self.image_display_frames = self.image_display_frames_slow
                 self.waitKey_time = self.waitKey_time_slow
