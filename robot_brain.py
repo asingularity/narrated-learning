@@ -88,10 +88,9 @@ class RobotBrain(object):
 
         if starting_state is not None:
             print 'planning...'
-            plan_position_angle_list = None
 
-            #plan_position_angle_list = self.predictor_ensemble.plan_and_get_debug_position_angle_list(goal_states=goal_states,
-            #                                                                                          starting_state=starting_state)
+            plan_position_angle_list = self.predictor_ensemble.plan_and_get_debug_position_angle_list(goal_state=goal_states,
+                                                                                                      starting_state=starting_state)
 
             print 'finished planning. showing plan for 5 seconds.'
 

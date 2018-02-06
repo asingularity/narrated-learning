@@ -3,6 +3,7 @@ from knn_parallel import knn_query as knn_parallel_query
 import time
 import cv2
 import pickle
+import random
 import numpy as np
 np.set_printoptions(suppress=True)
 #from PVM.PVM_framework import MLP
@@ -163,22 +164,83 @@ class PredictorEnsemble(object):
                     #else:
                     #    print 'NOT replacing: ', r_r_c_eff
 
+    def plan_and_get_debug_position_angle_list(self, goal_state, starting_state):
+        print 'predictor_ensemble::plan_and_get_debug_position_angle_list'
+
+        # print goal_state.shape, starting_state.shape  # 48, 48
+        # print self.table.shape # (800, 144)
+        # print self.dim  # 48
+
+        # planning:
+        N = 5  # currently this is also number of planned steps
+        iter_steps = 100
+        # TODO should be able to display plan as it evolves, inside this function, each iteration
+        # for now, just display intermediate states here
+
+        # rows: implicit - table_output - output rows are always the same column of same table.
+        #   currently all rows are implicitly propagated with some assigned uncertainty
+        #   (will require all-to-all distance pre-compute between input & context, output & context, input & output)
+        # uncertainties: inverse confidence (propagated error) of next or previous level's predictions.
+        #   needs normalization?
+
+        output_uncertainties = {}
+
+        for k in range(N):
+            output_uncertainties[k] = None
+
+        for iter_step in range(iter_steps):
+            # run level 0
+            level = 0
+            out_uncert = self._run_level_0(input_starting_state=starting_state,
+                                           context={'rows': 'table_output', 'uncertainties': output_uncertainties[level + 1]})
+            output_uncertainties[level] = out_uncert.copy()
+
+            # run intermediate levels
+            for level in range(1, N - 1):
+                out_uncert = self._run_level_k(input={'rows': 'table_output', 'uncertainties': output_uncertainties[level - 1]},
+                                               context={'rows': 'table_output', 'uncertainties': output_uncertainties[level + 1]})
+                output_uncertainties[level] = out_uncert.copy()
+
+            # run highest level: N - 1
+            level = N - 1
+            out_uncert = self._run_level_N(input={'rows': 'table_output', 'uncertainties': output_uncertainties[level - 1]},
+                                           context_goal_state=goal_state)
+            output_uncertainties[level] = out_uncert.copy()
+
+        # return random positions & angles
+        # TODO fix this to return real position angle list!
+        plan_position_angle_list = []
+
+        for k in range(N):
+            rand_entry = random.randint(0, self.entries - 1)
+            plan_position_angle_list.append((self.debug_x_y_theta_output[rand_entry, 0],
+                                             self.debug_x_y_theta_output[rand_entry, 1],
+                                             self.debug_x_y_theta_output[rand_entry, 2]))
+
+        return plan_position_angle_list
+
+    def _run_level_0(self, input_starting_state, context):
+        '''
+        :param input_starting_state: single array of size self.dim
+        :param context: dict, ex: {'rows': 'table_output', 'uncertainties': output_uncertainties[level + 1]}
+        :return: single array of size self.entries
+        '''
+
+        out_uncert = np.ones(1)
+        return out_uncert
+
+    def _run_level_k(self, input, context):
+        out_uncert = np.ones(1)
+        return out_uncert
+
+    def _run_level_N(self, input, context_goal_state):
+        out_uncert = np.ones(1)
+        return out_uncert
+
     def save_to_pkl(self):
         f = open(self.plots_save_folder + '/offline_trained_' + self.plots_prefix + '_' + '_PredictorEnsemble.pkl', 'w')
         pickle.dump(self, f)
         f.close()
-
-        #f = open(self.plots_save_folder + '/offline_trained_' + self.plots_prefix + '_' + '_I_O_C_table.pkl', 'w')
-        #pickle.dump(self.table, f)
-        #f.close()
-
-        #f = open(self.plots_save_folder + '/offline_trained_' + self.plots_prefix + '_' + '_I_debug_x_y_theta.pkl', 'w')
-        #pickle.dump(self.debug_x_y_theta_input, f)
-        #f.close()
-
-        #f = open(self.plots_save_folder + '/offline_trained_' + self.plots_prefix + '_' + '_O_debug_x_y_theta.pkl', 'w')
-        #pickle.dump(self.debug_x_y_theta_output, f)
-        #f.close()
 
     def get_table_im(self):
 

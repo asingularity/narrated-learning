@@ -65,33 +65,33 @@ class Visualizer(object):
         # rays should be drawn on resized image so always width 1
 
         if plan_position_angle_list is not None:
+            if 0:
+                input_td_info = plan_position_angle_list[0]
+                context_td_info = plan_position_angle_list[1]
+                output_td_info = plan_position_angle_list[2]
 
-            input_td_info = plan_position_angle_list[0]
-            context_td_info = plan_position_angle_list[1]
-            output_td_info = plan_position_angle_list[2]
+                br = 1.0
+                for td_info in [input_td_info, context_td_info]: #, output_td_info]:
+                    r_x = td_info[0]
+                    r_y = td_info[1]
+                    r_theta = td_info[2]
 
-            br = 1.0
-            for td_info in [input_td_info, context_td_info]: #, output_td_info]:
-                r_x = td_info[0]
-                r_y = td_info[1]
-                r_theta = td_info[2]
-
-                cv2.circle(img=resized_image,
-                           center=(int(r_x * self.scale_topdown_factor), int(r_y * self.scale_topdown_factor)),
-                           radius=5,
-                           color=(1.0 * br, 1.0 * br, 1.0 * br),
-                           thickness=3)
-                g2_x = r_x + 0.5 * cos(r_theta)
-                g2_y = r_y + 0.5 * sin(r_theta)
-                cv2.line(resized_image,
-                         pt1=(int(r_x * self.scale_topdown_factor), int(r_y * self.scale_topdown_factor)),
-                         pt2=(int(g2_x * self.scale_topdown_factor), int(g2_y * self.scale_topdown_factor)),
-                         color=(0.5, 0.5, 0),
-                         thickness=2)
-                br *= 0.5
+                    cv2.circle(img=resized_image,
+                               center=(int(r_x * self.scale_topdown_factor), int(r_y * self.scale_topdown_factor)),
+                               radius=5,
+                               color=(1.0 * br, 1.0 * br, 1.0 * br),
+                               thickness=3)
+                    g2_x = r_x + 0.5 * cos(r_theta)
+                    g2_y = r_y + 0.5 * sin(r_theta)
+                    cv2.line(resized_image,
+                             pt1=(int(r_x * self.scale_topdown_factor), int(r_y * self.scale_topdown_factor)),
+                             pt2=(int(g2_x * self.scale_topdown_factor), int(g2_y * self.scale_topdown_factor)),
+                             color=(0.5, 0.5, 0),
+                             thickness=2)
+                    br *= 0.5
 
             # plan
-            if False:
+            if True:
                 br = 1.0
                 for td_info in plan_position_angle_list:
                     r_x = td_info[0]
@@ -111,7 +111,7 @@ class Visualizer(object):
                              color=(0.5 * br, 0.5 * br, 0),
                              thickness=2)
 
-                    br *= 0.5
+                    br *= 0.8
 
         goal_x, goal_y, goal_theta = current_goal_position_angle
         if goal_x is not None:
