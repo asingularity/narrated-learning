@@ -59,7 +59,8 @@ def get_brain_params():
         # ************ I-O-C predictor ensemble ************
         # TO DO: add online training back in
         'predictor_ensemble_load_from_file': True,
-        'predictor_ensemble_filename': '/home/' + USERNAME + '/NL-sim/' + SIM_LOAD_NAME + '/offline_trained_init_0_adapt_1_repl_1_800_entries_learn_off_500K__PredictorEnsemble.pkl',
+        #'predictor_ensemble_filename': '/home/' + USERNAME + '/NL-sim/' + SIM_LOAD_NAME + '/offline_trained_init_0_adapt_1_repl_1_800_entries_learn_off_500K__PredictorEnsemble.pkl',
+        'predictor_ensemble_filename': '/home/' + USERNAME + '/NL-sim/' + SIM_LOAD_NAME + '/offline_trained_init_1_adapt_1_repl_1_8000_entries_learn_off_900K__PredictorEnsemble.pkl'
     }
     return params
 

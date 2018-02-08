@@ -67,6 +67,43 @@ class PredictorEnsemble(object):
         self.t = 0
         self.last_replacement_t = 0
 
+        # things to precompute
+        self.output_input_distance = None
+        self.output_context_distance = None
+
+    def precompute_distances(self):
+        '''
+        to be run after learning, on a learned table
+        called after loading ensemble from file, in robot_brain.py
+        :return: nothing. fills in self.input_output_distance, self.context_output_distance
+        '''
+
+        # *** table is: | input | output | context | ***
+
+        # dist, ind = knn_parallel_query(self.table, new_entry, self.temp_array, self.table.shape[0], self.dim * 3)
+
+        table_input = np.ascontiguousarray(self.table[:, 0:self.dim])
+        table_output = np.ascontiguousarray(self.table[:, self.dim:self.dim * 2])
+        table_context = np.ascontiguousarray(self.table[:, self.dim * 2::])
+
+        self.table_input = table_input.astype(np.float32)
+        self.table_output = table_output.astype(np.float32)
+        self.table_context = table_context.astype(np.float32)
+
+        print table_input.shape, table_output.shape, table_context.shape
+
+        self.output_input_distance = np.zeros((self.entries, self.entries))
+        for k in range(self.entries):
+            output_entry = table_output[k, :]
+            dist, ind = knn_parallel_query(table_input, output_entry, self.temp_array, self.table.shape[0], self.dim)
+            self.output_input_distance[k, range(0, self.entries)] = self.temp_array[:]
+
+        self.output_context_distance = np.zeros((self.entries, self.entries))
+        for k in range(self.entries):
+            output_entry = table_output[k, :]
+            dist, ind = knn_parallel_query(table_context, output_entry, self.temp_array, self.table.shape[0], self.dim)
+            self.output_context_distance[k, range(0, self.entries)] = self.temp_array[:]
+
     def step(self, last_input_state, input_state, next_input_state, last_x_y_theta, x_y_theta, learn=True):
         '''
         for learning mode
@@ -137,7 +174,7 @@ class PredictorEnsemble(object):
                 self.debug_x_y_theta_input[ind, :] = 0.9 * self.debug_x_y_theta_input[ind, :] + 0.1 * last_x_y_theta[:]
 
             min_replaced_row_age = 1000
-            replacement_every_k_steps = 100
+            replacement_every_k_steps = 10  # TODO put as parameter. 100 for 800 rows, 10 for 8000 rows
 
             if do_replacements:
                 row_replace_candidates = np.nonzero(self.row_ages > min_replaced_row_age)[0]
@@ -173,7 +210,7 @@ class PredictorEnsemble(object):
 
         # planning:
         N = 5  # currently this is also number of planned steps
-        iter_steps = 100
+        iter_steps = 10
         # TODO should be able to display plan as it evolves, inside this function, each iteration
         # for now, just display intermediate states here
 
@@ -193,48 +230,152 @@ class PredictorEnsemble(object):
             level = 0
             out_uncert = self._run_level_0(input_starting_state=starting_state,
                                            context={'rows': 'table_output', 'uncertainties': output_uncertainties[level + 1]})
+            #print 'setting output uncertainties, level:', level
             output_uncertainties[level] = out_uncert.copy()
 
             # run intermediate levels
             for level in range(1, N - 1):
                 out_uncert = self._run_level_k(input={'rows': 'table_output', 'uncertainties': output_uncertainties[level - 1]},
-                                               context={'rows': 'table_output', 'uncertainties': output_uncertainties[level + 1]})
+                                               context={'rows': 'table_output', 'uncertainties': output_uncertainties[level + 1]},
+                                               debug_print=False)#(level==2))
+                if 0: #level == 2:
+                    print '**////'
+                    print output_uncertainties[level - 1], output_uncertainties[level + 1]
+                    print '**////'
+                    print out_uncert
+                    print '////***'
+                #print 'setting output uncertainties, level:', level
                 output_uncertainties[level] = out_uncert.copy()
 
             # run highest level: N - 1
             level = N - 1
             out_uncert = self._run_level_N(input={'rows': 'table_output', 'uncertainties': output_uncertainties[level - 1]},
                                            context_goal_state=goal_state)
+            #print 'setting output uncertainties, level:', level
             output_uncertainties[level] = out_uncert.copy()
 
+            #print 'iter: ', iter_step
+            #print output_uncertainties[2][30:35]
+            #print
+            #print '***************************'
         # return random positions & angles
         # TODO fix this to return real position angle list!
         plan_position_angle_list = []
 
         for k in range(N):
-            rand_entry = random.randint(0, self.entries - 1)
+            #rand_entry = random.randint(0, self.entries - 1)
+            rand_entry = np.argmin(output_uncertainties[k])
+
             plan_position_angle_list.append((self.debug_x_y_theta_output[rand_entry, 0],
                                              self.debug_x_y_theta_output[rand_entry, 1],
                                              self.debug_x_y_theta_output[rand_entry, 2]))
 
+        print plan_position_angle_list
+
         return plan_position_angle_list
+
+    def _compute_uncertainty(self, output_to_column_distance, output_column_uncertainties):
+        '''
+        :param dist_mat: ex. self.output_context_distance, or self.output_input_distance
+        :param output_column_uncertainties: ex. uncertainty associated with each output-column row
+        :return: uncertainty associated with each input or context row
+        '''
+
+        #  compute context "uncertainties" by computing:
+        #  for each row in input/context column of table:
+        #       1. compute distance to each row in output column of table.
+        #       2. weight by output_uncertainty of that row. (from "context" parameter)
+        #       3. take min or max? for "sum" uncertainty for this input/context-column row
+        uncert = []
+        for k in range(self.entries):
+            if output_column_uncertainties is None:
+                row_uncert = output_to_column_distance[:, k]
+            else:
+                v1 = output_to_column_distance[:, k]
+                #if np.amin(v1) == 0.0:
+                    #print '**@#$Q@#%$*&#%'
+                    #print k
+                    #print np.argmin(v1)
+                v2 = output_column_uncertainties
+                row_uncert = self._combine_uncertainties(v1, v2)  # np.multiply???
+
+#            print '*k', k, row_uncert
+            row_uncert = np.amin(row_uncert)
+
+            uncert.append(row_uncert)
+
+        #print '*********************'
+        #print '*** 1'
+        #print np.amin(output_to_column_distance)
+        #print '**** 2'
+        #print np.sum(np.array(uncert))
+
+        return np.array(uncert)
+
+    def _combine_uncertainties(self, uncert_1, uncert_2):
+        uncert_3 = uncert_1 + uncert_2
+        #uncert_3 = np.sum(uncert_1, uncert_2)
+        #uncert_3 = uncert_3 * 1.0 / np.amax(uncert_3)
+        return uncert_3
 
     def _run_level_0(self, input_starting_state, context):
         '''
+
+        out_uncert = self._run_level_0(input_starting_state=starting_state,
+                                       context={'rows': 'table_output', 'uncertainties': output_uncertainties[level + 1]})
+
         :param input_starting_state: single array of size self.dim
         :param context: dict, ex: {'rows': 'table_output', 'uncertainties': output_uncertainties[level + 1]}
         :return: single array of size self.entries
         '''
 
-        out_uncert = np.ones(1)
+        self.temp_array = np.zeros(self.entries).astype(np.float32)
+
+        # receive: input vector of current input
+        # receive: each output row of table, as context, and associated uncertainty
+        # compute: uncertainty for all output rows
+
+        # take distance of input_starting_state to all rows in input column to get input "uncertainties"
+        dist, ind = knn_parallel_query(self.table, input_starting_state, self.temp_array, self.table.shape[0], self.dim)
+        input_uncertainties = self.temp_array.copy()
+
+        context_uncertainties = self._compute_uncertainty(output_to_column_distance=self.output_context_distance,
+                                                          output_column_uncertainties=context['uncertainties'])
+
+        # for now define output_uncertainty as max or sum (input_uncertainty, context_uncertainty)
+        out_uncert = self._combine_uncertainties(input_uncertainties, context_uncertainties)
+
         return out_uncert
 
-    def _run_level_k(self, input, context):
-        out_uncert = np.ones(1)
+    def _run_level_k(self, input, context, debug_print=False):
+
+        input_uncertainties = self._compute_uncertainty(output_to_column_distance=self.output_input_distance,
+                                                        output_column_uncertainties=input['uncertainties'])
+
+        context_uncertainties = self._compute_uncertainty(output_to_column_distance=self.output_context_distance,
+                                                          output_column_uncertainties=context['uncertainties'])
+
+        out_uncert = self._combine_uncertainties(input_uncertainties, context_uncertainties)
+
+        if debug_print:
+            print '~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~'
+            print input_uncertainties
+            print context_uncertainties
+            print out_uncert
+            print '``````````````````````````````````````'
+
         return out_uncert
 
     def _run_level_N(self, input, context_goal_state):
-        out_uncert = np.ones(1)
+
+        input_uncertainties = self._compute_uncertainty(output_to_column_distance=self.output_input_distance,
+                                                        output_column_uncertainties=input['uncertainties'])
+
+        dist, ind = knn_parallel_query(self.table_context, context_goal_state, self.temp_array, self.table.shape[0], self.dim)
+        context_uncertainties = self.temp_array.copy()
+
+        out_uncert = self._combine_uncertainties(input_uncertainties, context_uncertainties)
+
         return out_uncert
 
     def save_to_pkl(self):

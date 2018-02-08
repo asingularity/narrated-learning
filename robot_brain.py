@@ -22,6 +22,9 @@ class RobotBrain(object):
             self.predictor_ensemble = pickle.load(f)
             f.close()
             print 'done loading predictor ensemble.'
+            print 'precomputing distances...'
+            self.predictor_ensemble.precompute_distances()
+            print 'done precomputing distances.'
         else:
             self.predictor_ensemble = None
 
@@ -92,13 +95,13 @@ class RobotBrain(object):
             plan_position_angle_list = self.predictor_ensemble.plan_and_get_debug_position_angle_list(goal_state=goal_states,
                                                                                                       starting_state=starting_state)
 
-            print 'finished planning. showing plan for 5 seconds.'
+            print 'finished planning. showing plan for 1 seconds.'
 
             # change this to public function. pass in plan_position_angle_list as computed here, and display here as planning converges:
             im = visualizer._get_topdown_map(rays, topdown_info, current_goal_position_angle, plan_position_angle_list)
             cv2.imshow('planned', im)
             cv2.waitKey(1)
-            time.sleep(5)
+            time.sleep(1)
             # later, next motor command will be computed here or in process_input based on proximal states in the plan
         else:
             print 'starting state is None. skipping planning.'

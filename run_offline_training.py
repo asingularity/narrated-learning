@@ -70,28 +70,28 @@ def run_experiment():
     max_history_length = states_history.shape[0]
     scale_camera_factor = 32
     do_display = False
-    plot_error_every_k_seconds = 10
+    plot_error_every_k_seconds = 60
     imshow_every_k_seconds = 1
     start_step_offset = 0
     env_width_height = 30
 
     do_random_permute_train = True
     #learning_off_time = np.inf
-    learning_off_time = 500000
+    learning_off_time = 900000
     #sim_off_time = np.inf
-    sim_off_time = 600000
+    sim_off_time = 950000
 
     ensemble = PredictorEnsemble(params={'max_history_length': max_history_length,
                                          'plots_save_folder': plots_save_folder,
                                          'error_average_steps': 500,
-                                         'entries': 800,
+                                         'entries': 8000,
                                          'dim': dim,
                                          'use_context_in_knn_diff': True,  # if False, input+output only. no context.
-                                         'do_random_init': False,
+                                         'do_random_init': True,
                                          'do_adaptation': True,
                                          'do_replacements': True,
                                          'env_width_height': env_width_height,  # for plotting positions
-                                         'plots_prefix': 'init_0_adapt_1_repl_1_800_entries_learn_off_500K'})
+                                         'plots_prefix': 'init_1_adapt_1_repl_1_8000_entries_learn_off_900K'})
 
     k_to_train = np.arange(3, max_history_length - 1)[start_step_offset::]
 

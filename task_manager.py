@@ -90,7 +90,7 @@ class TaskManager(object):
                 task_goal_rays = robot_sensors.get_rays(nonzero_tiles=task_goal_nonzero_tiles,
                                                         robot_position_angle=(self.goal_r_x, self.goal_r_y, self.goal_r_theta))
                 task_goal_sensory_input = task_goal_rays['ray_colors']
-                self.task_goal_states = task_goal_sensory_input
+                self.task_goal_states = task_goal_sensory_input.astype(np.float32)
                 new_goal = True
             else:  # don't need to start new trial
                 self.t_trial += 1
