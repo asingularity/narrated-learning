@@ -111,7 +111,7 @@ class Visualizer(object):
                              color=(0.5 * br, 0.5 * br, 0),
                              thickness=2)
 
-                    br *= 0.95
+                    br *= 0.85
 
         goal_x, goal_y, goal_theta = current_goal_position_angle
         if goal_x is not None:
