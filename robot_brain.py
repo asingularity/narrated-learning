@@ -22,9 +22,10 @@ class RobotBrain(object):
             self.predictor_ensemble = pickle.load(f)
             f.close()
             print 'done loading predictor ensemble.'
-            print 'precomputing distances...'
-            self.predictor_ensemble.precompute_distances()
-            print 'done precomputing distances.'
+
+            print 'precomputing...'
+            self.predictor_ensemble.precompute()
+            print 'done precomputing.'
         else:
             self.predictor_ensemble = None
 

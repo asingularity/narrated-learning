@@ -61,6 +61,7 @@ def get_brain_params():
         'predictor_ensemble_load_from_file': True,
         #'predictor_ensemble_filename': '/home/' + USERNAME + '/NL-sim/' + SIM_LOAD_NAME + '/offline_trained_init_0_adapt_1_repl_1_800_entries_learn_off_500K__PredictorEnsemble.pkl',
         'predictor_ensemble_filename': '/home/' + USERNAME + '/NL-sim/' + SIM_LOAD_NAME + '/offline_trained_init_1_adapt_1_repl_1_8000_entries_learn_off_900K__PredictorEnsemble.pkl'
+        #'predictor_ensemble_filename': '/home/' + USERNAME + '/NL-sim/' + SIM_LOAD_NAME + '/offline_trained_EXPR_init_1_adapt_1_repl_1_40K_entries_learn_off_900K__PredictorEnsemble.pkl'
     }
     return params
 
@@ -75,9 +76,9 @@ def get_environment_params():
         'wall_min_length': 8,
         'wall_max_length': 10,
         'min_space_between_walls': 2,
-        'init_robot_x': 5,
-        'init_robot_y': 5,
-        'init_robot_theta': 45
+        'init_robot_x': 20,
+        'init_robot_y': 17,
+        'init_robot_theta': 270
     }
     return params
 
@@ -137,6 +138,7 @@ def run_demo(demo_components):
 
     use_keyboard_input = False
     random.seed(1233)  # change to make movement different, without different walls
+    #random.seed(346)  # change to make movement different, without different walls
 
     # TODO fix see through walls from left side of vertical wall viewing right
     # TODO is this fixed?

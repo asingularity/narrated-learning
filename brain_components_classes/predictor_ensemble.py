@@ -24,6 +24,8 @@ class PredictorEnsemble(object):
         self.error_history = np.zeros(params['max_history_length'])
         self.mean_error_history = np.zeros(params['max_history_length'])
 
+        self.replacement_every_k_steps = params['replacement_every_k_steps']  # TODO put as parameter. 100 for 800 rows, 10 for 8000 rows
+
         self.use_context_in_knn_diff = params['use_context_in_knn_diff']
 
         self.plots_prefix = params['plots_prefix']
@@ -66,17 +68,20 @@ class PredictorEnsemble(object):
 
         self.t = 0
         self.last_replacement_t = 0
+        self.radius = None
 
         # things to precompute
         self.output_input_distance = None
         self.output_context_distance = None
 
-    def precompute_distances(self):
+    def precompute(self):
         '''
         to be run after learning, on a learned table
         called after loading ensemble from file, in robot_brain.py
         :return: nothing. fills in self.input_output_distance, self.context_output_distance
         '''
+
+        self.original_way = True
 
         # *** table is: | input | output | context | ***
 
@@ -92,17 +97,20 @@ class PredictorEnsemble(object):
 
         print table_input.shape, table_output.shape, table_context.shape
 
-        self.output_input_distance = np.zeros((self.entries, self.entries))
-        for k in range(self.entries):
-            output_entry = table_output[k, :]
-            dist, ind = knn_parallel_query(table_input, output_entry, self.temp_array, self.table.shape[0], self.dim)
-            self.output_input_distance[k, range(0, self.entries)] = self.temp_array[:]
+        precompute_dist = self.original_way
 
-        self.output_context_distance = np.zeros((self.entries, self.entries))
-        for k in range(self.entries):
-            output_entry = table_output[k, :]
-            dist, ind = knn_parallel_query(table_context, output_entry, self.temp_array, self.table.shape[0], self.dim)
-            self.output_context_distance[k, range(0, self.entries)] = self.temp_array[:]
+        if precompute_dist:
+            self.output_input_distance = np.zeros((self.entries, self.entries))
+            for k in range(self.entries):
+                output_entry = table_output[k, :]
+                dist, ind = knn_parallel_query(table_input, output_entry, self.temp_array, self.table.shape[0], self.dim)
+                self.output_input_distance[k, range(0, self.entries)] = self.temp_array[:]
+
+            self.output_context_distance = np.zeros((self.entries, self.entries))
+            for k in range(self.entries):
+                output_entry = table_output[k, :]
+                dist, ind = knn_parallel_query(table_context, output_entry, self.temp_array, self.table.shape[0], self.dim)
+                self.output_context_distance[k, range(0, self.entries)] = self.temp_array[:]
 
     def step(self, last_input_state, input_state, next_input_state, last_x_y_theta, x_y_theta, learn=True):
         '''
@@ -137,6 +145,7 @@ class PredictorEnsemble(object):
 
         # find second best
         sorted_dist_indices = np.argsort(self.temp_array)
+        sorted_dists = self.temp_array[sorted_dist_indices]
         assert self.temp_array[sorted_dist_indices[0]] == dist
         ind2 = sorted_dist_indices[1]
         ind3 = sorted_dist_indices[2]
@@ -147,6 +156,8 @@ class PredictorEnsemble(object):
         mean_index_1 = self.error_step
         self.mean_error_history[self.error_step] = np.mean(self.error_history[mean_index_0:mean_index_1])
         self.error_step += 1
+
+        to_debug_print = {}
 
         if learn:
 
@@ -173,10 +184,27 @@ class PredictorEnsemble(object):
                 self.debug_x_y_theta_output[ind, :] = 0.9 * self.debug_x_y_theta_output[ind, :] + 0.1 * x_y_theta[:]
                 self.debug_x_y_theta_input[ind, :] = 0.9 * self.debug_x_y_theta_input[ind, :] + 0.1 * last_x_y_theta[:]
 
+                if 0:  # try something like a SOM
+                    if self.radius is None:
+                        self.radius = np.inf
+
+                    if self.radius == np.inf:
+                        self.table[:, :] = 0.99 * self.table[:, :] + 0.01 * new_entry
+                        self.radius = 10.0
+                    else:
+                        within_radius = sorted_dist_indices[sorted_dists < self.radius]
+                        self.table[within_radius, :] = 0.99 * self.table[within_radius, :] + 0.01 * new_entry
+                        self.radius *= 0.9999
+
+                        to_debug_print['radius'] = self.radius
+                        to_debug_print['num within'] = len(within_radius)
+
             min_replaced_row_age = 1000
-            replacement_every_k_steps = 10  # TODO put as parameter. 100 for 800 rows, 10 for 8000 rows
+            replacement_every_k_steps = self.replacement_every_k_steps
 
             if do_replacements:
+                #to_debug_print['warning'] = 'doing replacements!'
+
                 row_replace_candidates = np.nonzero(self.row_ages > min_replaced_row_age)[0]
                 effectiveness_mean = np.divide(self.effectiveness_sum, self.effectiveness_num)
 
@@ -201,7 +229,155 @@ class PredictorEnsemble(object):
                     #else:
                     #    print 'NOT replacing: ', r_r_c_eff
 
+        return to_debug_print
+
     def plan_and_get_debug_position_angle_list(self, goal_state, starting_state, visualizer, rays, topdown_info, current_goal_position_angle):
+        print 'predictor_ensemble::plan_and_get_debug_position_angle_list'
+        if self.original_way:
+            return self.plan_and_get_debug_position_angle_list_OLD_ALL_TO_ALL(goal_state, starting_state, visualizer, rays, topdown_info, current_goal_position_angle)
+        else:
+            # planning:
+            N = 5  # currently this is also number of planned steps
+            iter_steps = 10
+            num_to_propagate = 1
+
+            # TODO normalization
+
+            assert self.entries == self.table.shape[0]
+
+            output_uncertainties = {}
+            top_output_rows = {}
+            top_output_row_indices = {}
+            top_output_row_uncertainties = {}
+
+            for k in range(N):
+                output_uncertainties[k] = None
+                top_output_rows[k] = None
+                top_output_row_indices[k] = None
+                top_output_row_uncertainties[k] = None
+
+            for iter_step in range(iter_steps):
+                print 'starting iter_step: ', iter_step
+
+                for level in range(N):
+                    print 'starting level:', level
+                    if level == 0:
+                        input_rows = starting_state[np.newaxis, :]
+                        print 'input_rows.shape:', input_rows.shape
+                    else:
+                        input_rows = top_output_rows[level - 1]
+
+                    if level == N - 1:
+                        context_rows = goal_state[np.newaxis, :]
+                        print 'context_rows.shape:', context_rows.shape
+                    else:
+                        context_rows = top_output_rows[level + 1]
+
+                    # we have K input rows, L context rows coming to Table
+
+                    # for each row in input_rows: calculate distance to self.table_input, update uncertainty totals
+
+                    input_uncertainties = None
+                    if input_rows is not None:
+                        for r in range(input_rows.shape[0]):
+                            dist, ind = knn_parallel_query(self.table_input, input_rows[r, :], self.temp_array, self.table.shape[0], self.dim)
+                            if level == 0:
+                                factor = 1.0
+                            else:
+                                factor = top_output_row_uncertainties[level - 1][r]
+
+                            if input_uncertainties is None:
+                                input_uncertainties = self.temp_array.copy() * factor    # TODO copy necessary?
+                            else:
+                                input_uncertainties = input_uncertainties + self.temp_array + factor
+
+                    # for each row in context_rows: calculate distance to (all rows in ) self.table_context, update uncertainty totals
+
+                    context_uncertainties = None
+                    if context_rows is not None:
+                        for r in range(context_rows.shape[0]):
+                            dist, ind = knn_parallel_query(self.table_context, context_rows[r, :], self.temp_array,
+                                                           self.table.shape[0], self.dim)
+                            if level == N - 1:
+                                factor = 1.0
+                            else:
+                                factor = top_output_row_uncertainties[level + 1][r]
+
+                            if context_uncertainties is None:
+                                context_uncertainties = self.temp_array.copy() * factor   # TODO copy necessary?
+                            else:
+                                context_uncertainties = context_uncertainties + self.temp_array + factor
+
+                    # result should be an uncertainty value for every row (entire output column) of Table
+
+                    assert not (input_uncertainties is None and context_uncertainties is None)
+                    sum_uncertainties = np.zeros(self.entries)
+
+                    if input_uncertainties is not None:
+                        print '+inp: ', np.sum(input_uncertainties * 1.0 / input_rows.shape[0])
+                        sum_uncertainties = sum_uncertainties + input_uncertainties * 1.0 / input_rows.shape[0]
+                    if context_uncertainties is not None:
+                        print '+ctx: ', np.sum(context_uncertainties * 1.0 / context_rows.shape[0])
+                        sum_uncertainties = sum_uncertainties + context_uncertainties * 1.0 / context_rows.shape[0]
+
+                    top_row_ind = np.argsort(sum_uncertainties)
+                    top_row_ind = top_row_ind[0:num_to_propagate]
+
+                    top_output_rows[level] = self.table_output[top_row_ind, :].copy()  # TODO copy necessary?
+                    top_output_row_indices[level] = top_row_ind
+
+                    tmp = sum_uncertainties[top_row_ind]
+                    tmp = tmp - np.amin(tmp)
+                    tmp = tmp * 1.0 / np.amax(tmp)
+                    #print 'tmp', tmp
+
+                    #top_output_row_uncertainties[level] = tmp
+                    top_output_row_uncertainties[level] = np.ones(num_to_propagate)
+
+                    #print top_output_row_uncertainties
+
+                plan_position_angle_list = []
+
+                for k in range(N):
+                    # rand_entry = random.randint(0, self.entries - 1)
+                    rand_entry = top_output_row_indices[k][0]
+
+                    plan_position_angle_list.append((self.debug_x_y_theta_output[rand_entry, 0],
+                                                     self.debug_x_y_theta_output[rand_entry, 1],
+                                                     self.debug_x_y_theta_output[rand_entry, 2]))
+
+                im = visualizer._get_topdown_map(rays, topdown_info, current_goal_position_angle, plan_position_angle_list)
+                cv2.imshow('planned', im)
+                cv2.waitKey(1)
+                print 'finished iter_step: ', iter_step
+
+                time.sleep(0.1)
+
+                if 0:
+
+                    out_uncert = self._run_level_0(input_starting_state=starting_state,
+                                                   context={'rows': 'table_output', 'uncertainties': output_uncertainties[level + 1]})
+                    #print 'setting output uncertainties, level:', level
+                    output_uncertainties[level] = out_uncert.copy()
+
+                    # run intermediate levels
+                    for level in range(1, N - 1):
+                        out_uncert = self._run_level_k(input={'rows': 'table_output', 'uncertainties': output_uncertainties[level - 1]},
+                                                       context={'rows': 'table_output', 'uncertainties': output_uncertainties[level + 1]},
+                                                       debug_print=False)#(level==2))
+                        #print 'setting output uncertainties, level:', level
+                        output_uncertainties[level] = out_uncert.copy()
+
+                    # run highest level: N - 1
+                    level = N - 1
+                    out_uncert = self._run_level_N(input={'rows': 'table_output', 'uncertainties': output_uncertainties[level - 1]},
+                                                   context_goal_state=goal_state)
+                    output_uncertainties[level] = out_uncert.copy()
+
+            return plan_position_angle_list
+
+
+    def plan_and_get_debug_position_angle_list_OLD_ALL_TO_ALL(self, goal_state, starting_state, visualizer, rays, topdown_info, current_goal_position_angle):
         print 'predictor_ensemble::plan_and_get_debug_position_angle_list'
 
         # print goal_state.shape, starting_state.shape  # 48, 48

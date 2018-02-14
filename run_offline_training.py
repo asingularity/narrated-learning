@@ -57,6 +57,14 @@ def _compute_sparse_inputs(input_state, n_bins):
     return input_sparse.astype(np.float)
 
 
+def print_debug_info(debug_info):
+    if len(debug_info) > 0:
+        print
+        for name in debug_info:
+            print name + ':', debug_info[name]
+
+        print
+
 def run_experiment():
     sim_load_name = '48DIMx1M_states_positions_saved_2018-01-31T13:09:15.676826'
     plots_save_folder = '/home/intec/NL-sim/' + sim_load_name + '/'
@@ -70,7 +78,7 @@ def run_experiment():
     max_history_length = states_history.shape[0]
     scale_camera_factor = 32
     do_display = False
-    plot_error_every_k_seconds = 60
+    plot_error_every_k_seconds = 60 * 5
     imshow_every_k_seconds = 1
     start_step_offset = 0
     env_width_height = 30
@@ -79,19 +87,20 @@ def run_experiment():
     #learning_off_time = np.inf
     learning_off_time = 900000
     #sim_off_time = np.inf
-    sim_off_time = 950000
+    sim_off_time = 1000000
 
     ensemble = PredictorEnsemble(params={'max_history_length': max_history_length,
                                          'plots_save_folder': plots_save_folder,
                                          'error_average_steps': 500,
-                                         'entries': 8000,
+                                         'entries': 40000,
+                                         'replacement_every_k_steps': 1,  # 100 for 800 rows, 10 for 8000 rows
                                          'dim': dim,
                                          'use_context_in_knn_diff': True,  # if False, input+output only. no context.
                                          'do_random_init': True,
                                          'do_adaptation': True,
                                          'do_replacements': True,
                                          'env_width_height': env_width_height,  # for plotting positions
-                                         'plots_prefix': 'init_1_adapt_1_repl_1_8000_entries_learn_off_900K'})
+                                         'plots_prefix': 'EXPR2_init_1_adapt_1_repl_1_40K_entries_learn_off_900K'})
 
     k_to_train = np.arange(3, max_history_length - 1)[start_step_offset::]
 
@@ -108,12 +117,14 @@ def run_experiment():
     t = 0
     last_plot_time = time.time()
     last_imshow_time = time.time()
+    to_debug_print = {}
 
     for k in k_to_train.tolist():
         fps_frames += 1
 
         if time.time() > last_fps_time + 5:
             print 'FPS: ', fps_frames / (time.time() - last_fps_time)
+            print_debug_info(to_debug_print)
             fps_frames = 0
             last_fps_time = time.time()
 
@@ -128,12 +139,12 @@ def run_experiment():
         if do_display:
             _do_display(input_state, dim, scale_camera_factor)
 
-        ensemble.step(last_input_state=last_input_state,
-                      input_state=input_state,
-                      next_input_state=next_input_state,
-                      last_x_y_theta=last_x_y_theta,
-                      x_y_theta=x_y_theta,
-                      learn=(t < learning_off_time))
+        to_debug_print = ensemble.step(last_input_state=last_input_state,
+                                      input_state=input_state,
+                                      next_input_state=next_input_state,
+                                      last_x_y_theta=last_x_y_theta,
+                                      x_y_theta=x_y_theta,
+                                      learn=(t < learning_off_time))
 
         if t == learning_off_time:
             print 'SAVING ENSEMBLE TO PKL'
