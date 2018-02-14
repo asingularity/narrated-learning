@@ -76,9 +76,9 @@ def get_environment_params():
         'wall_min_length': 8,
         'wall_max_length': 10,
         'min_space_between_walls': 2,
-        'init_robot_x': 20,
-        'init_robot_y': 17,
-        'init_robot_theta': 270
+        'init_robot_x': 15,
+        'init_robot_y': 2,
+        'init_robot_theta': 90
     }
     return params
 
@@ -137,8 +137,8 @@ def run_demo(demo_components):
     task_manager = demo_components['task_manager']
 
     use_keyboard_input = False
-    random.seed(1233)  # change to make movement different, without different walls
-    #random.seed(346)  # change to make movement different, without different walls
+    #random.seed(1233)  # change to make movement different, without different walls
+    random.seed(346)  # change to make movement different, without different walls
 
     # TODO fix see through walls from left side of vertical wall viewing right
     # TODO is this fixed?
