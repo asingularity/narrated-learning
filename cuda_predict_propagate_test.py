@@ -36,7 +36,7 @@ def run_cpu_test(test_seconds):
         uncert = np.amin(tmp, axis=0)
 
         if frame == 2:
-            print '    data check:', uncert[0:4], 'shape:', uncert.shape
+            print '    data check:', uncert[[0, 1, 100, -1]], 'shape:', uncert.shape
 
         fps_frames += 1
         if time.time() - fps_last_time > 5.0:
@@ -48,7 +48,7 @@ def run_cpu_test(test_seconds):
         frame += 1
 
 
-def run_cuda_test_single(test_seconds):
+def run_cuda_test_multiple(test_seconds):
     output_input_dist, dim, entries = get_table()
 
     t_0 = time.time()
@@ -57,7 +57,6 @@ def run_cuda_test_single(test_seconds):
     frame = 0
 
     skcuda.misc.init()
-    o_i_dist_gpu = gpuarray.to_gpu(output_input_dist)
 
     while time.time() < t_0 + test_seconds:
         v1 = np.random.random((entries, 1)).astype(np.float32)
@@ -65,13 +64,23 @@ def run_cuda_test_single(test_seconds):
         #tmp = output_input_dist + v1
         #uncert = np.amin(tmp, axis=0)
 
-        v1_gpu = gpuarray.to_gpu(v1)
-        sum_gpu = misc.add(o_i_dist_gpu, v1_gpu)
-        uncert_gpu = misc.min(sum_gpu, axis=0)  # , keepdims=False)
-        uncert = uncert_gpu.get()
+        uncert = np.ones(entries) * np.inf
+
+        for indices_start_end in [(0, entries/4),
+                                  (entries/4, entries/2),
+                                  (entries/2, 3*entries/4),
+                                  (3*entries/4, entries)]:
+            i0 = indices_start_end[0]
+            i1 = indices_start_end[1]
+
+            o_i_dist_gpu = gpuarray.to_gpu(output_input_dist[i0:i1, :])
+            v1_gpu = gpuarray.to_gpu(v1[i0:i1, :])
+            sum_gpu = misc.add(o_i_dist_gpu, v1_gpu)
+            uncert_gpu = misc.min(sum_gpu, axis=0)  # , keepdims=False)
+            uncert = np.minimum(uncert, uncert_gpu.get()[:])
 
         if frame == 2:
-            print '    data check:', uncert[0:4], 'shape:', uncert.shape
+            print '    data check:', uncert[[0, 1, 100, -1]], 'shape:', uncert.shape
 
         fps_frames += 1
         if time.time() - fps_last_time > 5.0:
@@ -106,7 +115,7 @@ def run_cuda_test(test_seconds):
         uncert = uncert_gpu.get()
 
         if frame == 2:
-            print '    data check:', uncert[0:4], 'shape:', uncert.shape
+            print '    data check:', uncert[[0, 1, 100, -1]], 'shape:', uncert.shape
 
         fps_frames += 1
         if time.time() - fps_last_time > 5.0:
@@ -139,11 +148,16 @@ if __name__ == '__main__':
     test_seconds = 11
 
     print
-    print '--- cuda ---'
+    print '--- cuda multiple split ---'
     np.random.seed(2)
-    run_cuda_test(test_seconds=test_seconds)
+    run_cuda_test_multiple(test_seconds=test_seconds)
 
     print
     print '--- cpu ---'
     np.random.seed(2)
     run_cpu_test(test_seconds=test_seconds)
+
+    print
+    print '--- cuda single ---'
+    np.random.seed(2)
+    run_cuda_test(test_seconds=test_seconds)
