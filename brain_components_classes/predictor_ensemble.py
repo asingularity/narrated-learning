@@ -10,6 +10,11 @@ np.set_printoptions(suppress=True)
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+import pycuda.driver as cuda
+import pycuda.autoinit
+import skcuda
+import skcuda.misc as misc
+import pycuda.gpuarray as gpuarray
 
 
 class PredictorEnsemble(object):
@@ -74,6 +79,10 @@ class PredictorEnsemble(object):
         self.output_input_distance = None
         self.output_context_distance = None
 
+        self.use_cuda = True
+        self.cuda_split_n = 1
+        self.cuda_init_done = False
+
     def precompute(self):
         '''
         to be run after learning, on a learned table
@@ -81,6 +90,9 @@ class PredictorEnsemble(object):
         :return: nothing. fills in self.input_output_distance, self.context_output_distance
         '''
 
+        self.use_cuda = True
+        self.cuda_split_n = 1
+        self.cuda_init_done = False
         self.original_way = True
 
         # *** table is: | input | output | context | ***
@@ -98,6 +110,10 @@ class PredictorEnsemble(object):
         print table_input.shape, table_output.shape, table_context.shape
 
         precompute_dist = self.original_way
+        skcuda.misc.init()
+
+        self.o_i_dist_gpu = None
+        self.o_c_dist_gpu = None
 
         if precompute_dist:
             self.output_input_distance = np.zeros((self.entries, self.entries))
@@ -111,6 +127,10 @@ class PredictorEnsemble(object):
                 output_entry = table_output[k, :]
                 dist, ind = knn_parallel_query(table_context, output_entry, self.temp_array, self.table.shape[0], self.dim)
                 self.output_context_distance[k, range(0, self.entries)] = self.temp_array[:]
+
+            if self.cuda_split_n == 1 and self.use_cuda:
+                self.o_i_dist_gpu = gpuarray.to_gpu(self.output_input_distance)
+                self.o_c_dist_gpu = gpuarray.to_gpu(self.output_context_distance)
 
     def step(self, last_input_state, input_state, next_input_state, last_x_y_theta, x_y_theta, learn=True):
         '''
@@ -447,7 +467,7 @@ class PredictorEnsemble(object):
 
         return plan_position_angle_list
 
-    def _compute_uncertainty(self, output_to_column_distance, output_column_uncertainties):
+    def _compute_uncertainty(self, output_to_column_distance, output_column_uncertainties, output_to_column_distance_gpu=None):
         '''
         :param dist_mat: ex. self.output_context_distance, or self.output_input_distance
         :param output_column_uncertainties: ex. uncertainty associated with each output-column row
@@ -467,8 +487,51 @@ class PredictorEnsemble(object):
             if output_column_uncertainties is None:
                 uncert = np.amin(output_to_column_distance, axis=0)
             else:
-                tmp = np.reshape(output_column_uncertainties, (output_column_uncertainties.shape[0], 1))
-                uncert = np.amin(output_to_column_distance + 1 * tmp, axis=0)
+                if self.use_cuda:
+                    if not self.cuda_init_done:
+                        print 'doing cuda init...'
+                        #linalg.init()
+                        #skcuda.misc.init()
+                        self.cuda_init_done = True
+
+                    entries = self.entries
+
+                    split_n = self.cuda_split_n  #20
+
+                    if split_n > 1:
+                        v1 = np.reshape(output_column_uncertainties, (output_column_uncertainties.shape[0], 1))
+
+                        uncert = np.ones(entries) * np.inf
+
+                        entries_per_split = entries * 1.0 / split_n
+                        assert int(entries_per_split) == entries_per_split
+                        entries_per_split = int(entries_per_split)
+
+                        indices_start_end_list = []
+                        for k in range(split_n):
+                            indices_start_end_list.append((k * entries_per_split, (k + 1) * entries_per_split))
+
+                        for indices_start_end in indices_start_end_list:
+                            i0 = indices_start_end[0]
+                            i1 = indices_start_end[1]
+
+                            o_i_dist_gpu = gpuarray.to_gpu(output_to_column_distance[i0:i1, :])
+                            v1_gpu = gpuarray.to_gpu(v1[i0:i1, :])
+                            sum_gpu = misc.add(o_i_dist_gpu, v1_gpu)
+                            uncert_gpu = misc.min(sum_gpu, axis=0)  # , keepdims=False)
+                            new_uncert = uncert_gpu.get()
+                            uncert = np.minimum(uncert, new_uncert[:])
+                    else:
+                        v1 = output_column_uncertainties
+                        v1_gpu = gpuarray.to_gpu(v1)
+                        sum_gpu = misc.add_matvec(output_to_column_distance_gpu, v1_gpu, axis=0)
+                        uncert_gpu = misc.min(sum_gpu, axis=0)  # , keepdims=False)
+                        uncert = uncert_gpu.get()
+                else:
+                    tmp = np.reshape(output_column_uncertainties, (output_column_uncertainties.shape[0], 1))
+                    tmp2 = output_to_column_distance + tmp
+                    uncert = np.amin(tmp2, axis=0)
+
                 #uncert = np.amin(np.multiply(output_to_column_distance, tmp), axis=0)
         else:
             uncert = []
@@ -529,7 +592,8 @@ class PredictorEnsemble(object):
         input_uncertainties = self.temp_array.copy()
 
         context_uncertainties = self._compute_uncertainty(output_to_column_distance=self.output_context_distance,
-                                                          output_column_uncertainties=context['uncertainties'])
+                                                          output_column_uncertainties=context['uncertainties'],
+                                                          output_to_column_distance_gpu=self.o_c_dist_gpu)
 
         # for now define output_uncertainty as max or sum (input_uncertainty, context_uncertainty)
         out_uncert = self._combine_uncertainties(input_uncertainties, context_uncertainties)
@@ -539,10 +603,12 @@ class PredictorEnsemble(object):
     def _run_level_k(self, input, context, debug_print=False):
 
         input_uncertainties = self._compute_uncertainty(output_to_column_distance=self.output_input_distance,
-                                                        output_column_uncertainties=input['uncertainties'])
+                                                        output_column_uncertainties=input['uncertainties'],
+                                                        output_to_column_distance_gpu=self.o_i_dist_gpu)
 
         context_uncertainties = self._compute_uncertainty(output_to_column_distance=self.output_context_distance,
-                                                          output_column_uncertainties=context['uncertainties'])
+                                                          output_column_uncertainties=context['uncertainties'],
+                                                          output_to_column_distance_gpu=self.o_c_dist_gpu)
 
         out_uncert = self._combine_uncertainties(input_uncertainties, context_uncertainties)
 
@@ -558,7 +624,8 @@ class PredictorEnsemble(object):
     def _run_level_N(self, input, context_goal_state):
 
         input_uncertainties = self._compute_uncertainty(output_to_column_distance=self.output_input_distance,
-                                                        output_column_uncertainties=input['uncertainties'])
+                                                        output_column_uncertainties=input['uncertainties'],
+                                                        output_to_column_distance_gpu=self.o_i_dist_gpu)
 
         dist, ind = knn_parallel_query(self.table_context, context_goal_state, self.temp_array, self.table.shape[0], self.dim)
         context_uncertainties = self.temp_array.copy()

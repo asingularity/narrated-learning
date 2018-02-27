@@ -5,6 +5,14 @@ import numpy as np
 np.set_printoptions(suppress=True)
 from fast_save_matrix import savetxt
 from brain_components import Autoencoder, StatesHistory, MotorHistory, Predictor, InverseModel, DebugTopdownInfoHistory
+
+import pycuda.driver as cuda
+import pycuda.autoinit
+from pycuda.compiler import SourceModule
+import pycuda.gpuarray as gpuarray
+import pycuda.cumath as cumath
+import skcuda.linalg as linalg
+
 from brain_components_classes.predictor_ensemble import PredictorEnsemble
 
 

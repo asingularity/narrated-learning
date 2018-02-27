@@ -6,8 +6,13 @@ import pycuda.autoinit
 import skcuda
 import skcuda.misc as misc
 import pycuda.gpuarray as gpuarray
+from fast_save_matrix import savetxt
+
+def loadtxt():
+    pass
 
 DTYPE = np.float32
+
 
 def get_table(load_from_file=False):
     print 'start table init...'
@@ -20,6 +25,10 @@ def get_table(load_from_file=False):
         #table = np.zeros((entries, dim * 3)).astype(DTYPE)
         table = None
         output_input_distance = np.random.random((entries, entries)).astype(DTYPE)
+
+        #filename = '/home/intec/NL-tmp/output_input_distance_' + str(entries) + '_' + str(dim) + '.txt'
+        #print 'saving to file: ', filename
+        #savetxt(filename, output_input_distance)
 
     print 'finished table init.'
     return output_input_distance, dim, entries
