@@ -2,6 +2,16 @@
 import numpy as np
 
 
+def matrix_vect_dist_numpy(data, query_data, tmp, data_frames, dim):
+    #print data.shape, query_data.shape, tmp.shape
+    # (2000000, 24) (24,) (2000000,)
+    tmp2 = (data - query_data)
+    tmp2 = np.sum(np.multiply(tmp2, tmp2), axis=1)
+    tmp[:] = tmp2[:]
+
+    return 1
+
+
 class knn(object):
     def __init__(self, input_data):
         # KDTree(self.concat_predictor_input_histories[net_index][0:self.predictor_training_history_step, :])
