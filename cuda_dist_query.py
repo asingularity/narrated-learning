@@ -41,6 +41,11 @@ class CudaQuery(object):
         linalg.init()
         self.i_d_t_gpu = gpuarray.to_gpu(self.input_data_transpose)
 
+    def retransfer_matrix_for_test(self):
+        #self.term_2 = np.sum(self.input_data ** 2, axis=1)
+        del self.i_d_t_gpu
+        self.i_d_t_gpu = gpuarray.to_gpu(self.input_data_transpose)
+
     def query(self, query_data):
         X = self.X
         X[0, :] = query_data[:]
