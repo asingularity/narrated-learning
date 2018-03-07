@@ -17,8 +17,9 @@ else:
     FRAMES = 10000
     DIM = 40000
 
-INCLUDE_CUDA_DATA_RETRANSFER = False
+INCLUDE_CUDA_DATA_RETRANSFER = False  # extremely slow for whole matrix
 INCLUDE_SORTED_DIST = True
+INCLUDE_CHANGE_ROW = True
 
 
 def run_cuda_test(test_seconds):
@@ -29,6 +30,7 @@ def run_cuda_test(test_seconds):
     print
     print 'data first: ', data[0, 0], data[0, -1]
 
+    new_row_3 = data[3, :] * 2.0  # * 0.9 #* 2.0
     # --- start specific data init ---
     cuda_query = CudaQuery(input_data=data)
     # --- end specific data init ---
@@ -45,6 +47,9 @@ def run_cuda_test(test_seconds):
     for frame in range(test_frames):
 
         query_data = np.random.random(dim).astype(np.float32)
+
+        if INCLUDE_CHANGE_ROW:
+            cuda_query.set_matrix_row(row_index=3, row_data=new_row_3)
 
         if INCLUDE_CUDA_DATA_RETRANSFER:
             cuda_query.retransfer_matrix_for_test()
@@ -81,6 +86,7 @@ def run_numpy_test(test_seconds):
     data = np.random.random((data_frames, dim)).astype(np.float32)
     print 'data first: ', data[0, 0], data[0, -1]
 
+    new_row_3 = data[3, :] * 2.0  # * 0.9 #* 2.0
     # --- start specific data init ---
     tmp = np.zeros(data_frames).astype(np.float).astype(np.float32)
     # --- end specific data init ---
@@ -97,6 +103,9 @@ def run_numpy_test(test_seconds):
     for frame in range(test_frames):
 
         query_data = np.random.random(dim).astype(np.float32)
+
+        if INCLUDE_CHANGE_ROW:
+            data[3, :] = new_row_3
 
         t0 = time.time()
         ret = matrix_vect_dist_numpy(data, query_data, tmp, data_frames, dim)
@@ -130,6 +139,7 @@ def run_cython_knn_test(test_seconds):
     data = np.random.random((data_frames, dim)).astype(np.float32)
     print 'data first: ', data[0, 0], data[0, -1]
 
+    new_row_3 = data[3, :] * 2.0  # * 0.9 #* 2.0
     # --- start specific data init ---
     tmp = np.zeros(data_frames).astype(np.float).astype(np.float32)
     # --- end specific data init ---
@@ -146,6 +156,9 @@ def run_cython_knn_test(test_seconds):
     for frame in range(test_frames):
 
         query_data = np.random.random(dim).astype(np.float32)
+
+        if INCLUDE_CHANGE_ROW:
+            data[3, :] = new_row_3
 
         t0 = time.time()
         ret = matrix_vect_dist_cython(data, query_data, tmp, data_frames, dim)

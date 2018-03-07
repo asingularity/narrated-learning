@@ -10,7 +10,7 @@ from pycuda.compiler import SourceModule
 import pycuda.gpuarray as gpuarray
 import pycuda.cumath as cumath
 import skcuda.linalg as linalg
-
+import skcuda.misc as misc
 
 
 class CudaQuery(object):
@@ -45,6 +45,25 @@ class CudaQuery(object):
         #self.term_2 = np.sum(self.input_data ** 2, axis=1)
         del self.i_d_t_gpu
         self.i_d_t_gpu = gpuarray.to_gpu(self.input_data_transpose)
+
+    def set_matrix_row(self, row_index, row_data):
+        '''
+            since we store transposed matrix: row becomes column
+        '''
+
+        col = row_index
+        rows = self.input_data_transpose.shape[0]
+        cols = self.input_data_transpose.shape[1]
+
+        assert row_data.shape[0] == rows
+
+        arr_gpu = gpuarray.to_gpu(row_data)
+        misc.set_by_index(dest_gpu=self.i_d_t_gpu, ind=col + cols * np.arange(rows), src_gpu=arr_gpu, ind_which='dest')
+
+        # also change self.term2
+        # self.term_2.shape  # 10000 (original rows, transposed cols)
+        # self.term_2 = np.sum(self.input_data ** 2, axis=1)
+        self.term_2[row_index] = np.sum(row_data ** 2)
 
     def query(self, query_data):
         X = self.X
@@ -83,3 +102,6 @@ class CudaQuery(object):
         # print 'ratio of time spent in 2: ', end_2 / end_all
         return dists
 
+
+if __name__ == '__main__':
+    pass
