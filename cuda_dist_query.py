@@ -1,9 +1,6 @@
 
 import numpy as np
 import time
-from brute_force_knn import knn
-from knn_cython import knn_query
-from knn_parallel import knn_query as knn_parallel_query
 import pycuda.driver as cuda
 import pycuda.autoinit
 from pycuda.compiler import SourceModule
