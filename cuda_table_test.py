@@ -4,7 +4,7 @@ import timeit
 import numpy as np
 from matrix_vector_dist_parallel import knn_query as matrix_vect_dist_cython
 from brute_force_knn import matrix_vect_dist_numpy
-from cuda_dist_query import CudaQuery
+from cuda_dist_query import CudaTable
 
 USERNAME = 'intec'
 
@@ -17,7 +17,6 @@ else:
     FRAMES = 10000
     DIM = 40000
 
-INCLUDE_CUDA_DATA_RETRANSFER = False  # extremely slow for whole matrix
 INCLUDE_SORTED_DIST = True
 INCLUDE_CHANGE_ROW = True
 
@@ -32,7 +31,16 @@ def run_cuda_test(test_seconds):
 
     new_row_3 = data[3, :] * 2.0  # * 0.9 #* 2.0
     # --- start specific data init ---
-    cuda_query = CudaQuery(input_data=data)
+
+    input_dim = dim / 3
+    output_dim = dim / 3
+    context_dim = dim - input_dim - output_dim
+
+    cuda_query = CudaTable(num_entries=data_frames,
+                           input_dim=input_dim,
+                           output_dim=output_dim,
+                           context_dim=context_dim,
+                           table=data)
     # --- end specific data init ---
 
     start_time = time.time()
@@ -49,13 +57,17 @@ def run_cuda_test(test_seconds):
         query_data = np.random.random(dim).astype(np.float32)
 
         if INCLUDE_CHANGE_ROW:
-            cuda_query.set_matrix_row(row_index=3, row_data=new_row_3)
-
-        if INCLUDE_CUDA_DATA_RETRANSFER:
-            cuda_query.retransfer_matrix_for_test()
+            cuda_query.set_matrix_row(row_index=3,
+                                      row_input=new_row_3[0:input_dim],
+                                      row_output=new_row_3[input_dim:input_dim + output_dim],
+                                      row_context=new_row_3[input_dim + output_dim::])
 
         t0 = time.time()
-        tmp = cuda_query.query(query_data=query_data)
+        tmp = cuda_query.query(query_input=query_data[0:input_dim],
+                               query_output=query_data[input_dim:input_dim + output_dim],
+                               query_context=query_data[input_dim + output_dim::])
+
+        #query_data=query_data)
         t_spent_query += time.time() - t0
 
         if INCLUDE_SORTED_DIST:

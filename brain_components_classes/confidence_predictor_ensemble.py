@@ -1,5 +1,6 @@
 
 from matrix_vector_dist_parallel import knn_query as knn_parallel_query
+from cuda_dist_query import CudaTable
 import time
 import cv2
 import pickle
@@ -26,154 +27,236 @@ class ConfidencePredictorEnsemble(object):
         self.do_replacements = params['do_replacements']  # True  # replace low effectiveness over time
 
         self.max_history_length = params['max_history_length']
-        self.error_history = np.zeros(params['max_history_length'])
-        self.mean_error_history = np.zeros(params['max_history_length'])
 
-        self.replacement_every_k_steps = params['replacement_every_k_steps']  # TODO put as parameter. 100 for 800 rows, 10 for 8000 rows
+        self.replacement_every_k_steps = params['replacement_every_k_steps']  # 100 for 800 rows, 10 for 8000 rows
 
-        self.use_context_in_knn_diff = params['use_context_in_knn_diff']
+        self.use_context_in_knn_diff = True
 
         self.plots_prefix = params['plots_prefix']
         self.env_width_height = params['env_width_height']
         self.error_step = 0
 
-        self.entries = params['entries']
-        self.dim = params['dim']
+        self.entries_per_layer = params['entries_per_layer']
+        self.num_layers = len(self.entries_per_layer)
+        self.dim = params['dim']  # input dim
 
-        self.debug_x_y_theta_output = np.zeros((self.entries, 3))
-        self.debug_x_y_theta_input = np.zeros((self.entries, 3))
+        # self.debug_x_y_theta_output = np.zeros((self.entries, 3))
+        # self.debug_x_y_theta_input = np.zeros((self.entries, 3))
 
         # input (t), prediction (t+1), context (t+2)
-        self.table = np.zeros((self.entries, self.dim * 3)).astype(np.float32)
 
-        self.min_dist_pair = (0, 1)  # doesn't matter since they all start 0
-        self.min_dist = 0
+        self.cuda_tables_list = []
+        self.error_histories_list = []
+        self.mean_error_histories_list = []
+        self.error_steps_list = []
+        self.table_use_hist_list = []
+        self.effectiveness_sum_list = []
+        self.effectiveness_num_list = []
+        self.row_ages_list = []
+        self.last_replacement_t_list = []
+        self.input_output_dt_steps_list = []
+        self.input_context_dt_steps_list = []
+        self.last_step_layer_dists = []
+        self.tmp_ind_list = []
 
-        self.temp_array = np.zeros(self.entries).astype(np.float32)
-        print 'finished initializing ensemble.'
+        total_gb = 0
+
+        for k, layer_entries in enumerate(self.entries_per_layer):
+            if k == 0:
+                layer_input_dim = self.dim
+            else:
+                # input dim of layer is number of rows of previous layer
+                layer_input_dim = self.entries_per_layer[k - 1]
+
+            if k < self.num_layers - 1:
+                # context dim of layer is number of rows of next layer
+                layer_context_dim = self.entries_per_layer[k + 1]
+            else:
+                # last layer has no context
+                layer_context_dim = 0
+
+            layer_output_dim = layer_input_dim
+
+            # TODO starting init stays here, gets gb size after init below
+            #layer_gb = (table.size * 4.0) / (1e9)
+            #print 'Starting init of layer', k, 'with rows X cols, size(gb): ', '(', layer_entries, \
+            #    'X', ('('+str(layer_input_dim) + ' + ' + str(layer_context_dim) + ' + ' + str(layer_output_dim)+')'), ')', layer_gb
+            #total_gb += layer_gb
+
+            self.cuda_tables_list.append(CudaTable(num_entries=layer_entries,
+                                                   input_dim=layer_input_dim,
+                                                   output_dim=layer_output_dim,
+                                                   context_dim=layer_context_dim))
+
+            self.error_histories_list.append(np.zeros(self.max_history_length))
+            self.mean_error_histories_list.append(np.zeros(self.max_history_length))
+            self.error_steps_list.append(0)
+
+            self.table_use_hist_list.append(np.zeros(layer_entries))
+            self.effectiveness_sum_list.append(np.zeros(layer_entries))
+            self.effectiveness_num_list.append(np.ones(layer_entries))
+            self.row_ages_list.append(np.zeros(layer_entries))
+            self.last_replacement_t_list.append(0)
+
+            self.input_output_dt_steps_list.append(2)
+            self.input_context_dt_steps_list.append(4)
+
+            self.last_step_layer_dists.append(None)
+            self.tmp_ind_list.append(0)
+
+        print 'finished initializing ensemble. total gb: ', total_gb
 
         self.plots_save_folder = params['plots_save_folder']
         self.error_average_steps = params['error_average_steps']
 
-        self.error_history = np.zeros(self.max_history_length)
-        self.mean_error_history = np.zeros(self.max_history_length)
-        self.error_step = 0
-
-        self.table_use_hist = np.zeros(self.entries)
-        self.tmp_ind = 0
-
-        self.effectiveness_sum = np.zeros(self.entries)
-        self.effectiveness_num = np.ones(self.entries)
-
-        self.row_ages = np.zeros(self.entries)
-
         self.t = 0
-        self.last_replacement_t = 0
-        self.radius = None
 
-    def step(self, last_input_state, input_state, next_input_state, last_x_y_theta, x_y_theta, learn=True):
+    def step(self, input_state, x_y_theta, learn=True):
         '''
         for learning mode
 
-        :param last_input_state:
         :param input_state:
-        :param next_input_state:
-        :param last_x_y_theta:
         :param x_y_theta:
         :param learn:
         :return:
         '''
         self.t += 1
 
-        predictor_context = next_input_state
-        predictor_output = input_state
-        predictor_input = last_input_state
+        # for each layer:
+        # run forward on newest input
+        # train on previous
 
-        # 1. find input+output (IO) error
-        new_entry = np.concatenate((predictor_input, predictor_output))
-        new_entry = np.concatenate((new_entry, predictor_context))
+        layer_input = input_state.copy()
+        dists = None
+        for k in range(self.num_layers):
+            print(k, np.amin(dists), np.amax(dists), np.amin(layer_input), np.amax(layer_input))
 
-        if self.use_context_in_knn_diff:
-            dist, ind = knn_parallel_query(self.table, new_entry, self.temp_array, self.table.shape[0], self.dim * 3)
-        else:
-            dist, ind = knn_parallel_query(self.table, new_entry, self.temp_array, self.table.shape[0], self.dim * 2)
+            # where does layer_context come from when running?
+            # last timestep output confidences of next layer
 
-        self.table_use_hist[ind] += 1
+            layer_context = self.last_step_layer_dists[k + 1]
 
-        self.row_ages[:] = self.row_ages[:] + 1
+            #   in general, query should work with any subset of the total table dim
+            dists = self.cuda_tables_list[k].query(query_input=layer_input,
+                                                   query_output=None,
+                                                   query_context=layer_context)
+            dists = np.tanh(dists)  # factor will be needed here, dependent on layer
 
-        # find second best
-        sorted_dist_indices = np.argsort(self.temp_array)
-        sorted_dists = self.temp_array[sorted_dist_indices]
-        assert self.temp_array[sorted_dist_indices[0]] == dist
-        ind2 = sorted_dist_indices[1]
-        ind3 = sorted_dist_indices[2]
-        dist2 = self.temp_array[ind2]
+            self.last_step_layer_dists[k] = dists.copy()
+            layer_input = dists.copy()
 
-        self.error_history[self.error_step] = dist
-        mean_index_0 = max(0, self.error_step - self.error_average_steps)
-        mean_index_1 = self.error_step
-        self.mean_error_history[self.error_step] = np.mean(self.error_history[mean_index_0:mean_index_1])
-        self.error_step += 1
+        # learning
+        for k in range(self.num_layers):
+            dt_input_output = self.input_output_dt_steps_list[k]  # 2
+            dt_input_context = self.input_context_dt_steps_list[k]  # 4
+            assert dt_input_context > dt_input_output  # context always further future
+
+            input_delay = dt_input_context  # 4
+            output_delay = dt_input_context - dt_input_output  # 2
+            context_delay = 0
+
+            # TODO finish this
+            train_input = self.layer_input_history[k][input_delay]
+            train_output = self.layer_input_history[k][output_delay]
+
+            if k == self.num_layers - 1:
+                train_context = None
+            else:
+                # train_context = self.layer_dists_history[k + 1][context_delay]
+                # since context_delay == 0, instead of above, we can use last step dists:
+                train_context = self.last_step_layer_dists[k + 1]
+
+            self._learn(k=k,
+                        cuda_table=self.cuda_tables_list[k],
+                        train_input=train_input,
+                        train_output=train_output,
+                        train_context=train_context,
+                        error_history=self.error_histories_list[k],
+                        mean_error_history=self.mean_error_histories_list[k],
+                        table_use_hist=self.table_use_hist_list[k])
 
         to_debug_print = {}
-
-        if learn:
-
-            do_random_init = self.do_random_init  # initialize with random entries
-            do_adaptation = self.do_adaptation  # WTA-based learning
-            do_replacements = self.do_replacements  # replace low effectiveness over time
-
-            if do_random_init and self.tmp_ind < self.table.shape[0]:
-                self.table[self.tmp_ind, :] = new_entry[:]
-                self.debug_x_y_theta_output[self.tmp_ind, :] = x_y_theta[:]
-                self.debug_x_y_theta_input[self.tmp_ind, :] = last_x_y_theta[:]
-                self.tmp_ind += 1
-            else:
-                pass
-
-            best_second_diff_current = dist2 - dist
-            self.effectiveness_num[ind] += 1
-            self.effectiveness_sum[ind] += best_second_diff_current
-
-            # simple best learns:
-            if do_adaptation:
-                self.table[ind, :] = 0.9 * self.table[ind, :] + 0.1 * new_entry
-                # for theta: could be weird... discontinuities
-                self.debug_x_y_theta_output[ind, :] = 0.9 * self.debug_x_y_theta_output[ind, :] + 0.1 * x_y_theta[:]
-                self.debug_x_y_theta_input[ind, :] = 0.9 * self.debug_x_y_theta_input[ind, :] + 0.1 * last_x_y_theta[:]
-
-            min_replaced_row_age = 1000
-            replacement_every_k_steps = self.replacement_every_k_steps
-
-            if do_replacements:
-                #to_debug_print['warning'] = 'doing replacements!'
-
-                row_replace_candidates = np.nonzero(self.row_ages > min_replaced_row_age)[0]
-                effectiveness_mean = np.divide(self.effectiveness_sum, self.effectiveness_num)
-
-                if len(row_replace_candidates) > 0 and self.t > self.last_replacement_t + replacement_every_k_steps:
-                    r_r_c_ind = np.argmin(effectiveness_mean[row_replace_candidates])
-                    r_r_c_eff = effectiveness_mean[row_replace_candidates][r_r_c_ind]
-
-                    #if r_r_c_eff < 0.2 or np.isnan(r_r_c_eff):
-                    r_r_ind = row_replace_candidates[r_r_c_ind]
-                    #print r_r_ind
-                    self.table_use_hist[r_r_ind] = 0
-                    self.row_ages[r_r_ind] = 0
-                    self.effectiveness_sum[r_r_ind] = 0.0
-                    self.effectiveness_num[r_r_ind] = 0
-
-                    self.table[r_r_ind, :] = new_entry[:]
-                    self.debug_x_y_theta_output[r_r_ind, :] = x_y_theta[:]
-                    self.debug_x_y_theta_input[r_r_ind, :] = last_x_y_theta[:]
-
-                    self.last_replacement_t = self.t
-                    #    print 'replacing: ', r_r_c_eff
-                    #else:
-                    #    print 'NOT replacing: ', r_r_c_eff
-
         return to_debug_print
+
+    def _learn(self, k, cuda_table, train_input, train_output, train_context,
+               error_history, mean_error_history, table_use_hist):
+
+        do_random_init = self.do_random_init  # initialize with random entries
+        do_adaptation = self.do_adaptation  # WTA-based learning
+        do_replacements = self.do_replacements  # replace low effectiveness over time
+
+        dists = cuda_table.query(query_input=train_input,
+                                 query_output=train_output,
+                                 query_context=train_context)
+
+        dists = np.tanh(dists)  # factor will be needed here, dependent on layer
+        sorted_dist_indices = np.argsort(dists)
+        sorted_dists = dists[sorted_dist_indices]
+        ind2 = sorted_dist_indices[1]
+        dist2 = dists[ind2]
+        ind = sorted_dist_indices[0]
+        dist = dists[ind]
+
+        table_use_hist[ind] += 1
+
+        error_step = self.error_steps_list[k]
+        error_history[error_step] = dist
+        mean_index_0 = max(0, error_step - self.error_average_steps)
+        mean_index_1 = error_step
+        mean_error_history[error_step] = np.mean(error_history[mean_index_0:mean_index_1])
+        self.error_steps_list[k] += 1
+
+        if do_random_init and self.tmp_ind_list[k] < cuda_table.get_num_rows():
+            cuda_table.set_matrix_row(row_index=self.tmp_ind_list[k],
+                                      row_input=train_input,
+                                      row_output=train_output,
+                                      row_context=train_context)
+
+            # self.debug_x_y_theta_output[self.tmp_ind, :] = x_y_theta[:]
+            # self.debug_x_y_theta_input[self.tmp_ind, :] = last_x_y_theta[:]
+            self.tmp_ind_list[k] += 1
+
+        best_second_diff_current = dist2 - dist
+        self.effectiveness_num_list[k][ind] += 1
+        self.effectiveness_sum_list[k][ind] += best_second_diff_current
+
+        if do_adaptation:
+            #self.table[ind, :] = 0.9 * self.table[ind, :] + 0.1 * new_entry
+            cuda_table.adapt(row_index=ind,
+                             rate=0.1,
+                             row_input=train_input,
+                             row_output=train_output,
+                             row_context=train_context)
+
+            # for theta: could be weird... discontinuities
+            # self.debug_x_y_theta_output[ind, :] = 0.9 * self.debug_x_y_theta_output[ind, :] + 0.1 * x_y_theta[:]
+            # self.debug_x_y_theta_input[ind, :] = 0.9 * self.debug_x_y_theta_input[ind, :] + 0.1 * last_x_y_theta[:]
+
+        min_replaced_row_age = 1000
+        replacement_every_k_steps = self.replacement_every_k_steps
+
+        if do_replacements:
+            row_replace_candidates = np.nonzero(self.row_ages_list[k] > min_replaced_row_age)[0]
+            effectiveness_mean = np.divide(self.effectiveness_sum_list[k], self.effectiveness_num_list[k])
+
+            if len(row_replace_candidates) > 0 and self.t > self.last_replacement_t_list[k] + replacement_every_k_steps:
+                r_r_c_ind = np.argmin(effectiveness_mean[row_replace_candidates])
+
+                r_r_ind = row_replace_candidates[r_r_c_ind]
+                self.table_use_hist_list[k][r_r_ind] = 0
+                self.row_ages_list[k][r_r_ind] = 0
+                self.effectiveness_sum_list[k][r_r_ind] = 0.0
+                self.effectiveness_num_list[k][r_r_ind] = 0
+
+                cuda_table.set_matrix_row(row_index=r_r_ind,
+                                          row_input=train_input,
+                                          row_output=train_output,
+                                          row_context=train_context)
+
+                # self.debug_x_y_theta_output[r_r_ind, :] = x_y_theta[:]
+                # self.debug_x_y_theta_input[r_r_ind, :] = last_x_y_theta[:]
+
+                self.last_replacement_t_list[k] = self.t
 
     def plan_and_get_debug_position_angle_list(self, goal_state, starting_state, visualizer, rays, topdown_info, current_goal_position_angle):
         plan_position_angle_list = None
