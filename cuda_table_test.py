@@ -15,7 +15,7 @@ if SMALL_TEST:
     DIM = 48
 else:
     FRAMES = 10000
-    DIM = 30000
+    DIM = 20000
 
 INCLUDE_ADAPT_ROW = True
 INCLUDE_SORTED_DIST = True

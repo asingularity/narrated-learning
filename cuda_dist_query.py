@@ -40,6 +40,8 @@ class CudaTable(object):
         if table is None:
             table = np.zeros((num_entries, input_dim + output_dim + context_dim), np.float32)
 
+        self.size_gb = (table.size * 4.0) / (1e9)
+
         self.table_gpu = gpuarray.to_gpu(np.ascontiguousarray(np.transpose(table)))
         self.X = np.zeros((1, table.shape[1])).astype(np.float32)
         self.term_2 = np.sum(table ** 2, axis=1)
@@ -51,9 +53,27 @@ class CudaTable(object):
             c_indices = np.arange(input_dim + output_dim, input_dim + output_dim + context_dim)
             table_i_c_only = table[:, np.concatenate((i_indices, c_indices))]
 
+        self.size_gb += (table_i_c_only.size * 4.0) / (1e9)
+
         self.table_ic_gpu = gpuarray.to_gpu(np.ascontiguousarray(np.transpose(table_i_c_only)))
         self.X_ic = np.zeros((1, table_i_c_only.shape[1])).astype(np.float32)
         self.term_2_ic = np.sum(table_i_c_only ** 2, axis=1)
+
+        if table is None:
+            # TODO finish this- also incorporate into set_matrix_row
+            table_i_only = np.zeros((num_entries, input_dim), np.float32)
+        else:
+            i_indices = np.arange(input_dim)
+            table_i_only = table[:, i_indices]
+
+        self.size_gb += (table_i_only.size * 4.0) / (1e9)
+
+        self.table_i_gpu = gpuarray.to_gpu(np.ascontiguousarray(np.transpose(table_i_only)))
+        self.X_i = np.zeros((1, table_i_only.shape[1])).astype(np.float32)
+        self.term_2_i = np.sum(table_i_only ** 2, axis=1)
+
+    def get_size_gb(self):
+        return self.size_gb
 
     def query(self, query_input, query_output, query_context):
         '''
@@ -74,10 +94,27 @@ class CudaTable(object):
                 but... it won't be contiguous
         '''
 
-        # only two variations supported for now- only query_output can be None
-        assert query_input is not None and query_context is not None
+        # only three variations supported for now-
+        #   all are not None
+        #   query_output only is None
+        #   query_output and query_context are None
 
-        if query_output is None:
+        assert query_input is not None
+
+        if query_context is None and query_output is None:
+            # query_input only
+            query_data = query_input
+            X = self.X_i
+            X[0, :] = query_data[:]
+            i_d_t_gpu = self.table_i_gpu
+            X_gpu = gpuarray.to_gpu(X)
+            term_1 = linalg.dot(X_gpu, i_d_t_gpu).get()
+            term_1 = -2 * term_1
+            term_2 = self.term_2_i
+            term_3 = np.sum(X ** 2, axis=1)[:, np.newaxis]
+            dists = term_1 + term_2 + term_3
+        elif query_output is None and query_context is not None:
+            # query_input and query_context only
             query_data = np.concatenate((query_input, query_context))
             X = self.X_ic
             X[0, :] = query_data[:]
@@ -88,7 +125,8 @@ class CudaTable(object):
             term_2 = self.term_2_ic
             term_3 = np.sum(X ** 2, axis=1)[:, np.newaxis]
             dists = term_1 + term_2 + term_3
-        else:
+        elif query_output is not None and query_context is not None:
+            # all three
             query_data = np.concatenate((query_input, query_output, query_context))
             X = self.X
             X[0, :] = query_data[:]
@@ -99,6 +137,9 @@ class CudaTable(object):
             term_2 = self.term_2
             term_3 = np.sum(X ** 2, axis=1)[:, np.newaxis]
             dists = term_1 + term_2 + term_3
+        else:
+            assert False, str(('Error! invalid query configuration: ', query_input, query_output, query_context))
+            dists = None
 
         return dists[0]
 
@@ -116,11 +157,13 @@ class CudaTable(object):
         col = row_index
         # transposed
         rows = self.input_dim + self.output_dim + self.context_dim
+        rows_i = self.input_dim
         rows_ic = self.input_dim + self.context_dim
         cols = self.num_entries
 
         assert row_input.shape[0] + row_output.shape[0] + row_context.shape[0] == rows
         assert row_input.shape[0] + row_context.shape[0] == rows_ic
+        assert row_input.shape[0] == rows_i
 
         row_data_all = np.concatenate((row_input, row_output, row_context))
         arr_gpu = gpuarray.to_gpu(row_data_all)
@@ -131,6 +174,11 @@ class CudaTable(object):
         arr_gpu_ic = gpuarray.to_gpu(row_data_ic)
         misc.set_by_index(dest_gpu=self.table_ic_gpu, ind=col + cols * np.arange(rows_ic), src_gpu=arr_gpu_ic, ind_which='dest')
         self.term_2_ic[row_index] = np.sum(row_data_ic ** 2)
+
+        row_data_i = row_input
+        arr_gpu_i = gpuarray.to_gpu(row_data_i)
+        misc.set_by_index(dest_gpu=self.table_i_gpu, ind=col + cols * np.arange(rows_i), src_gpu=arr_gpu_i, ind_which='dest')
+        self.term_2_i[row_index] = np.sum(row_data_i ** 2)
 
     def get_matrix_row(self, row_index):
         col = row_index

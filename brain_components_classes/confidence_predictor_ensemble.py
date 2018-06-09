@@ -76,17 +76,14 @@ class ConfidencePredictorEnsemble(object):
                 layer_context_dim = 0
 
             layer_output_dim = layer_input_dim
-
-            # TODO starting init stays here, gets gb size after init below
-            #layer_gb = (table.size * 4.0) / (1e9)
-            #print 'Starting init of layer', k, 'with rows X cols, size(gb): ', '(', layer_entries, \
-            #    'X', ('('+str(layer_input_dim) + ' + ' + str(layer_context_dim) + ' + ' + str(layer_output_dim)+')'), ')', layer_gb
-            #total_gb += layer_gb
-
             self.cuda_tables_list.append(CudaTable(num_entries=layer_entries,
                                                    input_dim=layer_input_dim,
                                                    output_dim=layer_output_dim,
                                                    context_dim=layer_context_dim))
+            layer_size_gb = self.cuda_tables_list[len(self.cuda_tables_list) - 1].get_size_gb()
+            print 'Init of layer', k, 'with rows X cols, size_GB,', '(', layer_entries, 'X', ('('+str(layer_input_dim) + ' + ' + str(layer_context_dim) + ' + ' + str(layer_output_dim)+')'), layer_size_gb
+
+            total_gb += layer_size_gb
 
             self.error_histories_list.append(np.zeros(self.max_history_length))
             self.mean_error_histories_list.append(np.zeros(self.max_history_length))
@@ -134,9 +131,18 @@ class ConfidencePredictorEnsemble(object):
             # where does layer_context come from when running?
             # last timestep output confidences of next layer
 
-            layer_context = self.last_step_layer_dists[k + 1]
+            if k == self.num_layers - 1:
+                layer_context = None
+            else:
+                layer_context = self.last_step_layer_dists[k + 1]
 
             #   in general, query should work with any subset of the total table dim
+            # TODO not implemented: initially, context is also None
+            # TODO does it make sense even what last layer is doing here? is its prediction thing doing anything?
+            # unclear in this layer what output is doing, when trained... is prediction used at all?
+            # yes- they are different predictions- same input + different outputs, appear as two different values in confidences dict
+            # confidences are in space of input + predicted output, not just input by itself
+
             dists = self.cuda_tables_list[k].query(query_input=layer_input,
                                                    query_output=None,
                                                    query_context=layer_context)

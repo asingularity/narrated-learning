@@ -91,14 +91,14 @@ def run_experiment():
     ensemble = ConfidencePredictorEnsemble(params={'max_history_length': max_history_length,
                                                    'plots_save_folder': plots_save_folder,
                                                    'error_average_steps': 500,
-                                                   'entries_per_layer': [40000, 4000, 2000, 1000, 1000],
+                                                   'entries_per_layer': [20000, 4000, 2000, 1000, 1000],
                                                    'replacement_every_k_steps': 1,  # 100 for 800 rows, 10 for 8000 rows
                                                    'dim': dim,
                                                    'do_random_init': True,
                                                    'do_adaptation': True,
                                                    'do_replacements': True,
                                                    'env_width_height': env_width_height,  # for plotting positions
-                                                   'plots_prefix': 'EXPR2_init_1_adapt_1_repl_1_40K_entries_learn_off_900K'})
+                                                   'plots_prefix': 'new_test_1'})
 
     k_to_train = np.arange(3, max_history_length - 1)[start_step_offset::]
 
