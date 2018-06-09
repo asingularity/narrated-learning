@@ -137,7 +137,7 @@ class CudaTable(object):
         rows = self.input_dim + self.output_dim + self.context_dim
         cols = self.num_entries
 
-        full_row = np.array(misc.get_by_index(src_gpu=self.table_gpu, ind=col + cols * np.arange(rows)))
+        full_row = misc.get_by_index(src_gpu=self.table_gpu, ind=col + cols * np.arange(rows)).get()
         row_input = full_row[0:self.input_dim]
         row_output = full_row[self.input_dim:self.input_dim + self.output_dim]
         row_context = full_row[self.input_dim+self.output_dim:self.input_dim+self.output_dim+self.context_dim]
@@ -161,10 +161,14 @@ class CudaTable(object):
         assert 0.0 < rate < 1.0
         keep = 1.0 - rate
 
+        new_row_input = keep * current_row_input + rate * row_input
+        new_row_output = keep * current_row_output + rate * row_output
+        new_row_context = keep * current_row_context + rate * row_context
+
         self.set_matrix_row(row_index=row_index,
-                            row_input=keep * current_row_input + rate * row_input,
-                            row_output=keep * current_row_output + rate * row_output,
-                            row_context=keep * current_row_context + rate * row_context)
+                            row_input=new_row_input,
+                            row_output=new_row_output,
+                            row_context=new_row_context)
 
 
 class CudaQuery(object):

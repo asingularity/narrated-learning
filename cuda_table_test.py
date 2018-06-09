@@ -15,10 +15,12 @@ if SMALL_TEST:
     DIM = 48
 else:
     FRAMES = 10000
-    DIM = 40000
+    DIM = 30000
 
+INCLUDE_ADAPT_ROW = True
 INCLUDE_SORTED_DIST = True
 INCLUDE_CHANGE_ROW = True
+# TODO test adapt of a row
 
 
 def run_cuda_test(test_seconds):
@@ -56,6 +58,27 @@ def run_cuda_test(test_seconds):
 
         query_data = np.random.random(dim).astype(np.float32)
 
+        if INCLUDE_ADAPT_ROW and frame == 5:
+            # TODO test speed of this too! try doing every frame and see slow down
+
+            print('(testing adapt row)')
+            i_0, o_0, c_0 = cuda_query.get_matrix_row(row_index=5)
+            cuda_query.adapt(row_index=5,
+                             rate=0.5,
+                             row_input=new_row_3[0:input_dim],
+                             row_output=new_row_3[input_dim:input_dim + output_dim],
+                             row_context=new_row_3[input_dim + output_dim::])
+            i_1, o_1, c_1 = cuda_query.get_matrix_row(row_index=5)
+            r_0 = np.concatenate((i_0, o_0, c_0))
+            r_1 = np.concatenate((i_1, o_1, c_1))
+            r_1_test = r_0 * 0.5 + new_row_3 * 0.5
+            assert np.sum(np.fabs(r_1 - r_1_test)) == 0.0
+
+            cuda_query.set_matrix_row(row_index=5,
+                                      row_input=i_0,
+                                      row_output=o_0,
+                                      row_context=c_0)
+
         if INCLUDE_CHANGE_ROW:
             cuda_query.set_matrix_row(row_index=3,
                                       row_input=new_row_3[0:input_dim],
@@ -67,7 +90,6 @@ def run_cuda_test(test_seconds):
                                query_output=query_data[input_dim:input_dim + output_dim],
                                query_context=query_data[input_dim + output_dim::])
 
-        #query_data=query_data)
         t_spent_query += time.time() - t0
 
         if INCLUDE_SORTED_DIST:
