@@ -59,7 +59,7 @@ def run_cuda_test(test_seconds):
         query_data = np.random.random(dim).astype(np.float32)
 
         if INCLUDE_ADAPT_ROW and frame == 5:
-            # TODO test speed of this too! try doing every frame and see slow down
+            # when run on every frame: this test slows down FPS about 30%
 
             print('(testing adapt row)')
             i_0, o_0, c_0 = cuda_query.get_matrix_row(row_index=5)
