@@ -16,6 +16,7 @@ import pycuda.autoinit
 import skcuda
 import skcuda.misc as misc
 import pycuda.gpuarray as gpuarray
+from brain_components_classes.states_history import StatesLimitedHistory
 
 
 class ConfidencePredictorEnsemble(object):
@@ -27,6 +28,7 @@ class ConfidencePredictorEnsemble(object):
         self.do_replacements = params['do_replacements']  # True  # replace low effectiveness over time
 
         self.max_history_length = params['max_history_length']
+        self.max_delay = params['max_delay']
 
         self.replacement_every_k_steps = params['replacement_every_k_steps']  # 100 for 800 rows, 10 for 8000 rows
 
@@ -39,6 +41,9 @@ class ConfidencePredictorEnsemble(object):
         self.entries_per_layer = params['entries_per_layer']
         self.num_layers = len(self.entries_per_layer)
         self.dim = params['dim']  # input dim
+
+        input_output_dt = 2  # predict time
+        input_context_dt = 4  # context future time
 
         # self.debug_x_y_theta_output = np.zeros((self.entries, 3))
         # self.debug_x_y_theta_input = np.zeros((self.entries, 3))
@@ -61,6 +66,7 @@ class ConfidencePredictorEnsemble(object):
 
         total_gb = 0
 
+        layer_input_dim_list = []  # for initializing states_history object for input
         for k, layer_entries in enumerate(self.entries_per_layer):
             if k == 0:
                 layer_input_dim = self.dim
@@ -95,13 +101,18 @@ class ConfidencePredictorEnsemble(object):
             self.row_ages_list.append(np.zeros(layer_entries))
             self.last_replacement_t_list.append(0)
 
-            self.input_output_dt_steps_list.append(2)
-            self.input_context_dt_steps_list.append(4)
+            self.input_output_dt_steps_list.append(input_output_dt)
+            self.input_context_dt_steps_list.append(input_context_dt)
 
             self.last_step_layer_dists.append(None)
             self.tmp_ind_list.append(0)
 
+            layer_input_dim_list.append(layer_input_dim)
+
         print 'finished initializing ensemble. total gb: ', total_gb
+
+        self.layer_input_history = StatesLimitedHistory(params={'max_delay': self.max_delay,
+                                                                'states_dim_list': layer_input_dim_list})
 
         self.plots_save_folder = params['plots_save_folder']
         self.error_average_steps = params['error_average_steps']
@@ -136,10 +147,8 @@ class ConfidencePredictorEnsemble(object):
             else:
                 layer_context = self.last_step_layer_dists[k + 1]
 
-            #   in general, query should work with any subset of the total table dim
-            # TODO not implemented: initially, context is also None
-            # TODO does it make sense even what last layer is doing here? is its prediction thing doing anything?
-            # unclear in this layer what output is doing, when trained... is prediction used at all?
+            # in general, query should work with any subset of the total table dim
+            # unclear in this layer what output is doing, when trained... is prediction used at all? if context also None
             # yes- they are different predictions- same input + different outputs, appear as two different values in confidences dict
             # confidences are in space of input + predicted output, not just input by itself
 
@@ -152,6 +161,7 @@ class ConfidencePredictorEnsemble(object):
             layer_input = dists.copy()
 
         # learning
+        # TODO should only happen if guaranteed enough history already
         for k in range(self.num_layers):
             dt_input_output = self.input_output_dt_steps_list[k]  # 2
             dt_input_context = self.input_context_dt_steps_list[k]  # 4
@@ -161,9 +171,12 @@ class ConfidencePredictorEnsemble(object):
             output_delay = dt_input_context - dt_input_output  # 2
             context_delay = 0
 
-            # TODO finish this
-            train_input = self.layer_input_history[k][input_delay]
-            train_output = self.layer_input_history[k][output_delay]
+            #  TODO finish this
+
+            #train_input = self.layer_input_history[k][input_delay]
+            #train_output = self.layer_input_history[k][output_delay]
+            train_input = self.layer_input_history.get_state(state_index=k, delay=input_delay)
+            train_output = self.layer_input_history.get_state(state_index=k, delay=output_delay)
 
             if k == self.num_layers - 1:
                 train_context = None

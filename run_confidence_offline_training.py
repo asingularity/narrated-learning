@@ -89,6 +89,7 @@ def run_experiment():
     sim_off_time = 1000000
 
     ensemble = ConfidencePredictorEnsemble(params={'max_history_length': max_history_length,
+                                                   'max_delay': 10,
                                                    'plots_save_folder': plots_save_folder,
                                                    'error_average_steps': 500,
                                                    'entries_per_layer': [20000, 4000, 2000, 1000, 1000],
@@ -122,13 +123,12 @@ def run_experiment():
             fps_frames = 0
             last_fps_time = time.time()
 
-        last_input_state = states_history[k - 1, :]
-        last_x_y_theta = td_info_history[k - 1, :]
+        # last_input_state = states_history[k - 1, :]
+        # last_x_y_theta = td_info_history[k - 1, :]
+        # next_input_state = states_history[k + 1, :]
 
         input_state = states_history[k, :]
         x_y_theta = td_info_history[k, :]
-
-        next_input_state = states_history[k + 1, :]
 
         if do_display:
             _do_display(input_state, dim, scale_camera_factor)

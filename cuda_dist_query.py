@@ -72,6 +72,9 @@ class CudaTable(object):
         self.X_i = np.zeros((1, table_i_only.shape[1])).astype(np.float32)
         self.term_2_i = np.sum(table_i_only ** 2, axis=1)
 
+    def get_num_rows(self):
+        return self.num_entries
+
     def get_size_gb(self):
         return self.size_gb
 
@@ -97,6 +100,7 @@ class CudaTable(object):
         # only three variations supported for now-
         #   all are not None
         #   query_output only is None
+        #   TODO query_context only is None
         #   query_output and query_context are None
 
         assert query_input is not None
@@ -138,7 +142,7 @@ class CudaTable(object):
             term_3 = np.sum(X ** 2, axis=1)[:, np.newaxis]
             dists = term_1 + term_2 + term_3
         else:
-            assert False, str(('Error! invalid query configuration: ', query_input, query_output, query_context))
+            assert False, str(('Error! invalid query configuration (I, O, C): ', query_input, query_output, query_context))
             dists = None
 
         return dists[0]
