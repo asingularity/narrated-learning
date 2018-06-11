@@ -46,6 +46,8 @@ class CudaTable(object):
         self.X = np.zeros((1, table.shape[1])).astype(np.float32)
         self.term_2 = np.sum(table ** 2, axis=1)
 
+        # i_c_only
+
         if table is None:
             table_i_c_only = np.zeros((num_entries, input_dim + context_dim), np.float32)
         else:
@@ -58,6 +60,23 @@ class CudaTable(object):
         self.table_ic_gpu = gpuarray.to_gpu(np.ascontiguousarray(np.transpose(table_i_c_only)))
         self.X_ic = np.zeros((1, table_i_c_only.shape[1])).astype(np.float32)
         self.term_2_ic = np.sum(table_i_c_only ** 2, axis=1)
+
+        # i_o_only
+
+        if table is None:
+            table_i_o_only = np.zeros((num_entries, input_dim + output_dim), np.float32)
+        else:
+            i_indices = np.arange(input_dim)
+            o_indices = np.arange(input_dim, input_dim + output_dim)
+            table_i_o_only = table[:, np.concatenate((i_indices, o_indices))]
+
+        self.size_gb += (table_i_o_only.size * 4.0) / (1e9)
+
+        self.table_io_gpu = gpuarray.to_gpu(np.ascontiguousarray(np.transpose(table_i_o_only)))
+        self.X_io = np.zeros((1, table_i_o_only.shape[1])).astype(np.float32)
+        self.term_2_io = np.sum(table_i_o_only ** 2, axis=1)
+
+        # i_only
 
         if table is None:
             # TODO finish this- also incorporate into set_matrix_row
@@ -129,6 +148,17 @@ class CudaTable(object):
             term_2 = self.term_2_ic
             term_3 = np.sum(X ** 2, axis=1)[:, np.newaxis]
             dists = term_1 + term_2 + term_3
+        elif query_output is not None and query_context is None:
+            query_data = np.concatenate((query_input, query_output))
+            X = self.X_io
+            X[0, :] = query_data[:]
+            i_d_t_gpu = self.table_io_gpu
+            X_gpu = gpuarray.to_gpu(X)
+            term_1 = linalg.dot(X_gpu, i_d_t_gpu).get()
+            term_1 = -2 * term_1
+            term_2 = self.term_2_io
+            term_3 = np.sum(X ** 2, axis=1)[:, np.newaxis]
+            dists = term_1 + term_2 + term_3
         elif query_output is not None and query_context is not None:
             # all three
             query_data = np.concatenate((query_input, query_output, query_context))
@@ -163,7 +193,15 @@ class CudaTable(object):
         rows = self.input_dim + self.output_dim + self.context_dim
         rows_i = self.input_dim
         rows_ic = self.input_dim + self.context_dim
+        rows_io = self.input_dim + self.output_dim
         cols = self.num_entries
+
+        if row_input is None:
+            row_input = np.zeros(self.input_dim, np.float32)
+        if row_output is None:
+            row_output = np.zeros(self.output_dim, np.float32)
+        if row_context is None:
+            row_context = np.zeros(self.context_dim, np.float32)
 
         assert row_input.shape[0] + row_output.shape[0] + row_context.shape[0] == rows
         assert row_input.shape[0] + row_context.shape[0] == rows_ic
@@ -178,6 +216,11 @@ class CudaTable(object):
         arr_gpu_ic = gpuarray.to_gpu(row_data_ic)
         misc.set_by_index(dest_gpu=self.table_ic_gpu, ind=col + cols * np.arange(rows_ic), src_gpu=arr_gpu_ic, ind_which='dest')
         self.term_2_ic[row_index] = np.sum(row_data_ic ** 2)
+
+        row_data_io = np.concatenate((row_input, row_output))
+        arr_gpu_io = gpuarray.to_gpu(row_data_io)
+        misc.set_by_index(dest_gpu=self.table_io_gpu, ind=col + cols * np.arange(rows_io), src_gpu=arr_gpu_io, ind_which='dest')
+        self.term_2_io[row_index] = np.sum(row_data_io ** 2)
 
         row_data_i = row_input
         arr_gpu_i = gpuarray.to_gpu(row_data_i)
@@ -213,9 +256,20 @@ class CudaTable(object):
         assert 0.0 < rate < 1.0
         keep = 1.0 - rate
 
-        new_row_input = keep * current_row_input + rate * row_input
-        new_row_output = keep * current_row_output + rate * row_output
-        new_row_context = keep * current_row_context + rate * row_context
+        if row_input is not None:
+            new_row_input = keep * current_row_input + rate * row_input
+        else:
+            new_row_input = current_row_input
+
+        if row_output is not None:
+            new_row_output = keep * current_row_output + rate * row_output
+        else:
+            new_row_output = current_row_output
+
+        if row_context is not None:
+            new_row_context = keep * current_row_context + rate * row_context
+        else:
+            new_row_context = current_row_context
 
         self.set_matrix_row(row_index=row_index,
                             row_input=new_row_input,

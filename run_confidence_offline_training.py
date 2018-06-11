@@ -92,7 +92,7 @@ def run_experiment():
                                                    'max_delay': 10,
                                                    'plots_save_folder': plots_save_folder,
                                                    'error_average_steps': 500,
-                                                   'entries_per_layer': [20000, 4000, 2000, 1000, 1000],
+                                                   'entries_per_layer': [20000, 2000, 1000, 1000, 1000],
                                                    'replacement_every_k_steps': 1,  # 100 for 800 rows, 10 for 8000 rows
                                                    'dim': dim,
                                                    'do_random_init': True,

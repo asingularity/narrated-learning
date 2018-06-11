@@ -137,7 +137,7 @@ class ConfidencePredictorEnsemble(object):
         layer_input = input_state.copy()
         dists = None
         for k in range(self.num_layers):
-            print(k, np.amin(dists), np.amax(dists), np.amin(layer_input), np.amax(layer_input))
+            #print(k, np.amin(dists), np.amax(dists), np.amin(layer_input), np.amax(layer_input))
 
             # where does layer_context come from when running?
             # last timestep output confidences of next layer
@@ -240,7 +240,8 @@ class ConfidencePredictorEnsemble(object):
         self.effectiveness_sum_list[k][ind] += best_second_diff_current
 
         if do_adaptation:
-            #self.table[ind, :] = 0.9 * self.table[ind, :] + 0.1 * new_entry
+            #print('would adapt:', type(train_input), type(train_output), type(train_context))
+
             cuda_table.adapt(row_index=ind,
                              rate=0.1,
                              row_input=train_input,
