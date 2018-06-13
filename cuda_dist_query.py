@@ -16,7 +16,7 @@ class CudaTable(object):
         cuda_table_test.py
     '''
 
-    def __init__(self, num_entries, input_dim, output_dim, context_dim, table=None):
+    def __init__(self, num_entries, input_dim, output_dim, context_dim, include_layers, table=None):
         '''
 
         need to init twice: input + context, input + output + context
@@ -25,7 +25,16 @@ class CudaTable(object):
         :param input_dim:
         :param output_dim:
         :param context_dim:
+        :param include_layers:
+
+        if k < self.num_layers - 1:
+            include_layers = ['ioc', 'ic_only']
+        else:
+            include_layers = ['io_only', 'i_only']
+
         '''
+
+        self.include_layers = include_layers
 
         self.num_entries = num_entries
         self.input_dim = input_dim
@@ -37,59 +46,71 @@ class CudaTable(object):
         # set back to zero init
         # table = np.random.random((num_entries, input_dim + context_dim + output_dim)).astype(np.float32)
 
-        if table is None:
-            table = np.zeros((num_entries, input_dim + output_dim + context_dim), np.float32)
+        self.include_ioc = ('ioc' in self.include_layers)
+        self.include_ic = ('ic_only' in self.include_layers)
+        self.include_io = ('io_only' in self.include_layers)
+        self.include_i = ('i_only' in self.include_layers)
 
-        self.size_gb = (table.size * 4.0) / (1e9)
+        self.size_gb = 0.0
 
-        self.table_gpu = gpuarray.to_gpu(np.ascontiguousarray(np.transpose(table)))
-        self.X = np.zeros((1, table.shape[1])).astype(np.float32)
-        self.term_2 = np.sum(table ** 2, axis=1)
+        if self.include_ioc:
+            self.include_ioc = True
+            if table is None:
+                table = np.zeros((num_entries, input_dim + output_dim + context_dim), np.float32)
 
-        # i_c_only
+            self.size_gb += (table.size * 4.0) / (1e9)
 
-        if table is None:
-            table_i_c_only = np.zeros((num_entries, input_dim + context_dim), np.float32)
-        else:
-            i_indices = np.arange(input_dim)
-            c_indices = np.arange(input_dim + output_dim, input_dim + output_dim + context_dim)
-            table_i_c_only = table[:, np.concatenate((i_indices, c_indices))]
+            self.table_gpu = gpuarray.to_gpu(np.ascontiguousarray(np.transpose(table)))
+            self.X = np.zeros((1, table.shape[1])).astype(np.float32)
+            self.term_2 = np.sum(table ** 2, axis=1)
 
-        self.size_gb += (table_i_c_only.size * 4.0) / (1e9)
+        if self.include_ic:
+            # i_c_only
 
-        self.table_ic_gpu = gpuarray.to_gpu(np.ascontiguousarray(np.transpose(table_i_c_only)))
-        self.X_ic = np.zeros((1, table_i_c_only.shape[1])).astype(np.float32)
-        self.term_2_ic = np.sum(table_i_c_only ** 2, axis=1)
+            if table is None:
+                table_i_c_only = np.zeros((num_entries, input_dim + context_dim), np.float32)
+            else:
+                i_indices = np.arange(input_dim)
+                c_indices = np.arange(input_dim + output_dim, input_dim + output_dim + context_dim)
+                table_i_c_only = table[:, np.concatenate((i_indices, c_indices))]
 
-        # i_o_only
+            self.size_gb += (table_i_c_only.size * 4.0) / (1e9)
 
-        if table is None:
-            table_i_o_only = np.zeros((num_entries, input_dim + output_dim), np.float32)
-        else:
-            i_indices = np.arange(input_dim)
-            o_indices = np.arange(input_dim, input_dim + output_dim)
-            table_i_o_only = table[:, np.concatenate((i_indices, o_indices))]
+            self.table_ic_gpu = gpuarray.to_gpu(np.ascontiguousarray(np.transpose(table_i_c_only)))
+            self.X_ic = np.zeros((1, table_i_c_only.shape[1])).astype(np.float32)
+            self.term_2_ic = np.sum(table_i_c_only ** 2, axis=1)
 
-        self.size_gb += (table_i_o_only.size * 4.0) / (1e9)
+        if self.include_io:
+            # i_o_only
 
-        self.table_io_gpu = gpuarray.to_gpu(np.ascontiguousarray(np.transpose(table_i_o_only)))
-        self.X_io = np.zeros((1, table_i_o_only.shape[1])).astype(np.float32)
-        self.term_2_io = np.sum(table_i_o_only ** 2, axis=1)
+            if table is None:
+                table_i_o_only = np.zeros((num_entries, input_dim + output_dim), np.float32)
+            else:
+                i_indices = np.arange(input_dim)
+                o_indices = np.arange(input_dim, input_dim + output_dim)
+                table_i_o_only = table[:, np.concatenate((i_indices, o_indices))]
 
-        # i_only
+            self.size_gb += (table_i_o_only.size * 4.0) / (1e9)
 
-        if table is None:
-            # TODO finish this- also incorporate into set_matrix_row
-            table_i_only = np.zeros((num_entries, input_dim), np.float32)
-        else:
-            i_indices = np.arange(input_dim)
-            table_i_only = table[:, i_indices]
+            self.table_io_gpu = gpuarray.to_gpu(np.ascontiguousarray(np.transpose(table_i_o_only)))
+            self.X_io = np.zeros((1, table_i_o_only.shape[1])).astype(np.float32)
+            self.term_2_io = np.sum(table_i_o_only ** 2, axis=1)
 
-        self.size_gb += (table_i_only.size * 4.0) / (1e9)
+        if self.include_i:
+            # i_only
 
-        self.table_i_gpu = gpuarray.to_gpu(np.ascontiguousarray(np.transpose(table_i_only)))
-        self.X_i = np.zeros((1, table_i_only.shape[1])).astype(np.float32)
-        self.term_2_i = np.sum(table_i_only ** 2, axis=1)
+            if table is None:
+                # TODO finish this- also incorporate into set_matrix_row
+                table_i_only = np.zeros((num_entries, input_dim), np.float32)
+            else:
+                i_indices = np.arange(input_dim)
+                table_i_only = table[:, i_indices]
+
+            self.size_gb += (table_i_only.size * 4.0) / (1e9)
+
+            self.table_i_gpu = gpuarray.to_gpu(np.ascontiguousarray(np.transpose(table_i_only)))
+            self.X_i = np.zeros((1, table_i_only.shape[1])).astype(np.float32)
+            self.term_2_i = np.sum(table_i_only ** 2, axis=1)
 
     def get_num_rows(self):
         return self.num_entries
@@ -172,7 +193,7 @@ class CudaTable(object):
             term_3 = np.sum(X ** 2, axis=1)[:, np.newaxis]
             dists = term_1 + term_2 + term_3
         else:
-            assert False, str(('Error! invalid query configuration (I, O, C): ', query_input, query_output, query_context))
+            assert False, str(('Error! invalid query configuration (I, O, C) for include_layers: ', type(query_input), type(query_output), type(query_context), self.include_layers))
             dists = None
 
         return dists[0]
@@ -207,35 +228,51 @@ class CudaTable(object):
         assert row_input.shape[0] + row_context.shape[0] == rows_ic
         assert row_input.shape[0] == rows_i
 
-        row_data_all = np.concatenate((row_input, row_output, row_context))
-        arr_gpu = gpuarray.to_gpu(row_data_all)
-        misc.set_by_index(dest_gpu=self.table_gpu, ind=col + cols * np.arange(rows), src_gpu=arr_gpu, ind_which='dest')
-        self.term_2[row_index] = np.sum(row_data_all ** 2)
+        if self.include_ioc:
+            row_data_all = np.concatenate((row_input, row_output, row_context))
+            arr_gpu = gpuarray.to_gpu(row_data_all)
+            misc.set_by_index(dest_gpu=self.table_gpu, ind=col + cols * np.arange(rows), src_gpu=arr_gpu, ind_which='dest')
+            self.term_2[row_index] = np.sum(row_data_all ** 2)
 
-        row_data_ic = np.concatenate((row_input, row_context))
-        arr_gpu_ic = gpuarray.to_gpu(row_data_ic)
-        misc.set_by_index(dest_gpu=self.table_ic_gpu, ind=col + cols * np.arange(rows_ic), src_gpu=arr_gpu_ic, ind_which='dest')
-        self.term_2_ic[row_index] = np.sum(row_data_ic ** 2)
+        if self.include_ic:
+            row_data_ic = np.concatenate((row_input, row_context))
+            arr_gpu_ic = gpuarray.to_gpu(row_data_ic)
+            misc.set_by_index(dest_gpu=self.table_ic_gpu, ind=col + cols * np.arange(rows_ic), src_gpu=arr_gpu_ic, ind_which='dest')
+            self.term_2_ic[row_index] = np.sum(row_data_ic ** 2)
 
-        row_data_io = np.concatenate((row_input, row_output))
-        arr_gpu_io = gpuarray.to_gpu(row_data_io)
-        misc.set_by_index(dest_gpu=self.table_io_gpu, ind=col + cols * np.arange(rows_io), src_gpu=arr_gpu_io, ind_which='dest')
-        self.term_2_io[row_index] = np.sum(row_data_io ** 2)
+        if self.include_io:
+            row_data_io = np.concatenate((row_input, row_output))
+            arr_gpu_io = gpuarray.to_gpu(row_data_io)
+            misc.set_by_index(dest_gpu=self.table_io_gpu, ind=col + cols * np.arange(rows_io), src_gpu=arr_gpu_io, ind_which='dest')
+            self.term_2_io[row_index] = np.sum(row_data_io ** 2)
 
-        row_data_i = row_input
-        arr_gpu_i = gpuarray.to_gpu(row_data_i)
-        misc.set_by_index(dest_gpu=self.table_i_gpu, ind=col + cols * np.arange(rows_i), src_gpu=arr_gpu_i, ind_which='dest')
-        self.term_2_i[row_index] = np.sum(row_data_i ** 2)
+        if self.include_i:
+            row_data_i = row_input
+            arr_gpu_i = gpuarray.to_gpu(row_data_i)
+            misc.set_by_index(dest_gpu=self.table_i_gpu, ind=col + cols * np.arange(rows_i), src_gpu=arr_gpu_i, ind_which='dest')
+            self.term_2_i[row_index] = np.sum(row_data_i ** 2)
 
     def get_matrix_row(self, row_index):
-        col = row_index
-        rows = self.input_dim + self.output_dim + self.context_dim
-        cols = self.num_entries
+        if self.include_ioc:
+            col = row_index
+            rows = self.input_dim + self.output_dim + self.context_dim
+            cols = self.num_entries
 
-        full_row = misc.get_by_index(src_gpu=self.table_gpu, ind=col + cols * np.arange(rows)).get()
-        row_input = full_row[0:self.input_dim]
-        row_output = full_row[self.input_dim:self.input_dim + self.output_dim]
-        row_context = full_row[self.input_dim+self.output_dim:self.input_dim+self.output_dim+self.context_dim]
+            full_row = misc.get_by_index(src_gpu=self.table_gpu, ind=col + cols * np.arange(rows)).get()
+            row_input = full_row[0:self.input_dim]
+            row_output = full_row[self.input_dim:self.input_dim + self.output_dim]
+            row_context = full_row[self.input_dim+self.output_dim:self.input_dim+self.output_dim+self.context_dim]
+        else:
+            pass  # TODO what to return here if IOC not in table? for context? None? zeros?
+            col = row_index
+            rows = self.input_dim + self.output_dim
+            cols = self.num_entries
+
+            row_io = misc.get_by_index(src_gpu=self.table_io_gpu, ind=col + cols * np.arange(rows)).get()
+            row_input = row_io[0:self.input_dim]
+            row_output = row_io[self.input_dim:self.input_dim + self.output_dim]
+
+            row_context = np.zeros(self.context_dim, np.float32)
 
         return row_input, row_output, row_context
 

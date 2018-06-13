@@ -42,7 +42,8 @@ def run_cuda_test(test_seconds):
                            input_dim=input_dim,
                            output_dim=output_dim,
                            context_dim=context_dim,
-                           table=data)
+                           table=data,
+                           include_layers=['ioc'])
     # --- end specific data init ---
 
     start_time = time.time()

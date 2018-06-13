@@ -81,11 +81,17 @@ class ConfidencePredictorEnsemble(object):
                 # last layer has no context
                 layer_context_dim = 0
 
+            if k < self.num_layers - 1:
+                include_layers = ['ioc', 'ic_only']
+            else:
+                include_layers = ['io_only', 'i_only']
+
             layer_output_dim = layer_input_dim
             self.cuda_tables_list.append(CudaTable(num_entries=layer_entries,
                                                    input_dim=layer_input_dim,
                                                    output_dim=layer_output_dim,
-                                                   context_dim=layer_context_dim))
+                                                   context_dim=layer_context_dim,
+                                                   include_layers=include_layers))
             layer_size_gb = self.cuda_tables_list[len(self.cuda_tables_list) - 1].get_size_gb()
             print 'Init of layer', k, 'with rows X cols, size_GB,', '(', layer_entries, 'X', ('('+str(layer_input_dim) + ' + ' + str(layer_context_dim) + ' + ' + str(layer_output_dim)+')'), layer_size_gb
 
@@ -146,12 +152,15 @@ class ConfidencePredictorEnsemble(object):
                 layer_context = None
             else:
                 layer_context = self.last_step_layer_dists[k + 1]
+                if layer_context is None:
+                    layer_context = np.zeros(self.cuda_tables_list[k].context_dim, np.float32)
 
             # in general, query should work with any subset of the total table dim
             # unclear in this layer what output is doing, when trained... is prediction used at all? if context also None
             # yes- they are different predictions- same input + different outputs, appear as two different values in confidences dict
             # confidences are in space of input + predicted output, not just input by itself
 
+            #print('RUN: ', k, type(layer_input), type(None), type(layer_context))
             dists = self.cuda_tables_list[k].query(query_input=layer_input,
                                                    query_output=None,
                                                    query_context=layer_context)
@@ -185,6 +194,7 @@ class ConfidencePredictorEnsemble(object):
                 # since context_delay == 0, instead of above, we can use last step dists:
                 train_context = self.last_step_layer_dists[k + 1]
 
+            #print('LEARN: ', k, type(train_input), type(train_output), type(train_context))
             self._learn(k=k,
                         cuda_table=self.cuda_tables_list[k],
                         train_input=train_input,
