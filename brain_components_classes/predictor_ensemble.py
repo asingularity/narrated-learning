@@ -19,7 +19,7 @@ import pycuda.gpuarray as gpuarray
 
 class PredictorEnsemble(object):
     def __init__(self, params):
-        print 'initializing ensemble...'
+        print('initializing ensemble...')
 
         self.do_random_init = params['do_random_init']  # False  # initialize with random (first) entries
         self.do_adaptation = params['do_adaptation']  # True  # WTA-based learning
@@ -54,7 +54,7 @@ class PredictorEnsemble(object):
         self.min_dist = 0
 
         self.temp_array = np.zeros(self.entries).astype(np.float32)
-        print 'finished initializing ensemble.'
+        print('finished initializing ensemble.')
 
         self.plots_save_folder = params['plots_save_folder']
         self.error_average_steps = params['error_average_steps']
@@ -107,7 +107,7 @@ class PredictorEnsemble(object):
         self.table_output = table_output.astype(np.float32)
         self.table_context = table_context.astype(np.float32)
 
-        print table_input.shape, table_output.shape, table_context.shape
+        print(table_input.shape, table_output.shape, table_context.shape)
 
         precompute_dist = self.original_way
         skcuda.misc.init()

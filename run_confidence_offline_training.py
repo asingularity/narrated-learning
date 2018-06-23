@@ -10,26 +10,28 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from brain_components_classes.confidence_predictor_ensemble import ConfidencePredictorEnsemble
 
+NL_SIM_DIR = '/srv/projects/NL-sim/'
+
 
 def _load_states_history(sim_load_name):
-    data_file = '/home/intec/NL-sim/' + sim_load_name + '/states_history_0.pkl'
+    data_file = sim_load_name + '/states_history_0.pkl'
 
-    print 'loading states history...'
-    f = open(data_file, 'r')
-    states_history = pickle.load(f)
+    print('loading states history...')
+    f = open(data_file, 'rb')
+    states_history = pickle.load(f, encoding='latin1')  # latin1 needed for python 2 pickle
     f.close()
-    print states_history.shape  # (4000001, 48)
+    print (states_history.shape ) # (4000001, 48)
     return states_history
 
 
 def _load_td_info_history(sim_load_name):
-    data_file = '/home/intec/NL-sim/' + sim_load_name + '/debug_td_info_history.pkl'
+    data_file = sim_load_name + '/debug_td_info_history.pkl'
 
-    print 'loading td info history...'
-    f = open(data_file, 'r')
-    td_info_history = pickle.load(f)
+    print ('loading td info history...')
+    f = open(data_file, 'rb')
+    td_info_history = pickle.load(f, encoding='latin1')  # latin1 needed for python 2 pickle
     f.close()
-    print td_info_history.shape  # (4000001, 48)
+    print (td_info_history.shape ) # (4000001, 48)
     return td_info_history
 
 
@@ -59,19 +61,18 @@ def _compute_sparse_inputs(input_state, n_bins):
 
 def print_debug_info(debug_info):
     if len(debug_info) > 0:
-        print
+        print()
         for name in debug_info:
-            print name + ':', debug_info[name]
+            print( name + ':', debug_info[name])
 
-        print
+        print()
 
 
 def run_experiment():
     sim_load_name = '48DIMx1M_states_positions_saved_2018-01-31T13:09:15.676826'
-    plots_save_folder = '/home/intec/NL-sim/' + sim_load_name + '/'
-
-    states_history = _load_states_history(sim_load_name)
-    td_info_history = _load_td_info_history(sim_load_name)
+    plots_save_folder = NL_SIM_DIR + sim_load_name + '/'
+    states_history = _load_states_history(plots_save_folder)
+    td_info_history = _load_td_info_history(plots_save_folder)
 
     dim = states_history.shape[1]
 
@@ -118,7 +119,7 @@ def run_experiment():
         fps_frames += 1
 
         if time.time() > last_fps_time + 5:
-            print 'FPS: ', fps_frames / (time.time() - last_fps_time)
+            print ('FPS: ', fps_frames / (time.time() - last_fps_time))
             print_debug_info(to_debug_print)
             fps_frames = 0
             last_fps_time = time.time()
@@ -138,11 +139,11 @@ def run_experiment():
                                        learn=(t < learning_off_time))
 
         if t == learning_off_time:
-            print 'SAVING ENSEMBLE TO PKL'
+            print ('SAVING ENSEMBLE TO PKL')
             ensemble.save_to_pkl()
 
         if t > sim_off_time:
-            print 'Sim Complete:', t, sim_off_time
+            print ('Sim Complete:', t, sim_off_time)
             return
 
         # TODO re-enable:
@@ -154,7 +155,7 @@ def run_experiment():
                 last_imshow_time = time.time()
 
             if time.time() > last_plot_time + plot_error_every_k_seconds:
-                print 'plotting error', time.time()
+                print ('plotting error', time.time())
                 ensemble.plot_error(fig, ax)
                 last_plot_time = time.time()
         t += 1

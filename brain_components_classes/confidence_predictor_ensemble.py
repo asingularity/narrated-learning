@@ -21,7 +21,7 @@ from brain_components_classes.states_history import StatesLimitedHistory
 
 class ConfidencePredictorEnsemble(object):
     def __init__(self, params):
-        print 'initializing ensemble...'
+        print( 'initializing ensemble...')
 
         self.do_random_init = params['do_random_init']  # False  # initialize with random (first) entries
         self.do_adaptation = params['do_adaptation']  # True  # WTA-based learning
@@ -93,7 +93,7 @@ class ConfidencePredictorEnsemble(object):
                                                    context_dim=layer_context_dim,
                                                    include_layers=include_layers))
             layer_size_gb = self.cuda_tables_list[len(self.cuda_tables_list) - 1].get_size_gb()
-            print 'Init of layer', k, 'with rows X cols, size_GB,', '(', layer_entries, 'X', ('('+str(layer_input_dim) + ' + ' + str(layer_context_dim) + ' + ' + str(layer_output_dim)+')'), layer_size_gb
+            print( 'Init of layer', k, 'with rows X cols, size_GB,', '(', layer_entries, 'X', ('('+str(layer_input_dim) + ' + ' + str(layer_context_dim) + ' + ' + str(layer_output_dim)+')'), layer_size_gb)
 
             total_gb += layer_size_gb
 
@@ -115,7 +115,7 @@ class ConfidencePredictorEnsemble(object):
 
             layer_input_dim_list.append(layer_input_dim)
 
-        print 'finished initializing ensemble. total gb: ', total_gb
+        print ('finished initializing ensemble. total gb: ', total_gb)
 
         self.layer_input_history = StatesLimitedHistory(params={'max_delay': self.max_delay,
                                                                 'states_dim_list': layer_input_dim_list})
