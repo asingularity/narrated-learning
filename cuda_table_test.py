@@ -27,16 +27,17 @@ def run_cuda_test(test_seconds):
     data_frames = FRAMES
     dim = DIM
     data = np.random.random((data_frames, dim)).astype(np.float32)
-    print 'data gigabytes:', (data.size * 4.0) / (1e9)
-    print
-    print 'data first: ', data[0, 0], data[0, -1]
+    print ( 'data gigabytes:', (data.size * 4.0) / (1e9) )
+    print ()
+    print ( 'data first: ', data[0, 0], data[0, -1])
 
     new_row_3 = data[3, :] * 2.0  # * 0.9 #* 2.0
     # --- start specific data init ---
 
-    input_dim = dim / 3
-    output_dim = dim / 3
-    context_dim = dim - input_dim - output_dim
+    input_dim = int(dim / 3)
+    output_dim = int(dim / 3)
+    context_dim = int(dim - input_dim - output_dim)
+    assert DIM == input_dim + output_dim + context_dim
 
     cuda_query = CudaTable(num_entries=data_frames,
                            input_dim=input_dim,
@@ -99,14 +100,14 @@ def run_cuda_test(test_seconds):
             t_spent_sort += time.time() - t0
 
         if frame == 0 or frame == 3:
-            print '      *** frame ***', frame
-            print '      query data: ', query_data[0], query_data[-1]
-            print '      results: ', tmp[0:5]
+            print ('      *** frame ***', frame)
+            print ('      query data: ', query_data[0], query_data[-1])
+            print ('      results: ', tmp[0:5])
             if INCLUDE_SORTED_DIST:
-                print '      sorted dist ind: ', sorted_dist_indices[0], sorted_dist_indices[-1]
+                print ('      sorted dist ind: ', sorted_dist_indices[0], sorted_dist_indices[-1])
         if time.time() - last_time > 1 or time.time() - start_time > test_seconds:
             FPS = (frame - last_frame) * 1.0 / (time.time() - last_time)
-            print 'frame: ', frame, 'FPS: ', FPS, 'query:', t_spent_query / (t_spent_sort + t_spent_query), 'sort:', t_spent_sort / (t_spent_query + t_spent_sort)
+            print ('frame: ', frame, 'FPS: ', FPS, 'query:', t_spent_query / (t_spent_sort + t_spent_query), 'sort:', t_spent_sort / (t_spent_query + t_spent_sort))
             last_frame = frame
             last_time = time.time()
 
@@ -118,7 +119,7 @@ def run_numpy_test(test_seconds):
     data_frames = FRAMES
     dim = DIM
     data = np.random.random((data_frames, dim)).astype(np.float32)
-    print 'data first: ', data[0, 0], data[0, -1]
+    print ('data first: ', data[0, 0], data[0, -1])
 
     new_row_3 = data[3, :] * 2.0  # * 0.9 #* 2.0
     # --- start specific data init ---
@@ -153,14 +154,14 @@ def run_numpy_test(test_seconds):
         assert ret == 1
 
         if frame == 0 or frame == 3:
-            print '      *** frame ***', frame
-            print '      query data: ', query_data[0], query_data[-1]
+            print ('      *** frame ***', frame)
+            print ('      query data: ', query_data[0], query_data[-1])
             if INCLUDE_SORTED_DIST:
-                print '      sorted dist ind: ', sorted_dist_indices[0], sorted_dist_indices[-1]
-            print '      results: ', tmp[0:5]
+                print ('      sorted dist ind: ', sorted_dist_indices[0], sorted_dist_indices[-1])
+            print ('      results: ', tmp[0:5])
         if time.time() - last_time > 5:
             FPS = (frame - last_frame) * 1.0 / (time.time() - last_time)
-            print 'frame: ', frame, 'FPS: ', FPS, 'query:', t_spent_query / (t_spent_sort + t_spent_query), 'sort:', t_spent_sort / (t_spent_query + t_spent_sort)
+            print ('frame: ', frame, 'FPS: ', FPS, 'query:', t_spent_query / (t_spent_sort + t_spent_query), 'sort:', t_spent_sort / (t_spent_query + t_spent_sort))
             last_frame = frame
             last_time = time.time()
         if time.time() - start_time > test_seconds:
@@ -171,7 +172,7 @@ def run_cython_knn_test(test_seconds):
     data_frames = FRAMES
     dim = DIM
     data = np.random.random((data_frames, dim)).astype(np.float32)
-    print 'data first: ', data[0, 0], data[0, -1]
+    print ('data first: ', data[0, 0], data[0, -1])
 
     new_row_3 = data[3, :] * 2.0  # * 0.9 #* 2.0
     # --- start specific data init ---
@@ -206,14 +207,14 @@ def run_cython_knn_test(test_seconds):
         assert ret == 1
 
         if frame == 0 or frame == 3:
-            print '      *** frame ***', frame
-            print '      query data: ', query_data[0], query_data[-1]
-            print '      results: ', tmp[0:5]
+            print ('      *** frame ***', frame)
+            print ('      query data: ', query_data[0], query_data[-1])
+            print ('      results: ', tmp[0:5])
             if INCLUDE_SORTED_DIST:
-                print '      sorted dist ind: ', sorted_dist_indices[0], sorted_dist_indices[-1]
+                print( '      sorted dist ind: ', sorted_dist_indices[0], sorted_dist_indices[-1])
         if time.time() - last_time > 5:
             FPS = (frame - last_frame) * 1.0 / (time.time() - last_time)
-            print 'frame: ', frame, 'FPS: ', FPS, 'query:', t_spent_query / (t_spent_sort + t_spent_query), 'sort:', t_spent_sort / (t_spent_query + t_spent_sort)
+            print ('frame: ', frame, 'FPS: ', FPS, 'query:', t_spent_query / (t_spent_sort + t_spent_query), 'sort:', t_spent_sort / (t_spent_query + t_spent_sort))
             last_frame = frame
             last_time = time.time()
         if time.time() - start_time > test_seconds:
@@ -230,17 +231,17 @@ if __name__ == '__main__':
 
     test_seconds = 11
 
-    print
-    print '--- cuda ---'
+    print()
+    print ('--- cuda ---')
     np.random.seed(2)
     run_cuda_test(test_seconds=test_seconds)
 
-    print
-    print '--- cython ---'
+    print()
+    print ('--- cython ---')
     np.random.seed(2)
     run_cython_knn_test(test_seconds=test_seconds)
 
-    print
-    print '--- cpu ---'
+    print()
+    print ('--- cpu ---')
     np.random.seed(2)
     run_numpy_test(test_seconds=test_seconds)

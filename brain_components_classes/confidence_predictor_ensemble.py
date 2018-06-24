@@ -293,7 +293,7 @@ class ConfidencePredictorEnsemble(object):
         return plan_position_angle_list
 
     def save_to_pkl(self):
-        f = open(self.plots_save_folder + '/offline_trained_' + self.plots_prefix + '_' + '_PredictorEnsemble.pkl', 'w')
+        f = open(self.plots_save_folder + '/offline_trained_' + self.plots_prefix + '_' + '_PredictorEnsemble.pkl', 'wb')
         pickle.dump(self, f)
         f.close()
 

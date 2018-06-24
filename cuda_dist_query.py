@@ -225,7 +225,7 @@ class CudaTable(object):
             row_context = np.zeros(self.context_dim, np.float32)
 
         assert row_input.shape[0] + row_output.shape[0] + row_context.shape[0] == rows
-        assert row_input.shape[0] + row_context.shape[0] == rows_ic
+        assert row_input.shape[0] + row_context.shape[0] == rows_ic, str((row_input.shape[0], row_context.shape[0], rows_ic))
         assert row_input.shape[0] == rows_i
 
         if self.include_ioc:
