@@ -314,7 +314,7 @@ class CudaTable(object):
                             row_context=new_row_context)
 
 
-class CudaQuery(object):
+class CudaQuery_DEPRECATED(object):
     def __init__(self, input_data):
         self.original_input_data_shape = input_data.shape
         query_data = np.zeros(input_data.shape[1], np.float32)
