@@ -146,14 +146,15 @@ def run_experiment():
             print ('Sim Complete:', t, sim_off_time)
             return
 
+        if time.time() > last_imshow_time + imshow_every_k_seconds:
+            #print('showing new image...', time.time())
+            im = ensemble.get_table_im()
+            cv2.imshow('im', im)
+            cv2.waitKey(1)
+            last_imshow_time = time.time()
+
         # TODO re-enable:
         if False:
-            if time.time() > last_imshow_time + imshow_every_k_seconds:
-                im = ensemble.get_table_im()
-                cv2.imshow('im', im)
-                cv2.waitKey(1)
-                last_imshow_time = time.time()
-
             if time.time() > last_plot_time + plot_error_every_k_seconds:
                 print ('plotting error', time.time())
                 ensemble.plot_error(fig, ax)

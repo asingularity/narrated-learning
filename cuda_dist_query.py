@@ -276,6 +276,15 @@ class CudaTable(object):
 
         return row_input, row_output, row_context
 
+    def get_table_from_gpu(self):
+        '''
+        WARNING: SLOW
+        :return:
+        '''
+
+        table_numpy = self.table_gpu.get()
+        return table_numpy
+
     def adapt(self, row_index, rate, row_input, row_output, row_context):
         '''
         all arguments have to be not None

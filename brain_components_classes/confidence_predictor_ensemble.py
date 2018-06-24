@@ -142,6 +142,8 @@ class ConfidencePredictorEnsemble(object):
 
         layer_input = input_state.copy()
         dists = None
+
+        new_states_list = [layer_input]
         for k in range(self.num_layers):
             #print(k, np.amin(dists), np.amax(dists), np.amin(layer_input), np.amax(layer_input))
 
@@ -160,7 +162,7 @@ class ConfidencePredictorEnsemble(object):
             # yes- they are different predictions- same input + different outputs, appear as two different values in confidences dict
             # confidences are in space of input + predicted output, not just input by itself
 
-            #print('RUN: ', k, type(layer_input), type(None), type(layer_context))
+            # print('RUN: ', k, type(layer_input), type(None), type(layer_context))
             dists = self.cuda_tables_list[k].query(query_input=layer_input,
                                                    query_output=None,
                                                    query_context=layer_context)
@@ -168,7 +170,10 @@ class ConfidencePredictorEnsemble(object):
 
             self.last_step_layer_dists[k] = dists.copy()
             layer_input = dists.copy()
+            if k < self.num_layers - 1:
+                new_states_list.append(layer_input)
 
+        self.layer_input_history.process_new_states(newest_states_list=new_states_list)
         # learning
         # TODO should only happen if guaranteed enough history already
         for k in range(self.num_layers):
@@ -179,8 +184,6 @@ class ConfidencePredictorEnsemble(object):
             input_delay = dt_input_context  # 4
             output_delay = dt_input_context - dt_input_output  # 2
             context_delay = 0
-
-            #  TODO finish this
 
             #train_input = self.layer_input_history[k][input_delay]
             #train_output = self.layer_input_history[k][output_delay]
@@ -236,6 +239,7 @@ class ConfidencePredictorEnsemble(object):
         self.error_steps_list[k] += 1
 
         if do_random_init and self.tmp_ind_list[k] < cuda_table.get_num_rows():
+            # print('here!!!', train_input, train_output)
             cuda_table.set_matrix_row(row_index=self.tmp_ind_list[k],
                                       row_input=train_input,
                                       row_output=train_output,
@@ -298,25 +302,49 @@ class ConfidencePredictorEnsemble(object):
         f.close()
 
     def get_table_im(self):
+        cuda_table = self.cuda_tables_list[0]
+
+        input_dim = cuda_table.input_dim
+        output_dim = cuda_table.output_dim
+        context_dim = cuda_table.context_dim
+
+        table = np.transpose(self.cuda_tables_list[0].get_table_from_gpu())
 
         entries = 40
 
-        im_input = self.table[0:entries, 0:self.dim]
-        im_prediction = self.table[0:entries, self.dim:self.dim * 2]
-        im_context = self.table[0:entries, self.dim * 2::]
+        im_input = table[0:entries, 0:input_dim]
+        im_prediction = table[0:entries, input_dim:input_dim+output_dim]
+        im_context = table[0:entries, input_dim+output_dim::]
 
-        # interleave rows so context below prediction below input
-        A = im_input
-        B = im_prediction
-        C = im_context
-        D = np.empty((A.shape[0] + B.shape[0] + C.shape[0], A.shape[1]))
+        if False:
+            print('***')
+            print(table.shape)
+            print(im_input.shape, im_prediction.shape, im_context.shape)
+            # interleave rows so context below prediction below input
 
-        D[::3, :] = A
-        D[1::3, :] = B
-        D[2::3, :] = C
-        D = np.reshape(D, (D.shape[0], D.shape[1] / 3, 3))
+            A = im_input
+            B = im_prediction
+            C = im_context
+            D = np.empty((A.shape[0] + B.shape[0] + C.shape[0], A.shape[1]))
+            print(D.shape)
+            D[::3, :] = A
+            D[1::3, :] = B
+            D[2::3, :] = C
+            D = np.reshape(D, (D.shape[0], D.shape[1] / 3, 3))
 
-        im = D
+            im = D
+        else:
+            A = im_input
+            B = im_prediction
+            C = np.empty((A.shape[0] + B.shape[0], A.shape[1]))
+            #im = np.concatenate((im_input, im_prediction))
+            C[::2, :] = A
+            C[1::2, :] = B
+
+            im = np.reshape(C, (C.shape[0], C.shape[1] / 3, 3))
+
+        #print('**', np.amin(im), np.amax(im), im.dtype, im.shape)
+
         im = cv2.resize(im, dsize=(0,0), fx=10, fy=10, interpolation=cv2.INTER_NEAREST)
 
         return im
