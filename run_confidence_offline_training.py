@@ -80,7 +80,7 @@ def run_experiment():
     scale_camera_factor = 32
     do_display = False
     plot_error_every_k_seconds = 60 * 5
-    imshow_every_k_seconds = 1
+    imshow_every_k_seconds = 7
     start_step_offset = 0
     env_width_height = 30
 

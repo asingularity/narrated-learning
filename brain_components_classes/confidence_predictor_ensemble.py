@@ -166,7 +166,7 @@ class ConfidencePredictorEnsemble(object):
             dists = self.cuda_tables_list[k].query(query_input=layer_input,
                                                    query_output=None,
                                                    query_context=layer_context)
-            dists = np.tanh(dists)  # factor will be needed here, dependent on layer
+            dists = dists = np.tanh(dists * 0.001)  # TODO factor will be needed here, dependent on layer
 
             self.last_step_layer_dists[k] = dists.copy()
             layer_input = dists.copy()
@@ -221,7 +221,8 @@ class ConfidencePredictorEnsemble(object):
                                  query_output=train_output,
                                  query_context=train_context)
 
-        dists = np.tanh(dists)  # factor will be needed here, dependent on layer
+        dists = np.tanh(dists * 0.001)  # TODO factor will be needed here, dependent on layer
+
         sorted_dist_indices = np.argsort(dists)
         sorted_dists = dists[sorted_dist_indices]
         ind2 = sorted_dist_indices[1]
