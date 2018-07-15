@@ -166,7 +166,11 @@ class ConfidencePredictorEnsemble(object):
             dists = self.cuda_tables_list[k].query(query_input=layer_input,
                                                    query_output=None,
                                                    query_context=layer_context)
-            dists = dists = np.tanh(dists * 0.001)  # TODO factor will be needed here, dependent on layer
+            dists = np.tanh(dists * 0.001)  # TODO factor will be needed here, dependent on layer
+
+            ind = np.argmin(dists)
+            self.table_use_hist_list[k][ind] += 1
+            self.row_ages_list[k][:] = self.row_ages_list[k][:] + 1
 
             self.last_step_layer_dists[k] = dists.copy()
             layer_input = dists.copy()
@@ -275,9 +279,12 @@ class ConfidencePredictorEnsemble(object):
             effectiveness_mean = np.divide(self.effectiveness_sum_list[k], self.effectiveness_num_list[k])
 
             if len(row_replace_candidates) > 0 and self.t > self.last_replacement_t_list[k] + replacement_every_k_steps:
+
                 r_r_c_ind = np.argmin(effectiveness_mean[row_replace_candidates])
 
                 r_r_ind = row_replace_candidates[r_r_c_ind]
+                # if k == 0:
+                #print('replacing layer, index:', k, r_r_ind)
                 self.table_use_hist_list[k][r_r_ind] = 0
                 self.row_ages_list[k][r_r_ind] = 0
                 self.effectiveness_sum_list[k][r_r_ind] = 0.0

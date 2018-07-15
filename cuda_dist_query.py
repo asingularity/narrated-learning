@@ -281,8 +281,10 @@ class CudaTable(object):
         WARNING: SLOW
         :return:
         '''
-
-        table_numpy = self.table_gpu.get()
+        try:
+            table_numpy = self.table_gpu.get()
+        except:
+            table_numpy = self.table_io_gpu.get()
         return table_numpy
 
     def adapt(self, row_index, rate, row_input, row_output, row_context):
