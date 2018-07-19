@@ -36,7 +36,6 @@ class ConfidencePredictorEnsemble(object):
 
         self.plots_prefix = params['plots_prefix']
         self.env_width_height = params['env_width_height']
-        self.error_step = 0
 
         self.entries_per_layer = params['entries_per_layer']
         self.num_layers = len(self.entries_per_layer)
@@ -226,7 +225,7 @@ class ConfidencePredictorEnsemble(object):
                                  query_context=train_context)
 
         dists = np.tanh(dists * 0.001)  # TODO factor will be needed here, dependent on layer
-
+        #print(k, np.unique(dists))
         sorted_dist_indices = np.argsort(dists)
         sorted_dists = dists[sorted_dist_indices]
         ind2 = sorted_dist_indices[1]
@@ -240,7 +239,8 @@ class ConfidencePredictorEnsemble(object):
         error_history[error_step] = dist
         mean_index_0 = max(0, error_step - self.error_average_steps)
         mean_index_1 = error_step
-        mean_error_history[error_step] = np.mean(error_history[mean_index_0:mean_index_1])
+        new_mean_error_history = np.mean(error_history[mean_index_0:mean_index_1])
+        mean_error_history[error_step] = new_mean_error_history
         self.error_steps_list[k] += 1
 
         if do_random_init and self.tmp_ind_list[k] < cuda_table.get_num_rows():
@@ -358,37 +358,47 @@ class ConfidencePredictorEnsemble(object):
         return im
 
     def plot_error(self, fig, ax):
-        ax.cla()
-        ax.get_xaxis().get_major_formatter().set_scientific(False)
-        ax.get_yaxis().get_major_formatter().set_scientific(False)
-        ax.set_ylim([0.0, 10.0])
-        ax.set_yticks(np.arange(0, 10, 0.5))
-        ax.axhline(y=1.5, color='g')
-        thing_to_plot = self.mean_error_history[0:self.error_step]
-        ax.plot(thing_to_plot, 'b-')
-        fig.savefig(self.plots_save_folder + '/offline_trained_' + self.plots_prefix + '_' + 'error_history' + '.png', dpi=100)
 
-        ax.cla()
-        ax.get_xaxis().get_major_formatter().set_scientific(False)
-        ax.get_yaxis().get_major_formatter().set_scientific(False)
-        sorted_net_indices = np.argsort(self.table_use_hist)[::-1]
-        ax.bar(np.arange(self.table_use_hist.shape[0]), self.table_use_hist[sorted_net_indices])
-        fig.savefig(self.plots_save_folder + '/offline_trained_' + self.plots_prefix + '_' + 'table_use_hist' + '.png', dpi=100)
+        for k in range(self.num_layers):
+            mean_error_history = self.mean_error_histories_list[k]
+            table_use_hist = self.table_use_hist_list[k]
+            effectiveness_sum = self.effectiveness_sum_list[k]
+            effectiveness_num = self.effectiveness_num_list[k]
 
-        ax.cla()
-        ax.get_xaxis().get_major_formatter().set_scientific(False)
-        ax.get_yaxis().get_major_formatter().set_scientific(False)
-        effectiveness_mean = np.divide(self.effectiveness_sum, self.effectiveness_num)
-        sorted_effectiveness = np.argsort(effectiveness_mean)[::-1]
-        ax.bar(np.arange(effectiveness_mean.shape[0]), effectiveness_mean[sorted_effectiveness])
-        fig.savefig(self.plots_save_folder + '/offline_trained_' + self.plots_prefix + '_' + 'effectiveness_hist' + '.png', dpi=100)
+            ax.cla()
+            ax.get_xaxis().get_major_formatter().set_scientific(False)
+            ax.get_yaxis().get_major_formatter().set_scientific(False)
+            #ax.set_ylim([0.0, 10.0])
+            #ax.set_yticks(np.arange(0, 10, 0.5))
+            #ax.axhline(y=1.5, color='g')
+            if self.error_steps_list[k] > 10:
+                thing_to_plot = mean_error_history[10:self.error_steps_list[k]]
+                ax.plot(thing_to_plot, 'b-')
+                fig.savefig(self.plots_save_folder + '/' + self.plots_prefix + '_' + 'error_history_' + str(k) + '.png', dpi=100)
 
-        ax.cla()
-        ax.get_xaxis().get_major_formatter().set_scientific(False)
-        ax.get_yaxis().get_major_formatter().set_scientific(False)
-        ax.set_xlim([0 - 0.1, self.env_width_height + 0.1])
-        ax.set_ylim([0 - 0.1, self.env_width_height + 0.1])
-        ax.plot(self.debug_x_y_theta_input[:, 0],  self.debug_x_y_theta_input[:, 1], 'go')
-        #ax.plot(self.debug_x_y_theta_output[:, 0],  self.debug_x_y_theta_output[:, 1], 'ro')
-        ax.set_title(str(np.count_nonzero(self.debug_x_y_theta_input[:, 0]) * 1.0 / self.debug_x_y_theta_input.shape[0]))
-        fig.savefig(self.plots_save_folder + '/offline_trained_' + self.plots_prefix + '_' + 'debug_td_info' + '.png', dpi=100)
+            ax.cla()
+            ax.get_xaxis().get_major_formatter().set_scientific(False)
+            ax.get_yaxis().get_major_formatter().set_scientific(False)
+            sorted_net_indices = np.argsort(table_use_hist)[::-1]
+            ax.bar(np.arange(table_use_hist.shape[0]), table_use_hist[sorted_net_indices])
+            fig.savefig(self.plots_save_folder + '/' + self.plots_prefix + '_' + 'table_use_hist_' + str(k) + '.png', dpi=100)
+
+            ax.cla()
+            ax.get_xaxis().get_major_formatter().set_scientific(False)
+            ax.get_yaxis().get_major_formatter().set_scientific(False)
+            effectiveness_mean = np.divide(effectiveness_sum, effectiveness_num)
+            sorted_effectiveness = np.argsort(effectiveness_mean)[::-1]
+            ax.bar(np.arange(effectiveness_mean.shape[0]), effectiveness_mean[sorted_effectiveness])
+            fig.savefig(self.plots_save_folder + '/' + self.plots_prefix + '_' + 'effectiveness_hist_' + str(k) + '.png', dpi=100)
+
+            # TODO re-enable this for first layer!
+            if False:
+                ax.cla()
+                ax.get_xaxis().get_major_formatter().set_scientific(False)
+                ax.get_yaxis().get_major_formatter().set_scientific(False)
+                ax.set_xlim([0 - 0.1, self.env_width_height + 0.1])
+                ax.set_ylim([0 - 0.1, self.env_width_height + 0.1])
+                ax.plot(self.debug_x_y_theta_input[:, 0],  self.debug_x_y_theta_input[:, 1], 'go')
+                #ax.plot(self.debug_x_y_theta_output[:, 0],  self.debug_x_y_theta_output[:, 1], 'ro')
+                ax.set_title(str(np.count_nonzero(self.debug_x_y_theta_input[:, 0]) * 1.0 / self.debug_x_y_theta_input.shape[0]))
+                fig.savefig(self.plots_save_folder + '/offline_trained_' + self.plots_prefix + '_' + 'debug_td_info' + '.png', dpi=100)
