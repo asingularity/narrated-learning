@@ -79,7 +79,7 @@ def run_experiment():
     max_history_length = states_history.shape[0]
     scale_camera_factor = 32
     do_display = False
-    plot_error_every_k_seconds = 60 * 5
+    plot_error_every_k_seconds = 60  # * 5
     imshow_every_k_seconds = 7
     start_step_offset = 0
     env_width_height = 30
@@ -93,14 +93,14 @@ def run_experiment():
                                                    'max_delay': 10,
                                                    'plots_save_folder': plots_save_folder,
                                                    'error_average_steps': 500,
-                                                   'entries_per_layer': [20000, 2000, 1000, 1000, 1000],
-                                                   'replacement_every_k_steps': 1,  # 100 for 800 rows, 10 for 8000 rows
+                                                   'entries_per_layer': [20000],  #, 2000, 1000, 1000, 1000],
+                                                   'replacement_every_k_steps': 100,  # 100 for 800 rows, 10 for 8000 rows
                                                    'dim': dim,
                                                    'do_random_init': True,
                                                    'do_adaptation': True,
-                                                   'do_replacements': True,
+                                                   'do_replacements': False,
                                                    'env_width_height': env_width_height,  # for plotting positions
-                                                   'plots_prefix': 'new_test_1'})
+                                                   'plots_prefix': 'test'})
 
     k_to_train = np.arange(3, max_history_length - 1)[start_step_offset::]
 
@@ -150,15 +150,15 @@ def run_experiment():
             #print('showing new image...', time.time())
             im = ensemble.get_table_im()
             cv2.imshow('im', im)
-            cv2.waitKey(1)
             last_imshow_time = time.time()
 
-        # TODO re-enable:
-        if False:
-            if time.time() > last_plot_time + plot_error_every_k_seconds:
-                print ('plotting error', time.time())
-                ensemble.plot_error(fig, ax)
-                last_plot_time = time.time()
+        cv2.waitKey(1)
+
+        if time.time() > last_plot_time + plot_error_every_k_seconds:
+            print ('plotting error', time.time())
+            ensemble.plot_error(fig, ax)
+            last_plot_time = time.time()
+
         t += 1
 
 

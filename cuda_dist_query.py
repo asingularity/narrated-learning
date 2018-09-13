@@ -287,6 +287,42 @@ class CudaTable(object):
             table_numpy = self.table_io_gpu.get()
         return table_numpy
 
+    def seq_kmeans_adapt(self, row_index, rate, row_input, row_output, row_context):
+        '''
+        all arguments have to be not None
+
+        :param row_index:
+        :param rate:
+        :param row_input:
+        :param row_output:
+        :param row_context:
+        :return:
+        '''
+
+        # self.table[ind, :] = 0.9 * self.table[ind, :] + 0.1 * new_entry
+        current_row_input, current_row_output, current_row_context = self.get_matrix_row(row_index=row_index)
+        assert 0.0 < rate < 1.0
+
+        if row_input is not None:
+            new_row_input = current_row_input + rate * (row_input - current_row_input)
+        else:
+            new_row_input = current_row_input
+
+        if row_output is not None:
+            new_row_output = current_row_output + rate * (row_output - current_row_output)
+        else:
+            new_row_output = current_row_output
+
+        if row_context is not None:
+            new_row_context = current_row_context + rate * (row_context - current_row_context)
+        else:
+            new_row_context = current_row_context
+
+        self.set_matrix_row(row_index=row_index,
+                            row_input=new_row_input,
+                            row_output=new_row_output,
+                            row_context=new_row_context)
+
     def adapt(self, row_index, rate, row_input, row_output, row_context):
         '''
         all arguments have to be not None

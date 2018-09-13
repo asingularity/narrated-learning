@@ -144,10 +144,6 @@ class ConfidencePredictorEnsemble(object):
 
         new_states_list = [layer_input]
         for k in range(self.num_layers):
-            #print(k, np.amin(dists), np.amax(dists), np.amin(layer_input), np.amax(layer_input))
-
-            # where does layer_context come from when running?
-            # last timestep output confidences of next layer
 
             if k == self.num_layers - 1:
                 layer_context = None
@@ -156,12 +152,6 @@ class ConfidencePredictorEnsemble(object):
                 if layer_context is None:
                     layer_context = np.zeros(self.cuda_tables_list[k].context_dim, np.float32)
 
-            # in general, query should work with any subset of the total table dim
-            # unclear in this layer what output is doing, when trained... is prediction used at all? if context also None
-            # yes- they are different predictions- same input + different outputs, appear as two different values in confidences dict
-            # confidences are in space of input + predicted output, not just input by itself
-
-            # print('RUN: ', k, type(layer_input), type(None), type(layer_context))
             dists = self.cuda_tables_list[k].query(query_input=layer_input,
                                                    query_output=None,
                                                    query_context=layer_context)
@@ -178,7 +168,8 @@ class ConfidencePredictorEnsemble(object):
 
         self.layer_input_history.process_new_states(newest_states_list=new_states_list)
         # learning
-        # TODO should only happen if guaranteed enough history already
+        # should only happen if guaranteed enough history already
+
         for k in range(self.num_layers):
             dt_input_output = self.input_output_dt_steps_list[k]  # 2
             dt_input_context = self.input_context_dt_steps_list[k]  # 4
@@ -186,10 +177,7 @@ class ConfidencePredictorEnsemble(object):
 
             input_delay = dt_input_context  # 4
             output_delay = dt_input_context - dt_input_output  # 2
-            context_delay = 0
 
-            #train_input = self.layer_input_history[k][input_delay]
-            #train_output = self.layer_input_history[k][output_delay]
             train_input = self.layer_input_history.get_state(state_index=k, delay=input_delay)
             train_output = self.layer_input_history.get_state(state_index=k, delay=output_delay)
 
@@ -200,21 +188,19 @@ class ConfidencePredictorEnsemble(object):
                 # since context_delay == 0, instead of above, we can use last step dists:
                 train_context = self.last_step_layer_dists[k + 1]
 
-            #print('LEARN: ', k, type(train_input), type(train_output), type(train_context))
             self._learn(k=k,
                         cuda_table=self.cuda_tables_list[k],
                         train_input=train_input,
                         train_output=train_output,
                         train_context=train_context,
                         error_history=self.error_histories_list[k],
-                        mean_error_history=self.mean_error_histories_list[k],
-                        table_use_hist=self.table_use_hist_list[k])
+                        mean_error_history=self.mean_error_histories_list[k])
 
         to_debug_print = {}
         return to_debug_print
 
     def _learn(self, k, cuda_table, train_input, train_output, train_context,
-               error_history, mean_error_history, table_use_hist):
+               error_history, mean_error_history):
 
         do_random_init = self.do_random_init  # initialize with random entries
         do_adaptation = self.do_adaptation  # WTA-based learning
@@ -232,8 +218,6 @@ class ConfidencePredictorEnsemble(object):
         dist2 = dists[ind2]
         ind = sorted_dist_indices[0]
         dist = dists[ind]
-
-        table_use_hist[ind] += 1
 
         error_step = self.error_steps_list[k]
         error_history[error_step] = dist
@@ -258,14 +242,14 @@ class ConfidencePredictorEnsemble(object):
         self.effectiveness_num_list[k][ind] += 1
         self.effectiveness_sum_list[k][ind] += best_second_diff_current
 
-        if do_adaptation:
+        if do_adaptation and self.tmp_ind_list[k] >= cuda_table.get_num_rows():
             #print('would adapt:', type(train_input), type(train_output), type(train_context))
 
-            cuda_table.adapt(row_index=ind,
-                             rate=0.1,
-                             row_input=train_input,
-                             row_output=train_output,
-                             row_context=train_context)
+            cuda_table.seq_kmeans_adapt(row_index=ind,
+                                        rate=1.0 / self.effectiveness_num_list[k][ind],
+                                        row_input=train_input,
+                                        row_output=train_output,
+                                        row_context=train_context)
 
             # for theta: could be weird... discontinuities
             # self.debug_x_y_theta_output[ind, :] = 0.9 * self.debug_x_y_theta_output[ind, :] + 0.1 * x_y_theta[:]
