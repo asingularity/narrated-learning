@@ -79,7 +79,7 @@ def run_experiment():
     max_history_length = states_history.shape[0]
     scale_camera_factor = 32
     do_display = False
-    plot_error_every_k_seconds = 60  # * 5
+    plot_error_every_k_seconds = 60 * 20  # * 5
     imshow_every_k_seconds = 7
     start_step_offset = 0
     env_width_height = 30
@@ -119,7 +119,7 @@ def run_experiment():
         fps_frames += 1
 
         if time.time() > last_fps_time + 5:
-            print ('FPS: ', fps_frames / (time.time() - last_fps_time))
+            print ('FPS: ', fps_frames / (time.time() - last_fps_time), t)
             print_debug_info(to_debug_print)
             fps_frames = 0
             last_fps_time = time.time()
