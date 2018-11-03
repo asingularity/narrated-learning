@@ -301,7 +301,7 @@ class CudaTable(object):
 
         # self.table[ind, :] = 0.9 * self.table[ind, :] + 0.1 * new_entry
         current_row_input, current_row_output, current_row_context = self.get_matrix_row(row_index=row_index)
-        assert 0.0 < rate < 1.0
+        assert 0.0 < rate < 1.0, 'invalid rate: ' + str(rate)
 
         if row_input is not None:
             new_row_input = current_row_input + rate * (row_input - current_row_input)

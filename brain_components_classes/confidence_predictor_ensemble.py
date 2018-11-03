@@ -378,7 +378,7 @@ class ConfidencePredictorEnsemble(object):
                 self.table_use_hist_list[k][r_r_ind] = 0
                 self.row_ages_list[k][r_r_ind] = 0
                 self.effectiveness_sum_list[k][r_r_ind] = 0.0
-                self.effectiveness_num_list[k][r_r_ind] = 0
+                self.effectiveness_num_list[k][r_r_ind] = 1
 
                 cuda_table.set_matrix_row(row_index=r_r_ind,
                                           row_input=train_input,
