@@ -255,56 +255,26 @@ class ConfidencePredictorEnsemble(object):
         # (2) compare min of above, to current_min_row_to_row (min dist in table)
         # (3) if new min > current min:
 
-        if new_min_dist > self.current_min_dists[k]:
+        if new_min_dist > cuda_table.get_min_dist():
             # minimum distance of new row to current rows is greater than current minimum row-row distance
             # so: replace one row of current minimum, with new row
 
             # get one of the row indices of current minimum dist pair
-            r_r_ind = self.current_min_dist_indices[k][0]
+            r_r_ind = cuda_table.get_min_dist_row_indices()[0]
 
             # zero out its stats in preparation for replacement
             self.table_use_hist_list[k][r_r_ind] = 0
             self.row_ages_list[k][r_r_ind] = 0
             self.effectiveness_sum_list[k][r_r_ind] = 0.0
-            self.effectiveness_num_list[k][r_r_ind] = 0
+            self.effectiveness_num_list[k][r_r_ind] = 1
 
             # replace the current min dist row, with the new row
+            # TODO should it recompute dists again, or should it cache / should we pass in dists from above?
             cuda_table.set_matrix_row(row_index=r_r_ind,
                                       row_input=train_input,
                                       row_output=train_output,
-                                      row_context=train_context)
-
-            # THIS IS WRONG: we need to get the new minimum (something else in table- what was second minimum before?)
-            # now- using sorted dicts (?), get new worst row
-            self.current_min_dists[k] = min_dist
-            self.current_min_dist_indices[k][1] = r_r_ind
-            self.current_min_dist_indices[k][0] = min_ind
-
-        # OLD CODE:
-        if False:
-            row_replace_candidates = np.nonzero(self.row_ages_list[k] > min_replaced_row_age)[0]
-            effectiveness_mean = np.divide(self.effectiveness_sum_list[k], self.effectiveness_num_list[k])
-
-            if len(row_replace_candidates) > 0 and self.t > self.last_replacement_t_list[k] + replacement_every_k_steps:
-                r_r_c_ind = np.argmin(effectiveness_mean[row_replace_candidates])
-
-                r_r_ind = row_replace_candidates[r_r_c_ind]
-                # if k == 0:
-                # print('replacing layer, index:', k, r_r_ind)
-                self.table_use_hist_list[k][r_r_ind] = 0
-                self.row_ages_list[k][r_r_ind] = 0
-                self.effectiveness_sum_list[k][r_r_ind] = 0.0
-                self.effectiveness_num_list[k][r_r_ind] = 0
-
-                cuda_table.set_matrix_row(row_index=r_r_ind,
-                                          row_input=train_input,
-                                          row_output=train_output,
-                                          row_context=train_context)
-
-                # self.debug_x_y_theta_output[r_r_ind, :] = x_y_theta[:]
-                # self.debug_x_y_theta_input[r_r_ind, :] = last_x_y_theta[:]
-
-                self.last_replacement_t_list[k] = self.t
+                                      row_context=train_context,
+                                      row_to_table_dists=dists)  # optional arg- if None, cuda_table computes it internally as above
 
     def _learn_seq_kmeans(self, k, cuda_table, train_input, train_output, train_context, error_history, mean_error_history):
 

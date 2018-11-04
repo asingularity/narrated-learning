@@ -1,6 +1,14 @@
 import numpy as np
 import random
 from time import time
+import numpy as np
+import pycuda.driver as cuda
+import pycuda.autoinit
+from pycuda.compiler import SourceModule
+import pycuda.gpuarray as gpuarray
+import pycuda.cumath as cumath
+import skcuda.linalg as linalg
+import skcuda.misc as misc
 
 
 def test_sorted_dict():
@@ -27,7 +35,7 @@ def test_sorted_dict():
 
 
 def test_all_all_array():
-    rows = 20000
+    rows = 2000
     d = np.random.random((rows, rows))
     actual_min = np.amin(d)
     print(d.shape)
@@ -36,7 +44,7 @@ def test_all_all_array():
     print('Start...')
 
     t0 = time()
-    frames = 5000
+    frames = 500
     for k in range(frames):
         # choose a random row, and replaces all distances to/from it with a new float array
         rep_row_ind = random.randint(1, rows - 1)
@@ -47,7 +55,7 @@ def test_all_all_array():
         min_d = np.amin(new_row)
         if min_d < actual_min:
             actual_min = min_d
-        #(random.randint(1, rows - 1), random.randint(1, rows - 1))
+
     t1 = time()
 
     print('FPS: ', frames * 1.0 / (t1 - t0))
@@ -55,6 +63,53 @@ def test_all_all_array():
     print('min', actual_min)
 
 
+def test_min_cpu(rows, frames):
+    d = np.random.random((rows, rows)).astype(np.float32)
+    min_d = np.amin(d)
+
+    t0 = time()
+    print('Start...')
+    for k in range(frames):
+        min_d = np.amin(d)
+
+    t1 = time()
+    print('Done. min', min_d)
+
+    print('FPS: ', frames * 1.0 / (t1 - t0))
+
+
+def test_min_gpu(rows, frames):
+    linalg.init()
+
+    d = np.random.random((rows, rows)).astype(np.float32)
+    min_d = np.amin(d)
+    min_d_gpu = None
+
+    d_gpu = gpuarray.to_gpu(np.ascontiguousarray(d))
+
+    t0 = time()
+    print('Start...')
+    for k in range(frames):
+        min_d_gpu = misc.min(d_gpu)
+        #min_d_gpu = gpuarray.min(d_gpu)
+
+    t1 = time()
+
+    print('Done. min', min_d, min_d_gpu)
+    print('FPS: ', frames * 1.0 / (t1 - t0))
+
+
 if __name__ == '__main__':
     #test_sorted_dict()
-    test_all_all_array()
+    #test_all_all_array()
+
+    rows = 20000
+    frames = 20
+    print()
+    print('Starting test: rows: ', rows, ', frames:', frames)
+    print()
+    print('CPU')
+    test_min_cpu(rows, frames)
+    print()
+    print('GPU')
+    test_min_gpu(rows, frames)
