@@ -64,7 +64,7 @@ def test_all_all_array():
 
 
 def test_min_cpu(rows, frames):
-    d = np.random.random((rows, rows)).astype(np.float32)
+    d = np.random.random((rows * rows)).astype(np.float32)
     min_d = np.amin(d)
 
     t0 = time()
@@ -79,9 +79,11 @@ def test_min_cpu(rows, frames):
 
 
 def test_min_gpu(rows, frames):
+    DO_SET_DISTS_TEST = True
+
     linalg.init()
 
-    d = np.random.random((rows, rows)).astype(np.float32)
+    d = np.random.random((rows * rows)).astype(np.float32)
     min_d = np.amin(d)
     min_d_gpu = None
 
@@ -92,6 +94,13 @@ def test_min_gpu(rows, frames):
     for k in range(frames):
         min_d_gpu = misc.min(d_gpu)
         #min_d_gpu = gpuarray.min(d_gpu)
+
+        if DO_SET_DISTS_TEST:
+            rand_row = random.randint(1, rows - 1)
+            new_row_to_table_dists = np.random.random(rows).astype(np.float32)
+            new_row_to_table_dists_gpu = gpuarray.to_gpu(new_row_to_table_dists)
+
+            misc.set_by_index(dest_gpu=d_gpu, ind=rand_row * rows + np.arange(rows), src_gpu =new_row_to_table_dists_gpu, ind_which='dest')
 
     t1 = time()
 
