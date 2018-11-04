@@ -101,6 +101,7 @@ def test_min_gpu(rows, frames, dtype):
             new_row_to_table_dists_gpu = gpuarray.to_gpu(new_row_to_table_dists)
 
             misc.set_by_index(dest_gpu=d_gpu, ind=rand_row * rows + np.arange(rows), src_gpu=new_row_to_table_dists_gpu, ind_which='dest')
+            misc.set_by_index(dest_gpu=d_gpu, ind=rand_row + rows * np.arange(rows), src_gpu=new_row_to_table_dists_gpu, ind_which='dest')
 
     t1 = time()
 
@@ -119,8 +120,8 @@ if __name__ == '__main__':
     print()
     print('Starting test: rows: ', rows, ', frames:', frames)
     print()
-    print('CPU')
-    test_min_cpu(rows, frames, dtype)
-    print()
     print('GPU')
     test_min_gpu(rows, frames, dtype)
+    print()
+    print('CPU')
+    test_min_cpu(rows, frames, dtype)
