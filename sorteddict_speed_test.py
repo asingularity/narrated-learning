@@ -63,8 +63,8 @@ def test_all_all_array():
     print('min', actual_min)
 
 
-def test_min_cpu(rows, frames):
-    d = np.random.random((rows * rows)).astype(np.float32)
+def test_min_cpu(rows, frames, dtype):
+    d = np.random.random((rows * rows)).astype(dtype)
     min_d = np.amin(d)
 
     t0 = time()
@@ -78,12 +78,12 @@ def test_min_cpu(rows, frames):
     print('FPS: ', frames * 1.0 / (t1 - t0))
 
 
-def test_min_gpu(rows, frames):
+def test_min_gpu(rows, frames, dtype):
     DO_SET_DISTS_TEST = True
 
     linalg.init()
 
-    d = np.random.random((rows * rows)).astype(np.float32)
+    d = np.random.random((rows * rows)).astype(dtype)
     min_d = np.amin(d)
     min_d_gpu = None
 
@@ -97,10 +97,10 @@ def test_min_gpu(rows, frames):
 
         if DO_SET_DISTS_TEST:
             rand_row = random.randint(1, rows - 1)
-            new_row_to_table_dists = np.random.random(rows).astype(np.float32)
+            new_row_to_table_dists = np.random.random(rows).astype(dtype)
             new_row_to_table_dists_gpu = gpuarray.to_gpu(new_row_to_table_dists)
 
-            misc.set_by_index(dest_gpu=d_gpu, ind=rand_row * rows + np.arange(rows), src_gpu =new_row_to_table_dists_gpu, ind_which='dest')
+            misc.set_by_index(dest_gpu=d_gpu, ind=rand_row * rows + np.arange(rows), src_gpu=new_row_to_table_dists_gpu, ind_which='dest')
 
     t1 = time()
 
@@ -114,11 +114,13 @@ if __name__ == '__main__':
 
     rows = 20000
     frames = 20
+    dtype = np.float32
+
     print()
     print('Starting test: rows: ', rows, ', frames:', frames)
     print()
     print('CPU')
-    test_min_cpu(rows, frames)
+    test_min_cpu(rows, frames, dtype)
     print()
     print('GPU')
-    test_min_gpu(rows, frames)
+    test_min_gpu(rows, frames, dtype)
