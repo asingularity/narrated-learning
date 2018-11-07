@@ -56,6 +56,11 @@ class DistMatrixHelper(object):
         self.argmin_by_row = np.zeros(num_rows, np.int)
         self.min_by_row = np.zeros(num_rows, np.float32)
 
+        self.argmax_by_row = np.zeros(num_rows, np.int)
+        self.max_by_row = np.zeros(num_rows, np.float32)
+
+        self.dist_mat = np.ones((num_rows, num_rows), np.float32) * init_dists_val
+
     def get_min_dist(self):
         '''
 
@@ -74,7 +79,11 @@ class DistMatrixHelper(object):
         :return: max_dist, row_0, row_1
         '''
 
-        return None, None, None
+        row_1 = np.argmax(self.max_by_row)
+        max_dist = self.max_by_row[row_1]
+        row_0 = self.argmax_by_row[row_1]
+
+        return max_dist, row_0, row_1
 
     def set_row_dists(self, row_index, new_dists):
         '''
@@ -84,20 +93,82 @@ class DistMatrixHelper(object):
         :return:
         '''
 
-        tmp_ind = np.argmin(new_dists)
-        tmp_min = new_dists[tmp_ind]
-        if tmp_min < self.min_by_row[row_index]:
-            self.argmin_by_row[row_index] = tmp_ind
-            self.min_by_row[row_index] = tmp_min
+        self.dist_mat[row_index, :] = new_dists
+        self.dist_mat[:, row_index] = new_dists
+
+        tmp_min_ind = np.argmin(new_dists)
+        tmp_max_ind = np.argmax(new_dists)
+        tmp_min = new_dists[tmp_min_ind]
+        tmp_max = new_dists[tmp_max_ind]
+
+        self.argmin_by_row[row_index] = tmp_min_ind
+        self.min_by_row[row_index] = tmp_min
+
+        self.argmax_by_row[row_index] = tmp_max_ind
+        self.max_by_row[row_index] = tmp_max
 
         for r in range(self.num_rows):
             if not r == row_index:
-                if new_dists[r] < self.min_by_row[r]:
-                    self.min_by_row[r] = new_dists[r]
-                    self.argmin_by_row[r] = row_index
+
+                if self.argmin_by_row[r] == row_index:
+                    tmp_ind = np.argmin(self.dist_mat[r, :])
+                    tmp_min = self.dist_mat[r, tmp_ind]
+
+                    self.argmin_by_row[r] = tmp_ind
+                    self.min_by_row[r] = tmp_min
+                else:
+                    if new_dists[r] < self.min_by_row[r]:
+                        self.argmin_by_row[r] = row_index
+                        self.min_by_row[r] = new_dists[r]
+
+                if self.argmax_by_row[r] == row_index:
+                    tmp_ind = np.argmax(self.dist_mat[r, :])
+                    tmp_max = self.dist_mat[r, tmp_ind]
+
+                    self.argmax_by_row[r] = tmp_ind
+                    self.max_by_row[r] = tmp_max
+                else:
+                    if new_dists[r] > self.max_by_row[r]:
+                        self.argmax_by_row[r] = row_index
+                        self.max_by_row[r] = new_dists[r]
+
+                # TODO this is a problem: how do we know what new min is for a row?
+                # TODO: We still have same problem!
+                '''
+
+                all we know is that we are replacing one. But to get new min, we would need
+                    all the rest of the values
+                we can do one optimization:
+                    we know for a fact if this is NOT the new min:
+                        i.e. if this replacement value is larger than min for row, AND
+                            argmin for row is not replacement index
+
+                solution: still must keep whole matrix, but don't always need to use it:
+
+                scenarios:
+                    - new index is current min index
+                        - must take min over whole row to get new min
+                    - new index is not current min index
+                        - new value is smaller than current min:
+                            replace current min
+                        - new value is not smaller than current min:
+                            nothing changes
+
+                what about max??
+                    - same as min above
 
 
-def test_row_dist(num_rows, test_sec, dumb):
+                '''
+
+
+                #if new_dists[r] < self.min_by_row[r] or self.argmin_by_row[r] == row_index:
+                #    self.min_by_row[r] = new_dists[r]
+                #    self.argmin_by_row[r] = row_index
+
+        #print(self.min_by_row)
+        #print(self.argmin_by_row)
+
+def test_row_dist(num_rows, test_sec, test_frames, dumb):
     np.random.seed(0)
 
     fps = FPSCounter(params={'display_every_k_seconds': 2})
@@ -121,14 +192,14 @@ def test_row_dist(num_rows, test_sec, dumb):
 
         fps.update()
 
-        if frame == 0 or frame == 5 or frame == 10:
+        if frame in test_frames:
             print(frame, new_min, new_max)
 
         frame += 1
 
 if __name__ == '__main__':
 
-    num_rows_test = 10000
-    test_sec_test = 6
+    num_rows_test = 20000
+    test_sec_test = 8
 
-    test_row_dist(num_rows=num_rows_test, test_sec=test_sec_test, dumb=True)
+    test_row_dist(num_rows=num_rows_test, test_sec=test_sec_test, test_frames = [1, 5, 10], dumb=0)
