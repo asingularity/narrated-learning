@@ -193,13 +193,31 @@ def test_row_dist(num_rows, test_sec, test_frames, dumb):
         fps.update()
 
         if frame in test_frames:
-            print(frame, new_min, new_max)
+            print('    ', frame, new_min, new_max)
 
         frame += 1
 
 if __name__ == '__main__':
 
-    num_rows_test = 20000
-    test_sec_test = 8
+    print()
+    print('********')
+    print()
+    print('...slow...')
+    print()
+    test_row_dist(num_rows=200, test_sec=4, test_frames = [1000, 5000, 10000], dumb=1)
+    print()
+    print('...fast...')
+    print()
+    test_row_dist(num_rows=200, test_sec=4, test_frames = [1000, 5000, 10000], dumb=0)
 
-    test_row_dist(num_rows=num_rows_test, test_sec=test_sec_test, test_frames = [1, 5, 10], dumb=0)
+
+    print()
+    print('********')
+    print()
+    print('...slow...')
+    print()
+    test_row_dist(num_rows=20000, test_sec=8, test_frames = [1, 5, 10, 30, 50], dumb=1)
+    print()
+    print('...fast...')
+    print()
+    test_row_dist(num_rows=20000, test_sec=20, test_frames = [1, 5, 10, 30, 50], dumb=0)
