@@ -93,6 +93,10 @@ class DistMatrixHelper(object):
         :return:
         '''
 
+        #print('START')
+        num_bad_1 = 0
+        num_bad_2 = 0
+
         self.dist_mat[row_index, :] = new_dists
         self.dist_mat[:, row_index] = new_dists
 
@@ -110,9 +114,11 @@ class DistMatrixHelper(object):
         for r in range(self.num_rows):
             if not r == row_index:
 
-                if self.argmin_by_row[r] == row_index:
+                if self.argmin_by_row[r] == row_index and new_dists[r] > self.min_by_row[r]:
                     tmp_ind = np.argmin(self.dist_mat[r, :])
                     tmp_min = self.dist_mat[r, tmp_ind]
+
+                    num_bad_1 += 1
 
                     self.argmin_by_row[r] = tmp_ind
                     self.min_by_row[r] = tmp_min
@@ -121,9 +127,11 @@ class DistMatrixHelper(object):
                         self.argmin_by_row[r] = row_index
                         self.min_by_row[r] = new_dists[r]
 
-                if self.argmax_by_row[r] == row_index:
+                if self.argmax_by_row[r] == row_index and new_dists[r] < self.max_by_row[r]:
                     tmp_ind = np.argmax(self.dist_mat[r, :])
                     tmp_max = self.dist_mat[r, tmp_ind]
+
+                    num_bad_2 += 1
 
                     self.argmax_by_row[r] = tmp_ind
                     self.max_by_row[r] = tmp_max
@@ -132,41 +140,6 @@ class DistMatrixHelper(object):
                         self.argmax_by_row[r] = row_index
                         self.max_by_row[r] = new_dists[r]
 
-                # TODO this is a problem: how do we know what new min is for a row?
-                # TODO: We still have same problem!
-                '''
-
-                all we know is that we are replacing one. But to get new min, we would need
-                    all the rest of the values
-                we can do one optimization:
-                    we know for a fact if this is NOT the new min:
-                        i.e. if this replacement value is larger than min for row, AND
-                            argmin for row is not replacement index
-
-                solution: still must keep whole matrix, but don't always need to use it:
-
-                scenarios:
-                    - new index is current min index
-                        - must take min over whole row to get new min
-                    - new index is not current min index
-                        - new value is smaller than current min:
-                            replace current min
-                        - new value is not smaller than current min:
-                            nothing changes
-
-                what about max??
-                    - same as min above
-
-
-                '''
-
-
-                #if new_dists[r] < self.min_by_row[r] or self.argmin_by_row[r] == row_index:
-                #    self.min_by_row[r] = new_dists[r]
-                #    self.argmin_by_row[r] = row_index
-
-        #print(self.min_by_row)
-        #print(self.argmin_by_row)
 
 def test_row_dist(num_rows, test_sec, test_frames, dumb):
     np.random.seed(0)

@@ -20,12 +20,14 @@ else:
 INCLUDE_ADAPT_ROW = True
 INCLUDE_SORTED_DIST = True
 INCLUDE_CHANGE_ROW = True
+INCLUDE_GET_MIN_DIST = True  # TODO implement for fair test in cython / cpu
 # TODO test adapt of a row
 
 
 def run_cuda_test(test_seconds):
     data_frames = FRAMES
     dim = DIM
+    print('DIM:', DIM)
     data = np.random.random((data_frames, dim)).astype(np.float32)
     print ( 'data gigabytes:', (data.size * 4.0) / (1e9) )
     print ()
@@ -44,7 +46,8 @@ def run_cuda_test(test_seconds):
                            output_dim=output_dim,
                            context_dim=context_dim,
                            table=data,
-                           include_layers=['ioc'])
+                           include_layers=['ioc'],
+                           use_dumb_dist=False)
     # --- end specific data init ---
 
     start_time = time.time()
@@ -86,6 +89,10 @@ def run_cuda_test(test_seconds):
                                       row_input=new_row_3[0:input_dim],
                                       row_output=new_row_3[input_dim:input_dim + output_dim],
                                       row_context=new_row_3[input_dim + output_dim::])
+
+        if INCLUDE_GET_MIN_DIST:
+            min_tmp = cuda_query.get_min_dist()
+            max_tmp = cuda_query.get_max_dist()
 
         t0 = time.time()
         tmp = cuda_query.query(query_input=query_data[0:input_dim],
