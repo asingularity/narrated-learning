@@ -48,6 +48,7 @@ class ConfidencePredictorEnsemble(object):
         # self.debug_x_y_theta_input = np.zeros((self.entries, 3))
 
         # input (t), prediction (t+1), context (t+2)
+        self.post_init_done = False
 
         self.cuda_tables_list = []
         self.error_histories_list = []
@@ -188,7 +189,8 @@ class ConfidencePredictorEnsemble(object):
                 # since context_delay == 0, instead of above, we can use last step dists:
                 train_context = self.last_step_layer_dists[k + 1]
 
-            self._learn_seq_kmeans(k=k,
+            # self._learn_seq_kmeans(k=k,
+            self._learn_seq_nn(k=k,
                                    cuda_table=self.cuda_tables_list[k],
                                    train_input=train_input,
                                    train_output=train_output,
@@ -210,38 +212,12 @@ class ConfidencePredictorEnsemble(object):
         :param mean_error_history: self.mean_error_histories_list[k]
         :return:
         '''
-        pass
-        # can do this shortcut (and not store all row-to-row distances), because only this process is updating rows
-        #   won't work... the algorithm (seq nn) assumes you *unconditionally* add new data point to your table
-        #   you only *don't add* the data point if its min dist happens to be less than min dist in table
-        #   (making it the minimum)
-        #
-        # (1) get distance of new row to all current rows in table
-        # (2) compare min of above, to current_min_row_to_row (min dist in table)
-        # (3) if new min > current min:
-        #       replace one of current pair with new row, in table
-        #       current_min_row_to_row = new_min (over whole table)- would have to be next closest from before
-        #       also find next new next closest
-        #       (can't avoid keeping track of all dists)
-        #       i.e.
-        #       end up adding new point and all its distances to existing points, somewhere in the ordered list of dists, and remove current min
-        # what we need is a data structure ordered by distance
-        # a queue that we can insert new data into in correct positions
-        # answer: sortedcontainers: http://www.grantjenks.com/docs/sortedcontainers/
-        #   we want SortedDict: bisect_left / bisect_right
-
-        '''
-        Idea:
-            have:
-                ordered list of dists
-                dict: index in ordered dist list -> (index pair)
-                OR
-                sorted dictionary: dist -> (index pair)
-        '''
 
         # sequential nn: replace "worst" pair in table (smallest distance), with new best pair, new best pair better than worst pair
         #   "worst" pair: smallest distance between rows in pair
         #   "better": larger distance between rows in pair
+
+        do_random_init = self.do_random_init  # initialize with random entries
 
         # (1) get distance of new row to all current rows in table
 
@@ -251,30 +227,69 @@ class ConfidencePredictorEnsemble(object):
         sorted_dist_indices = np.argsort(dists)
         new_min_ind = sorted_dist_indices[0]
         new_min_dist = dists[new_min_ind]
+        ind2 = sorted_dist_indices[1]
+        dist2 = dists[ind2]
+
+        dist = new_min_dist
+        error_step = self.error_steps_list[k]
+        error_history[error_step] = dist
+        mean_index_0 = max(0, error_step - self.error_average_steps)
+        mean_index_1 = error_step
+        new_mean_error_history = np.mean(error_history[mean_index_0:mean_index_1])
+        mean_error_history[error_step] = new_mean_error_history
+        self.error_steps_list[k] += 1
+
+        best_second_diff_current = dist2 - dist
+        self.effectiveness_num_list[k][new_min_ind] += 1
+        self.effectiveness_sum_list[k][new_min_ind] += best_second_diff_current
 
         # (2) compare min of above, to current_min_row_to_row (min dist in table)
         # (3) if new min > current min:
 
-        if new_min_dist > cuda_table.get_min_dist():
-            # minimum distance of new row to current rows is greater than current minimum row-row distance
-            # so: replace one row of current minimum, with new row
+        if do_random_init and self.tmp_ind_list[k] < cuda_table.get_num_rows():
+            # necessary so dist matrix helper is not so slow at start
 
-            # get one of the row indices of current minimum dist pair
-            r_r_ind = cuda_table.get_min_dist_row_indices()[0]
-
-            # zero out its stats in preparation for replacement
-            self.table_use_hist_list[k][r_r_ind] = 0
-            self.row_ages_list[k][r_r_ind] = 0
-            self.effectiveness_sum_list[k][r_r_ind] = 0.0
-            self.effectiveness_num_list[k][r_r_ind] = 1
-
-            # replace the current min dist row, with the new row
-            # TODO should it recompute dists again, or should it cache / should we pass in dists from above?
-            cuda_table.set_matrix_row(row_index=r_r_ind,
+            # print('here!!!', train_input, train_output)
+            cuda_table.set_matrix_row(row_index=self.tmp_ind_list[k],
                                       row_input=train_input,
                                       row_output=train_output,
                                       row_context=train_context,
-                                      row_to_table_dists=dists)  # optional arg- if None, cuda_table computes it internally as above
+                                      row_to_table_dists=dists,
+                                      fast_init=True)
+
+            # self.debug_x_y_theta_output[self.tmp_ind, :] = x_y_theta[:]
+            # self.debug_x_y_theta_input[self.tmp_ind, :] = last_x_y_theta[:]
+            self.tmp_ind_list[k] += 1
+        else:
+            if not self.post_init_done:
+                print()
+                print('Doing post init...')
+                print()
+                cuda_table.post_init()
+                self.post_init_done = True
+                print('Done')
+
+            table_min_dist, table_min_dist_r, table_min_dist_c = cuda_table.get_min_dist()
+
+            if new_min_dist > table_min_dist:
+                # minimum distance of new row to current rows is greater than current minimum row-row distance
+                # so: replace one row of current minimum, with new row
+
+                # get one of the row indices of current minimum dist pair
+                r_r_ind = table_min_dist_r  # could be table_min_dist_c
+
+                # zero out its stats in preparation for replacement
+                self.table_use_hist_list[k][r_r_ind] = 0
+                self.row_ages_list[k][r_r_ind] = 0
+                self.effectiveness_sum_list[k][r_r_ind] = 0.0
+                self.effectiveness_num_list[k][r_r_ind] = 1
+
+                # replace the current min dist row, with the new row
+                cuda_table.set_matrix_row(row_index=r_r_ind,
+                                          row_input=train_input,
+                                          row_output=train_output,
+                                          row_context=train_context,
+                                          row_to_table_dists=dists)  # optional arg- if None, cuda_table computes it internally as above
 
     def _learn_seq_kmeans(self, k, cuda_table, train_input, train_output, train_context, error_history, mean_error_history):
 
@@ -286,7 +301,7 @@ class ConfidencePredictorEnsemble(object):
                                  query_output=train_output,
                                  query_context=train_context)
 
-        dists = np.tanh(dists * 0.001)  # TODO factor will be needed here, dependent on layer
+        #dists = np.tanh(dists * 0.001)  # TODO factor will be needed here, dependent on layer
         #print(k, np.unique(dists))
         sorted_dist_indices = np.argsort(dists)
         sorted_dists = dists[sorted_dist_indices]
@@ -308,7 +323,9 @@ class ConfidencePredictorEnsemble(object):
             cuda_table.set_matrix_row(row_index=self.tmp_ind_list[k],
                                       row_input=train_input,
                                       row_output=train_output,
-                                      row_context=train_context)
+                                      row_context=train_context,
+                                      row_to_table_dists=dists,
+                                      fast_init=True)
 
             # self.debug_x_y_theta_output[self.tmp_ind, :] = x_y_theta[:]
             # self.debug_x_y_theta_input[self.tmp_ind, :] = last_x_y_theta[:]
@@ -325,7 +342,8 @@ class ConfidencePredictorEnsemble(object):
                                         rate=1.0 / self.effectiveness_num_list[k][ind],
                                         row_input=train_input,
                                         row_output=train_output,
-                                        row_context=train_context)
+                                        row_context=train_context,
+                                        row_to_table_dists=dists)
 
             # for theta: could be weird... discontinuities
             # self.debug_x_y_theta_output[ind, :] = 0.9 * self.debug_x_y_theta_output[ind, :] + 0.1 * x_y_theta[:]
@@ -353,7 +371,8 @@ class ConfidencePredictorEnsemble(object):
                 cuda_table.set_matrix_row(row_index=r_r_ind,
                                           row_input=train_input,
                                           row_output=train_output,
-                                          row_context=train_context)
+                                          row_context=train_context,
+                                          row_to_table_dists=dists)
 
                 # self.debug_x_y_theta_output[r_r_ind, :] = x_y_theta[:]
                 # self.debug_x_y_theta_input[r_r_ind, :] = last_x_y_theta[:]

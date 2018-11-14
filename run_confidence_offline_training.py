@@ -79,7 +79,7 @@ def run_experiment():
     max_history_length = states_history.shape[0]
     scale_camera_factor = 32
     do_display = False
-    plot_error_every_k_seconds = 60 * 20  # * 5
+    plot_error_every_k_seconds = 60 * 20  # * 5  # * 20
     imshow_every_k_seconds = 7
     start_step_offset = 0
     env_width_height = 30
@@ -100,7 +100,7 @@ def run_experiment():
                                                    'do_adaptation': True,
                                                    'do_replacements': False,
                                                    'env_width_height': env_width_height,  # for plotting positions
-                                                   'plots_prefix': 'test'})
+                                                   'plots_prefix': 'test_seq_nn'})
 
     k_to_train = np.arange(3, max_history_length - 1)[start_step_offset::]
 

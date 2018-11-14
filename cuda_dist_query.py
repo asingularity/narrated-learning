@@ -127,6 +127,9 @@ class CudaTable(object):
     def get_size_gb(self):
         return self.size_gb
 
+    def post_init(self):
+        self.d.post_init()
+
     def query(self, query_input, query_output, query_context):
         '''
         at least one of arguments has to be not None
@@ -207,7 +210,7 @@ class CudaTable(object):
 
         return dists[0]
 
-    def set_matrix_row(self, row_index, row_input, row_output, row_context, row_to_table_dists=None):
+    def set_matrix_row(self, row_index, row_input, row_output, row_context, row_to_table_dists, fast_init=False):
         '''
         all arguments have to be not None
 
@@ -262,14 +265,9 @@ class CudaTable(object):
             misc.set_by_index(dest_gpu=self.table_i_gpu, ind=col + cols * np.arange(rows_i), src_gpu=arr_gpu_i, ind_which='dest')
             self.term_2_i[row_index] = np.sum(row_data_i ** 2)
 
-        if row_to_table_dists is None:
-            row_to_table_dists = self.query(query_input=row_input,
-                                            query_output=row_output,
-                                            query_context=row_context)
-
-        #print(self.num_entries, row_to_table_dists.shape, row_to_table_dists.dtype)
+        # print(self.num_entries, row_to_table_dists.shape, row_to_table_dists.dtype)
         # THIS IS A BOTTLENECK SLOW STEP:
-        self.d.set_row_dists(row_index=row_index, new_dists=row_to_table_dists)
+        self.d.set_row_dists(row_index=row_index, new_dists=row_to_table_dists, fast_init=fast_init)
 
     def get_min_dist(self):
         '''
@@ -318,7 +316,7 @@ class CudaTable(object):
             table_numpy = self.table_io_gpu.get()
         return table_numpy
 
-    def seq_kmeans_adapt(self, row_index, rate, row_input, row_output, row_context):
+    def seq_kmeans_adapt(self, row_index, rate, row_input, row_output, row_context, row_to_table_dists):
         '''
         all arguments have to be not None
 
@@ -352,7 +350,8 @@ class CudaTable(object):
         self.set_matrix_row(row_index=row_index,
                             row_input=new_row_input,
                             row_output=new_row_output,
-                            row_context=new_row_context)
+                            row_context=new_row_context,
+                            row_to_table_dists=row_to_table_dists)
 
     def adapt(self, row_index, rate, row_input, row_output, row_context):
         '''

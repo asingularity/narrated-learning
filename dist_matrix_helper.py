@@ -85,7 +85,14 @@ class DistMatrixHelper(object):
 
         return max_dist, row_0, row_1
 
-    def set_row_dists(self, row_index, new_dists):
+    def post_init(self):
+        for r in range(self.num_rows):
+            self.argmin_by_row[r] = np.argmin(self.dist_mat[r, :])
+            self.min_by_row[r] = self.dist_mat[r, self.argmin_by_row[r]]
+            self.argmax_by_row[r] = np.argmax(self.dist_mat[r, :])
+            self.max_by_row[r] = self.dist_mat[r, self.argmax_by_row[r]]
+
+    def set_row_dists(self, row_index, new_dists, fast_init=False):
         '''
 
         :param row_index:
@@ -100,45 +107,49 @@ class DistMatrixHelper(object):
         self.dist_mat[row_index, :] = new_dists
         self.dist_mat[:, row_index] = new_dists
 
-        tmp_min_ind = np.argmin(new_dists)
-        tmp_max_ind = np.argmax(new_dists)
-        tmp_min = new_dists[tmp_min_ind]
-        tmp_max = new_dists[tmp_max_ind]
+        if not fast_init:
+            tmp_min_ind = np.argmin(new_dists)
+            tmp_max_ind = np.argmax(new_dists)
+            tmp_min = new_dists[tmp_min_ind]
+            tmp_max = new_dists[tmp_max_ind]
 
-        self.argmin_by_row[row_index] = tmp_min_ind
-        self.min_by_row[row_index] = tmp_min
+            self.argmin_by_row[row_index] = tmp_min_ind
+            self.min_by_row[row_index] = tmp_min
 
-        self.argmax_by_row[row_index] = tmp_max_ind
-        self.max_by_row[row_index] = tmp_max
+            self.argmax_by_row[row_index] = tmp_max_ind
+            self.max_by_row[row_index] = tmp_max
 
-        for r in range(self.num_rows):
-            if not r == row_index:
+            for r in range(self.num_rows):
+                if not r == row_index:
 
-                if self.argmin_by_row[r] == row_index and new_dists[r] > self.min_by_row[r]:
-                    tmp_ind = np.argmin(self.dist_mat[r, :])
-                    tmp_min = self.dist_mat[r, tmp_ind]
+                    if self.argmin_by_row[r] == row_index and new_dists[r] > self.min_by_row[r]:
+                        tmp_ind = np.argmin(self.dist_mat[r, :])
+                        tmp_min = self.dist_mat[r, tmp_ind]
 
-                    num_bad_1 += 1
+                        num_bad_1 += 1
 
-                    self.argmin_by_row[r] = tmp_ind
-                    self.min_by_row[r] = tmp_min
-                else:
-                    if new_dists[r] < self.min_by_row[r]:
-                        self.argmin_by_row[r] = row_index
-                        self.min_by_row[r] = new_dists[r]
+                        self.argmin_by_row[r] = tmp_ind
+                        self.min_by_row[r] = tmp_min
+                    else:
+                        if new_dists[r] < self.min_by_row[r]:
+                            self.argmin_by_row[r] = row_index
+                            self.min_by_row[r] = new_dists[r]
 
-                if self.argmax_by_row[r] == row_index and new_dists[r] < self.max_by_row[r]:
-                    tmp_ind = np.argmax(self.dist_mat[r, :])
-                    tmp_max = self.dist_mat[r, tmp_ind]
+                    if self.argmax_by_row[r] == row_index and new_dists[r] < self.max_by_row[r]:
+                        tmp_ind = np.argmax(self.dist_mat[r, :])
+                        tmp_max = self.dist_mat[r, tmp_ind]
 
-                    num_bad_2 += 1
+                        num_bad_2 += 1
 
-                    self.argmax_by_row[r] = tmp_ind
-                    self.max_by_row[r] = tmp_max
-                else:
-                    if new_dists[r] > self.max_by_row[r]:
-                        self.argmax_by_row[r] = row_index
-                        self.max_by_row[r] = new_dists[r]
+                        self.argmax_by_row[r] = tmp_ind
+                        self.max_by_row[r] = tmp_max
+                    else:
+                        if new_dists[r] > self.max_by_row[r]:
+                            self.argmax_by_row[r] = row_index
+                            self.max_by_row[r] = new_dists[r]
+
+            # TODO debug why slow at start:
+            # print(num_bad_1, num_bad_2)
 
 
 def test_row_dist(num_rows, test_sec, test_frames, dumb):
