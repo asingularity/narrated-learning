@@ -351,7 +351,8 @@ class CudaTable(object):
                             row_input=new_row_input,
                             row_output=new_row_output,
                             row_context=new_row_context,
-                            row_to_table_dists=row_to_table_dists)
+                            row_to_table_dists=row_to_table_dists,
+                            fast_init=True)
 
     def adapt(self, row_index, rate, row_input, row_output, row_context):
         '''
