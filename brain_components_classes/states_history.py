@@ -43,13 +43,17 @@ class StatesLimitedHistory(object):
         self.max_delay = params['max_delay'] + 1  # + 1 for no safety in case you think of it off by 1
         self.states_dim_list = params['states_dim_list']
         self.state_arrays_list = []
+        self.extra_data_list = []
         for k in range(len(self.states_dim_list)):
             self.state_arrays_list.append(np.zeros((self.max_delay, self.states_dim_list[k])).astype(np.float32))
+            self.extra_data_list.append([None] * self.max_delay)
         self.t_mod = 0
 
-    def process_new_states(self, newest_states_list):
+    def process_new_states(self, newest_states_list, extra_data_list):
 
         assert len(newest_states_list) == len(self.state_arrays_list), 'Error: invalid states length!'
+        assert len(extra_data_list) == len(self.extra_data_list), 'Error: invalid extra data length!'
+        assert len(newest_states_list) == len(self.extra_data_list), 'Error: invalid extra data length!'
 
         self.t_mod += 1
         if self.t_mod == self.max_delay:
@@ -58,6 +62,7 @@ class StatesLimitedHistory(object):
         state_index = 0
         for state in newest_states_list:
             self.state_arrays_list[state_index][self.t_mod, :] = state[:]
+            self.extra_data_list[state_index][self.t_mod] = extra_data_list[state_index]
             state_index += 1
 
     def get_state(self, state_index, delay):
@@ -71,4 +76,5 @@ class StatesLimitedHistory(object):
             time_index = self.max_delay + time_index
 
         state = self.state_arrays_list[state_index][time_index, :]
-        return state
+        extra_data = self.extra_data_list[state_index][time_index]
+        return state, extra_data

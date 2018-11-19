@@ -123,6 +123,10 @@ class ConfidencePredictorEnsemble(object):
         self.plots_save_folder = params['plots_save_folder']
         self.error_average_steps = params['error_average_steps']
 
+        # for first layer
+        self.debug_x_y_theta_output = np.zeros((self.entries_per_layer[0], 3))
+        self.debug_x_y_theta_input = np.zeros((self.entries_per_layer[0], 3))
+
         self.t = 0
 
     def step(self, input_state, x_y_theta, learn=True):
@@ -144,6 +148,7 @@ class ConfidencePredictorEnsemble(object):
         dists = None
 
         new_states_list = [layer_input]
+        extra_data_list = [x_y_theta]
         for k in range(self.num_layers):
 
             if k == self.num_layers - 1:
@@ -166,8 +171,9 @@ class ConfidencePredictorEnsemble(object):
             layer_input = dists.copy()
             if k < self.num_layers - 1:
                 new_states_list.append(layer_input)
+                extra_data_list.append(x_y_theta)
 
-        self.layer_input_history.process_new_states(newest_states_list=new_states_list)
+        self.layer_input_history.process_new_states(newest_states_list=new_states_list, extra_data_list=extra_data_list)
         # learning
         # should only happen if guaranteed enough history already
 
@@ -179,8 +185,8 @@ class ConfidencePredictorEnsemble(object):
             input_delay = dt_input_context  # 4
             output_delay = dt_input_context - dt_input_output  # 2
 
-            train_input = self.layer_input_history.get_state(state_index=k, delay=input_delay)
-            train_output = self.layer_input_history.get_state(state_index=k, delay=output_delay)
+            train_input, x_y_theta_input = self.layer_input_history.get_state(state_index=k, delay=input_delay)
+            train_output, x_y_theta_output = self.layer_input_history.get_state(state_index=k, delay=output_delay)
 
             if k == self.num_layers - 1:
                 train_context = None
@@ -191,17 +197,20 @@ class ConfidencePredictorEnsemble(object):
 
             # self._learn_seq_kmeans(k=k,
             self._learn_seq_nn(k=k,
-                                   cuda_table=self.cuda_tables_list[k],
-                                   train_input=train_input,
-                                   train_output=train_output,
-                                   train_context=train_context,
-                                   error_history=self.error_histories_list[k],
-                                   mean_error_history=self.mean_error_histories_list[k])
+                               cuda_table=self.cuda_tables_list[k],
+                               train_input=train_input,
+                               train_output=train_output,
+                               train_context=train_context,
+                               error_history=self.error_histories_list[k],
+                               mean_error_history=self.mean_error_histories_list[k],
+                               x_y_theta_input=x_y_theta_input,
+                               x_y_theta_output=x_y_theta_output
+                              )
 
         to_debug_print = {}
         return to_debug_print
 
-    def _learn_seq_nn(self, k, cuda_table, train_input, train_output, train_context, error_history, mean_error_history):
+    def _learn_seq_nn(self, k, cuda_table, train_input, train_output, train_context, error_history, mean_error_history, x_y_theta_input, x_y_theta_output):
         '''
         :param k: layer
         :param cuda_table: self.cuda_tables_list[k]
@@ -256,9 +265,12 @@ class ConfidencePredictorEnsemble(object):
                                       row_context=train_context,
                                       row_to_table_dists=dists,
                                       fast_init=True)
+            #print(self.debug_x_y_theta_output, self.tmp_ind_list[k], x_y_theta_output)
+            if x_y_theta_output is not None:
+                self.debug_x_y_theta_output[self.tmp_ind_list[k], :] = x_y_theta_output[:]
+            if x_y_theta_input is not None:
+                self.debug_x_y_theta_input[self.tmp_ind_list[k], :] = x_y_theta_input[:]
 
-            # self.debug_x_y_theta_output[self.tmp_ind, :] = x_y_theta[:]
-            # self.debug_x_y_theta_input[self.tmp_ind, :] = last_x_y_theta[:]
             self.tmp_ind_list[k] += 1
         else:
             if not self.post_init_done:
@@ -290,6 +302,9 @@ class ConfidencePredictorEnsemble(object):
                                           row_output=train_output,
                                           row_context=train_context,
                                           row_to_table_dists=dists)  # optional arg- if None, cuda_table computes it internally as above
+
+                self.debug_x_y_theta_output[r_r_ind, :] = x_y_theta_output[:]
+                self.debug_x_y_theta_input[r_r_ind, :] = x_y_theta_input[:]
 
     def _learn_seq_kmeans(self, k, cuda_table, train_input, train_output, train_context, error_history, mean_error_history):
 
@@ -470,14 +485,12 @@ class ConfidencePredictorEnsemble(object):
             ax.bar(np.arange(effectiveness_mean.shape[0]), effectiveness_mean[sorted_effectiveness])
             fig.savefig(self.plots_save_folder + '/' + self.plots_prefix + '_' + 'effectiveness_hist_' + str(k) + '.png', dpi=100)
 
-            # TODO re-enable this for first layer!
-            if False:
-                ax.cla()
-                ax.get_xaxis().get_major_formatter().set_scientific(False)
-                ax.get_yaxis().get_major_formatter().set_scientific(False)
-                ax.set_xlim([0 - 0.1, self.env_width_height + 0.1])
-                ax.set_ylim([0 - 0.1, self.env_width_height + 0.1])
-                ax.plot(self.debug_x_y_theta_input[:, 0],  self.debug_x_y_theta_input[:, 1], 'go')
-                #ax.plot(self.debug_x_y_theta_output[:, 0],  self.debug_x_y_theta_output[:, 1], 'ro')
-                ax.set_title(str(np.count_nonzero(self.debug_x_y_theta_input[:, 0]) * 1.0 / self.debug_x_y_theta_input.shape[0]))
-                fig.savefig(self.plots_save_folder + '/offline_trained_' + self.plots_prefix + '_' + 'debug_td_info' + '.png', dpi=100)
+            ax.cla()
+            ax.get_xaxis().get_major_formatter().set_scientific(False)
+            ax.get_yaxis().get_major_formatter().set_scientific(False)
+            ax.set_xlim([0 - 0.1, self.env_width_height + 0.1])
+            ax.set_ylim([0 - 0.1, self.env_width_height + 0.1])
+            ax.plot(self.debug_x_y_theta_input[:, 0],  self.debug_x_y_theta_input[:, 1], 'go')
+            #ax.plot(self.debug_x_y_theta_output[:, 0],  self.debug_x_y_theta_output[:, 1], 'ro')
+            ax.set_title(str(np.count_nonzero(self.debug_x_y_theta_input[:, 0]) * 1.0 / self.debug_x_y_theta_input.shape[0]))
+            fig.savefig(self.plots_save_folder + '/offline_trained_' + self.plots_prefix + '_' + 'debug_td_info' + '.png', dpi=100)

@@ -100,7 +100,7 @@ def run_experiment():
                                                    'do_adaptation': True,
                                                    'do_replacements': False,
                                                    'env_width_height': env_width_height,  # for plotting positions
-                                                   'plots_prefix': 'test_seq_nn'})
+                                                   'plots_prefix': 'test_seq_nn_with_plot'})
 
     k_to_train = np.arange(3, max_history_length - 1)[start_step_offset::]
 
