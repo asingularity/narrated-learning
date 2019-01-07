@@ -82,9 +82,9 @@ class ConfidencePredictorEnsemble(object):
                 layer_context_dim = 0
 
             if k < self.num_layers - 1:
-                include_layers = ['ioc', 'ic_only']
+                include_layers = ['ioc', 'ic_only']  # ioc: learning, ic: running
             else:
-                include_layers = ['io_only', 'i_only']
+                include_layers = ['io_only', 'i_only']  # last layer: io: learning, i: running
 
             layer_output_dim = layer_input_dim
             self.cuda_tables_list.append(CudaTable(num_entries=layer_entries,
@@ -129,6 +129,19 @@ class ConfidencePredictorEnsemble(object):
 
         self.t = 0
 
+    def _scale_dists(self, dists, min_d, max_d):
+        '''
+            such that linear for:
+            min distance pair -> output confidence = 1.0
+            max distance pair -> output confidence = 0.0
+            hard nonlinearity otherwise (maxed out to 0 or 1)
+        '''
+
+        dists = 0.0 + (dists - min_d) * 1.0 / (max_d - min_d)
+        dists[dists < 0.0] = 0.0
+        dists[dists > 1.0] = 1.0
+        return dists
+
     def step(self, input_state, x_y_theta, learn=True):
         '''
         for learning mode
@@ -161,19 +174,33 @@ class ConfidencePredictorEnsemble(object):
             dists = self.cuda_tables_list[k].query(query_input=layer_input,
                                                    query_output=None,
                                                    query_context=layer_context)
-            dists = np.tanh(dists * 0.001)  # TODO factor will be needed here, dependent on layer
 
             ind = np.argmin(dists)
             self.table_use_hist_list[k][ind] += 1
             self.row_ages_list[k][:] = self.row_ages_list[k][:] + 1
 
-            self.last_step_layer_dists[k] = dists.copy()
-            layer_input = dists.copy()
+            min_d, _, _ = self.cuda_tables_list[k].get_min_dist()  # TODO base on input + context
+            max_d, _, _ = self.cuda_tables_list[k].get_max_dist()  # TODO base on input + context
+            scaled_ic_dists = self._scale_dists(dists, min_d, max_d)
+
+            # *** how scaling works ***
+            # in normal network operations, all lookups are based only on input + context
+            #   (prediction output is "implicit" and used only in learning)
+            # so, we scale dists to Input + Context only to be [0, 1], disregarding output column
+            # all I, O, C vectors, thus, are I+C-scaled vectors from other layers
+            # when dist is used in learning phase, on I+O+C, there is no scaling done on that dist afterwards
+            #   (as it is not propagated anywhere)
+
+            self.last_step_layer_dists[k] = scaled_ic_dists.copy()
+            layer_input = scaled_ic_dists.copy()
+
             if k < self.num_layers - 1:
                 new_states_list.append(layer_input)
                 extra_data_list.append(x_y_theta)
 
+        # processing stores *scaled* dists
         self.layer_input_history.process_new_states(newest_states_list=new_states_list, extra_data_list=extra_data_list)
+
         # learning
         # should only happen if guaranteed enough history already
 
@@ -188,14 +215,21 @@ class ConfidencePredictorEnsemble(object):
             train_input, x_y_theta_input = self.layer_input_history.get_state(state_index=k, delay=input_delay)
             train_output, x_y_theta_output = self.layer_input_history.get_state(state_index=k, delay=output_delay)
 
+            # here, train_input and train_output are I+C dists that have been scaled
+
             if k == self.num_layers - 1:
                 train_context = None
             else:
                 # train_context = self.layer_dists_history[k + 1][context_delay]
                 # since context_delay == 0, instead of above, we can use last step dists:
                 train_context = self.last_step_layer_dists[k + 1]
+                # TODO assert that with zero delay from layer_input_history, same vector as above
 
             # self._learn_seq_kmeans(k=k,
+
+            # here, train_input, train_output, and train_context are all scaled I+C dists, from different layers
+            # (from feedforward sweep)
+
             self._learn_seq_nn(k=k,
                                cuda_table=self.cuda_tables_list[k],
                                train_input=train_input,
@@ -214,9 +248,9 @@ class ConfidencePredictorEnsemble(object):
         '''
         :param k: layer
         :param cuda_table: self.cuda_tables_list[k]
-        :param train_input:
-        :param train_output:
-        :param train_context:
+        :param train_input: I+C scaled dists
+        :param train_output: I+C scaled dists
+        :param train_context: I+C scaled dists
         :param error_history: self.error_histories_list[k]
         :param mean_error_history: self.mean_error_histories_list[k]
         :return:
@@ -233,6 +267,11 @@ class ConfidencePredictorEnsemble(object):
         dists = cuda_table.query(query_input=train_input,
                                  query_output=train_output,
                                  query_context=train_context)
+
+        # should we be scaling dists here?
+        # no- this is only for the purpose of determining which rows to update or replace
+        #   so, relative dist is all that matters, so scaling should not matter for learning.
+
         sorted_dist_indices = np.argsort(dists)
         new_min_ind = sorted_dist_indices[0]
         new_min_dist = dists[new_min_ind]
@@ -283,6 +322,7 @@ class ConfidencePredictorEnsemble(object):
 
             table_min_dist, table_min_dist_r, table_min_dist_c = cuda_table.get_min_dist()
 
+            # these are unscaled dists here.
             if new_min_dist > table_min_dist:
                 # minimum distance of new row to current rows is greater than current minimum row-row distance
                 # so: replace one row of current minimum, with new row
