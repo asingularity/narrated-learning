@@ -329,6 +329,8 @@ class ConfidencePredictorEnsemble(object):
 
                 # get one of the row indices of current minimum dist pair
                 r_r_ind = table_min_dist_r  # could be table_min_dist_c
+                #print('replacing: ' + str(r_r_ind))
+                #print('    ' + str((train_input, train_output, train_context)))
 
                 # zero out its stats in preparation for replacement
                 self.table_use_hist_list[k][r_r_ind] = 0
@@ -452,7 +454,7 @@ class ConfidencePredictorEnsemble(object):
 
         table = np.transpose(self.cuda_tables_list[0].get_table_from_gpu())
 
-        entries = 40
+        entries = 40 * 2 * 3
 
         im_input = table[0:entries, 0:input_dim]
         im_prediction = table[0:entries, input_dim:input_dim+output_dim]
@@ -487,7 +489,7 @@ class ConfidencePredictorEnsemble(object):
 
         #print('**', np.amin(im), np.amax(im), im.dtype, im.shape)
 
-        im = cv2.resize(im, dsize=(0,0), fx=10, fy=10, interpolation=cv2.INTER_NEAREST)
+        im = cv2.resize(im, dsize=(0,0), fx=3, fy=3, interpolation=cv2.INTER_NEAREST)
 
         return im
 
