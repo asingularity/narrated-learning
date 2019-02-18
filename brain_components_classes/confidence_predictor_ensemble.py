@@ -50,6 +50,9 @@ class ConfidencePredictorEnsemble(object):
         # input (t), prediction (t+1), context (t+2)
         self.post_init_done = False
 
+        self.last_warn_dist_time = time.time()
+        self.warn_dist_int = 1.0
+
         self.cuda_tables_list = []
         self.error_histories_list = []
         self.mean_error_histories_list = []
@@ -65,6 +68,11 @@ class ConfidencePredictorEnsemble(object):
         self.tmp_ind_list = []
 
         total_gb = 0
+
+        # logging:
+        self.replacements_by_layer = []
+        self.disp_every_k_sec = 10
+        self.last_disp_time = time.time()
 
         layer_input_dim_list = []  # for initializing states_history object for input
         for k, layer_entries in enumerate(self.entries_per_layer):
@@ -96,6 +104,8 @@ class ConfidencePredictorEnsemble(object):
             print( 'Init of layer', k, 'with rows X cols, size_GB,', '(', layer_entries, 'X', ('('+str(layer_input_dim) + ' + ' + str(layer_context_dim) + ' + ' + str(layer_output_dim)+')'), layer_size_gb)
 
             total_gb += layer_size_gb
+
+            self.replacements_by_layer.append({})
 
             self.error_histories_list.append(np.zeros(self.max_history_length))
             self.mean_error_histories_list.append(np.zeros(self.max_history_length))
@@ -137,9 +147,18 @@ class ConfidencePredictorEnsemble(object):
             hard nonlinearity otherwise (maxed out to 0 or 1)
         '''
 
-        dists = 0.0 + (dists - min_d) * 1.0 / (max_d - min_d)
-        dists[dists < 0.0] = 0.0
-        dists[dists > 1.0] = 1.0
+        # what to do here if max_d == min_d ?
+
+        if max_d == min_d:
+            dists[:] = 0.5
+            if time.time() > self.last_warn_dist_time + self.warn_dist_int:
+                print('Warning! max_d==min_d!')
+                self.last_warn_dist_time = time.time()
+        else:
+            dists = 0.0 + (dists - min_d) * 1.0 / (max_d - min_d)
+            dists[dists < 0.0] = 0.0
+            dists[dists > 1.0] = 1.0
+
         return dists
 
     def step(self, input_state, x_y_theta, learn=True):
@@ -181,6 +200,7 @@ class ConfidencePredictorEnsemble(object):
 
             min_d, _, _ = self.cuda_tables_list[k].get_min_dist()  # TODO base on input + context
             max_d, _, _ = self.cuda_tables_list[k].get_max_dist()  # TODO base on input + context
+
             scaled_ic_dists = self._scale_dists(dists, min_d, max_d)
 
             # *** how scaling works ***
@@ -321,6 +341,9 @@ class ConfidencePredictorEnsemble(object):
                 print('Done')
 
             table_min_dist, table_min_dist_r, table_min_dist_c = cuda_table.get_min_dist()
+            if k == 4:
+                print('&**************')
+                print(new_min_dist, ',,,', table_min_dist, (table_min_dist_r, table_min_dist_c))
 
             # these are unscaled dists here.
             if new_min_dist > table_min_dist:
@@ -347,6 +370,20 @@ class ConfidencePredictorEnsemble(object):
 
                 self.debug_x_y_theta_output[r_r_ind, :] = x_y_theta_output[:]
                 self.debug_x_y_theta_input[r_r_ind, :] = x_y_theta_input[:]
+
+                if r_r_ind not in self.replacements_by_layer[k]:
+                    self.replacements_by_layer[k][r_r_ind] = 1
+                else:
+                    self.replacements_by_layer[k][r_r_ind] = self.replacements_by_layer[k][r_r_ind] + 1
+
+        if time.time() > self.last_disp_time + self.disp_every_k_sec:
+            print('replacements: ')
+            for k2 in range(len(self.replacements_by_layer)):
+                print('    layer ' + str(k2) + ': ', self.replacements_by_layer[k2])
+                print()
+            self.last_disp_time = time.time()
+            for k2 in range(len(self.replacements_by_layer)):
+                self.replacements_by_layer[k2] = {}
 
     def _learn_seq_kmeans(self, k, cuda_table, train_input, train_output, train_context, error_history, mean_error_history):
 
@@ -445,51 +482,72 @@ class ConfidencePredictorEnsemble(object):
         pickle.dump(self, f)
         f.close()
 
-    def get_table_im(self):
-        cuda_table = self.cuda_tables_list[0]
+    def get_table_im(self, layer_index):
+        cuda_table = self.cuda_tables_list[layer_index]
+
+        # layer 0: display as color images below
+        # layer 1...N-1: display as grayscale [0, 1] values?
 
         input_dim = cuda_table.input_dim
         output_dim = cuda_table.output_dim
         context_dim = cuda_table.context_dim
 
-        table = np.transpose(self.cuda_tables_list[0].get_table_from_gpu())
+        table = np.transpose(self.cuda_tables_list[layer_index].get_table_from_gpu())
 
-        entries = 40 * 2 * 3
+        # print('***', layer_index, table.shape, input_dim, output_dim, context_dim)
+
+        if layer_index == 0:
+            entries = 40 * 2 * 3
+        else:
+            entries = table.shape[0]
 
         im_input = table[0:entries, 0:input_dim]
-        im_prediction = table[0:entries, input_dim:input_dim+output_dim]
-        im_context = table[0:entries, input_dim+output_dim::]
+        im_prediction = table[0:entries, input_dim:input_dim + output_dim]
+        im_context = table[0:entries, input_dim + output_dim::]
 
-        if False:
-            print('***')
-            print(table.shape)
-            print(im_input.shape, im_prediction.shape, im_context.shape)
-            # interleave rows so context below prediction below input
+        #print('*** ', layer_index, im_input.shape, im_prediction.shape, im_context.shape)
 
-            A = im_input
-            B = im_prediction
-            C = im_context
-            D = np.empty((A.shape[0] + B.shape[0] + C.shape[0], A.shape[1]))
-            print(D.shape)
-            D[::3, :] = A
-            D[1::3, :] = B
-            D[2::3, :] = C
-            D = np.reshape(D, (D.shape[0], D.shape[1] / 3, 3))
+        # count nans
+        count_nans = False
+        if count_nans:
+            try:
+                print('Nan count, layer: ' + str(layer_index),
+                      'input:', np.count_nonzero(np.isnan(im_input)) * 1.0 / (im_input.shape[0] * im_input.shape[1]),
+                      'prediction:', np.count_nonzero(np.isnan(im_prediction)) * 1.0 / (im_prediction.shape[0] * im_prediction.shape[1]),
+                      'context:', np.count_nonzero(np.isnan(im_context)) * 1.0 / (im_context.shape[0] * im_context.shape[1]))
+            except ZeroDivisionError:  # last layer no context
+                print('Nan count, layer: ' + str(layer_index),
+                      'input:', np.count_nonzero(np.isnan(im_input)) * 1.0 / (im_input.shape[0] * im_input.shape[1]),
+                      'prediction:',
+                      np.count_nonzero(np.isnan(im_prediction)) * 1.0 / (im_prediction.shape[0] * im_prediction.shape[1]))
 
-            im = D
-        else:
+        if layer_index == 0:
             A = im_input
             B = im_prediction
             C = np.empty((A.shape[0] + B.shape[0], A.shape[1]))
-            #im = np.concatenate((im_input, im_prediction))
             C[::2, :] = A
             C[1::2, :] = B
 
             im = np.reshape(C, (C.shape[0], C.shape[1] / 3, 3))
 
-        #print('**', np.amin(im), np.amax(im), im.dtype, im.shape)
+            #print('**', np.amin(im), np.amax(im), im.dtype, im.shape)
 
-        im = cv2.resize(im, dsize=(0,0), fx=3, fy=3, interpolation=cv2.INTER_NEAREST)
+            im = cv2.resize(im, dsize=(0,0), fx=3, fy=3, interpolation=cv2.INTER_NEAREST)
+        else:
+            # A = im_input
+            # B = im_prediction
+            # C = im_context
+            # D = np.hstack((A, B, C))
+            D = table
+
+            # imscale = 0.2  # full table
+            imscale = 5.0
+            im = cv2.resize(D, dsize=(0,0), fx=imscale, fy=imscale, interpolation=cv2.INTER_NEAREST)
+
+        print('layer, (min, max), num_unique, dtype, (shape): ' + str(layer_index),  (np.amin(im), np.amax(im)), len(np.unique(im)), im.dtype, im.shape)
+
+        #if layer_index > 0:
+        #    im = None
 
         return im
 

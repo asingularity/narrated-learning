@@ -80,7 +80,7 @@ def run_experiment():
     scale_camera_factor = 32
     do_display = False
     plot_error_every_k_seconds = 60 * 2  # * 5  # * 20
-    imshow_every_k_seconds = 7
+    imshow_every_k_seconds = 2
     start_step_offset = 0
     env_width_height = 30
 
@@ -89,11 +89,14 @@ def run_experiment():
     #sim_off_time = np.inf
     sim_off_time = 1000000
 
+    #entries_per_layer =  [20000, 2000, 1000, 1000, 1000]
+    entries_per_layer =  [500, 200, 100, 100, 100]
+
     ensemble = ConfidencePredictorEnsemble(params={'max_history_length': max_history_length,
                                                    'max_delay': 10,
                                                    'plots_save_folder': plots_save_folder,
                                                    'error_average_steps': 500,
-                                                   'entries_per_layer': [20000], #, 2000, 1000, 1000, 1000],
+                                                   'entries_per_layer': entries_per_layer,
                                                    'replacement_every_k_steps': 100,  # 100 for 800 rows, 10 for 8000 rows
                                                    'dim': dim,
                                                    'do_random_init': True,
@@ -147,10 +150,15 @@ def run_experiment():
             return
 
         if time.time() > last_imshow_time + imshow_every_k_seconds:
-            #print('showing new image...', time.time())
-            im = ensemble.get_table_im()
-            cv2.imshow('im', im)
-            last_imshow_time = time.time()
+            for layer_num in range(len(entries_per_layer)):
+
+                #print('showing new image...', time.time())
+
+                im = ensemble.get_table_im(layer_index=layer_num)
+                if im is not None:
+                    cv2.imshow('im_' + str(layer_num), im)
+
+                last_imshow_time = time.time()
 
         cv2.waitKey(1)
 
