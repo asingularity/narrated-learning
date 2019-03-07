@@ -33,7 +33,7 @@ class DumbDistMatrixHelper(object):
         max_dist = self.dist_mat[max_dist_ind[0], max_dist_ind[1]]
         return max_dist, max_dist_ind[0], max_dist_ind[1]
 
-    def set_row_dists(self, row_index, new_dists):
+    def set_row_dists(self, row_index, new_dists, fast_init=False):
         '''
 
         :param row_index:
@@ -42,6 +42,9 @@ class DumbDistMatrixHelper(object):
         '''
         self.dist_mat[row_index, :] = new_dists
         self.dist_mat[:, row_index] = new_dists
+
+    def post_init(self):
+        pass
 
 
 class DistMatrixHelper(object):

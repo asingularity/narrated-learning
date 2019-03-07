@@ -50,8 +50,8 @@ class ConfidencePredictorEnsemble(object):
         # input (t), prediction (t+1), context (t+2)
         self.post_init_done = False
 
-        self.last_warn_dist_time = time.time()
-        self.warn_dist_int = 1.0
+        self.last_warn_dist_time = time.time() - 10
+        self.warn_dist_int = 0.1
 
         self.cuda_tables_list = []
         self.error_histories_list = []
@@ -149,17 +149,44 @@ class ConfidencePredictorEnsemble(object):
 
         # what to do here if max_d == min_d ?
 
-        if max_d == min_d:
-            dists[:] = 0.5
-            if time.time() > self.last_warn_dist_time + self.warn_dist_int:
-                print('Warning! max_d==min_d!')
-                self.last_warn_dist_time = time.time()
-        else:
-            dists = 0.0 + (dists - min_d) * 1.0 / (max_d - min_d)
-            dists[dists < 0.0] = 0.0
-            dists[dists > 1.0] = 1.0
+        min_dists = np.amin(dists)
+        max_dists = np.amax(dists)
 
-        return dists
+        dists_copy = dists.copy()
+
+        #print('1')
+        dists_copy = np.argsort(dists_copy)
+        #print('2')
+        dists_copy = (dists_copy * 1.0 / len(dists_copy)).astype(dists.dtype)
+        # dists_range = max_dists - min_dists
+        # if dists_range > 0:
+        #     dists_copy = (dists_copy - min_dists) * 1.0 / (max_dists - min_dists)
+        # else:
+        #     dists_copy[:] = 1.0
+        # above doesn't work either because dists can be uniform, initially
+
+        # TODO
+        # need to define the encoding here
+        # in a way that is stable all of the time, doesn't blow up, work on init, etc.
+
+        # I guess a different question is:
+        # why is it unstable without scaling, in the first place?
+
+        return dists_copy
+
+        #
+        # if max_d == min_d:
+        #     #dists[:] = 0.5
+        #     if time.time() > self.last_warn_dist_time + self.warn_dist_int:
+        #         # ???? Warning! max_d==min_d! 0.0 2.09488e+11
+        #
+        #         print('Warning! max_d==min_d!', np.amin(dists), np.amax(dists))
+        #         self.last_warn_dist_time = time.time()
+        # else:
+        #     pass
+        #     #dists = 0.0 + (dists - min_d) * 1.0 / (max_d - min_d)
+        #     #dists[dists < 0.0] = 0.0
+        #     #dists[dists > 1.0] = 1.0
 
     def step(self, input_state, x_y_theta, learn=True):
         '''
@@ -194,6 +221,14 @@ class ConfidencePredictorEnsemble(object):
                                                    query_output=None,
                                                    query_context=layer_context)
 
+            # count nans
+            count_nans = False
+            if count_nans:
+                print('Nan count, layer: ' + str(k),
+                      'dists:',
+                      np.count_nonzero(np.isnan(dists)) * 1.0 / (dists.shape[0]),
+                      )
+
             ind = np.argmin(dists)
             self.table_use_hist_list[k][ind] += 1
             self.row_ages_list[k][:] = self.row_ages_list[k][:] + 1
@@ -223,6 +258,7 @@ class ConfidencePredictorEnsemble(object):
 
         # learning
         # should only happen if guaranteed enough history already
+        # TODO is violation of above the problem?
 
         for k in range(self.num_layers):
             dt_input_output = self.input_output_dt_steps_list[k]  # 2
@@ -249,6 +285,25 @@ class ConfidencePredictorEnsemble(object):
 
             # here, train_input, train_output, and train_context are all scaled I+C dists, from different layers
             # (from feedforward sweep)
+
+            # count nans
+            count_nans = False
+            if count_nans:
+                layer_index = k
+                try:
+                    print('Nan count, layer: ' + str(layer_index),
+                          'input:',
+                          np.count_nonzero(np.isnan(train_input)) * 1.0 / (train_input.shape[0]),
+                          'prediction:', np.count_nonzero(np.isnan(train_output)) * 1.0 / (
+                              train_output.shape[0]),
+                          'context:',
+                          np.count_nonzero(np.isnan(train_context)) * 1.0 / (train_context.shape[0]))
+                except TypeError:  # last layer no context
+                    print('Nan count, layer: ' + str(layer_index),
+                          'input:',
+                          np.count_nonzero(np.isnan(train_input)) * 1.0 / (train_input.shape[0]),
+                          'prediction:', np.count_nonzero(np.isnan(train_output)) * 1.0 / (
+                              train_output.shape[0]))
 
             self._learn_seq_nn(k=k,
                                cuda_table=self.cuda_tables_list[k],
@@ -318,6 +373,7 @@ class ConfidencePredictorEnsemble(object):
             # necessary so dist matrix helper is not so slow at start
 
             # print('here!!!', train_input, train_output)
+            dists[self.tmp_ind_list[k]] = np.inf
             cuda_table.set_matrix_row(row_index=self.tmp_ind_list[k],
                                       row_input=train_input,
                                       row_output=train_output,
@@ -341,11 +397,39 @@ class ConfidencePredictorEnsemble(object):
                 print('Done')
 
             table_min_dist, table_min_dist_r, table_min_dist_c = cuda_table.get_min_dist()
-            if k == 4:
-                print('&**************')
-                print(new_min_dist, ',,,', table_min_dist, (table_min_dist_r, table_min_dist_c))
+            #print('k', k, 'new_min_dist', new_min_dist, 'table_min_dist', table_min_dist, table_min_dist_r, table_min_dist_c)
+
+            # ********************** DEBUGGING ABOVE ******************************
+            # TODO above: why does table_min_dist go negative sometimes?
+            # TODO above: why does table_min_dist_r == table_min_dist_c for all layers eventually?
+            # Happens with DistMatrixhelper, or DumbDistMatrixHelper, either way
+            # Answer: there was a bug with dists[r_r_ind] = 0, not being set that way- so self distance would diverge
+
+            # But now: always replacing same row constantly
+            # k 0 table_min_dist 0.0 0 0
+            # k 1 table_min_dist 0.0 0 0
+            # k 2 table_min_dist 0.0 0 0
+            # k 3 table_min_dist 0.0 0 0
+            # k 4 table_min_dist 0.0 0 0
+
+            # ... now, setting to np.inf instead of 0.0, does this constantly forever:
+            # k 4 table_min_dist 2.057 71 70
+            #   and no replcements occur
+
+            # *********************************************************************
+
+            #if k == 4:
+            #    print('&**************')
+            #    print(new_min_dist, ',,,', table_min_dist, (table_min_dist_r, table_min_dist_c))
 
             # these are unscaled dists here.
+
+            # TODO fix:
+            # If True:
+            #   always replaces same row
+            # if new_min_dist > table_min_dist:
+            #   eventually, no replacements occur
+
             if new_min_dist > table_min_dist:
                 # minimum distance of new row to current rows is greater than current minimum row-row distance
                 # so: replace one row of current minimum, with new row
@@ -361,6 +445,7 @@ class ConfidencePredictorEnsemble(object):
                 self.effectiveness_sum_list[k][r_r_ind] = 0.0
                 self.effectiveness_num_list[k][r_r_ind] = 1
 
+                dists[r_r_ind] = np.inf
                 # replace the current min dist row, with the new row
                 cuda_table.set_matrix_row(row_index=r_r_ind,
                                           row_input=train_input,
@@ -384,94 +469,6 @@ class ConfidencePredictorEnsemble(object):
             self.last_disp_time = time.time()
             for k2 in range(len(self.replacements_by_layer)):
                 self.replacements_by_layer[k2] = {}
-
-    def _learn_seq_kmeans(self, k, cuda_table, train_input, train_output, train_context, error_history, mean_error_history):
-
-        do_random_init = self.do_random_init  # initialize with random entries
-        do_adaptation = self.do_adaptation  # WTA-based learning
-        do_replacements = self.do_replacements  # replace low effectiveness over time
-
-        dists = cuda_table.query(query_input=train_input,
-                                 query_output=train_output,
-                                 query_context=train_context)
-
-        #dists = np.tanh(dists * 0.001)  # TODO factor will be needed here, dependent on layer
-        #print(k, np.unique(dists))
-        sorted_dist_indices = np.argsort(dists)
-        sorted_dists = dists[sorted_dist_indices]
-        ind2 = sorted_dist_indices[1]
-        dist2 = dists[ind2]
-        ind = sorted_dist_indices[0]
-        dist = dists[ind]
-
-        error_step = self.error_steps_list[k]
-        error_history[error_step] = dist
-        mean_index_0 = max(0, error_step - self.error_average_steps)
-        mean_index_1 = error_step
-        new_mean_error_history = np.mean(error_history[mean_index_0:mean_index_1])
-        mean_error_history[error_step] = new_mean_error_history
-        self.error_steps_list[k] += 1
-
-        if do_random_init and self.tmp_ind_list[k] < cuda_table.get_num_rows():
-            # print('here!!!', train_input, train_output)
-            cuda_table.set_matrix_row(row_index=self.tmp_ind_list[k],
-                                      row_input=train_input,
-                                      row_output=train_output,
-                                      row_context=train_context,
-                                      row_to_table_dists=dists,
-                                      fast_init=True)
-
-            # self.debug_x_y_theta_output[self.tmp_ind, :] = x_y_theta[:]
-            # self.debug_x_y_theta_input[self.tmp_ind, :] = last_x_y_theta[:]
-            self.tmp_ind_list[k] += 1
-
-        best_second_diff_current = dist2 - dist
-        self.effectiveness_num_list[k][ind] += 1
-        self.effectiveness_sum_list[k][ind] += best_second_diff_current
-
-        if do_adaptation and self.tmp_ind_list[k] >= cuda_table.get_num_rows():
-            #print('would adapt:', type(train_input), type(train_output), type(train_context))
-
-            cuda_table.seq_kmeans_adapt(row_index=ind,
-                                        rate=1.0 / self.effectiveness_num_list[k][ind],
-                                        row_input=train_input,
-                                        row_output=train_output,
-                                        row_context=train_context,
-                                        row_to_table_dists=dists)
-
-            # for theta: could be weird... discontinuities
-            # self.debug_x_y_theta_output[ind, :] = 0.9 * self.debug_x_y_theta_output[ind, :] + 0.1 * x_y_theta[:]
-            # self.debug_x_y_theta_input[ind, :] = 0.9 * self.debug_x_y_theta_input[ind, :] + 0.1 * last_x_y_theta[:]
-
-        min_replaced_row_age = 1000
-        replacement_every_k_steps = self.replacement_every_k_steps
-
-        if do_replacements:
-            row_replace_candidates = np.nonzero(self.row_ages_list[k] > min_replaced_row_age)[0]
-            effectiveness_mean = np.divide(self.effectiveness_sum_list[k], self.effectiveness_num_list[k])
-
-            if len(row_replace_candidates) > 0 and self.t > self.last_replacement_t_list[k] + replacement_every_k_steps:
-
-                r_r_c_ind = np.argmin(effectiveness_mean[row_replace_candidates])
-
-                r_r_ind = row_replace_candidates[r_r_c_ind]
-                # if k == 0:
-                #print('replacing layer, index:', k, r_r_ind)
-                self.table_use_hist_list[k][r_r_ind] = 0
-                self.row_ages_list[k][r_r_ind] = 0
-                self.effectiveness_sum_list[k][r_r_ind] = 0.0
-                self.effectiveness_num_list[k][r_r_ind] = 1
-
-                cuda_table.set_matrix_row(row_index=r_r_ind,
-                                          row_input=train_input,
-                                          row_output=train_output,
-                                          row_context=train_context,
-                                          row_to_table_dists=dists)
-
-                # self.debug_x_y_theta_output[r_r_ind, :] = x_y_theta[:]
-                # self.debug_x_y_theta_input[r_r_ind, :] = last_x_y_theta[:]
-
-                self.last_replacement_t_list[k] = self.t
 
     def plan_and_get_debug_position_angle_list(self, goal_state, starting_state, visualizer, rays, topdown_info, current_goal_position_angle):
         plan_position_angle_list = None
@@ -540,8 +537,8 @@ class ConfidencePredictorEnsemble(object):
             # D = np.hstack((A, B, C))
             D = table
 
-            # imscale = 0.2  # full table
-            imscale = 5.0
+            imscale = 0.2  # full table
+            # imscale = 5.0
             im = cv2.resize(D, dsize=(0,0), fx=imscale, fy=imscale, interpolation=cv2.INTER_NEAREST)
 
         print('layer, (min, max), num_unique, dtype, (shape): ' + str(layer_index),  (np.amin(im), np.amax(im)), len(np.unique(im)), im.dtype, im.shape)
