@@ -44,9 +44,6 @@ class ConfidencePredictorEnsemble(object):
         input_output_dt = 2  # predict time
         input_context_dt = 4  # context future time
 
-        # self.debug_x_y_theta_output = np.zeros((self.entries, 3))
-        # self.debug_x_y_theta_input = np.zeros((self.entries, 3))
-
         # input (t), prediction (t+1), context (t+2)
         self.post_init_done = False
 
@@ -66,6 +63,9 @@ class ConfidencePredictorEnsemble(object):
         self.input_context_dt_steps_list = []
         self.last_step_layer_dists = []
         self.tmp_ind_list = []
+
+        self.debug_x_y_theta_output = []
+        self.debug_x_y_theta_input = []
 
         total_gb = 0
 
@@ -111,6 +111,9 @@ class ConfidencePredictorEnsemble(object):
             self.mean_error_histories_list.append(np.zeros(self.max_history_length))
             self.error_steps_list.append(0)
 
+            self.debug_x_y_theta_output.append(np.zeros((layer_entries, 3)))
+            self.debug_x_y_theta_input.append(np.zeros((layer_entries, 3)))
+
             self.table_use_hist_list.append(np.zeros(layer_entries))
             self.effectiveness_sum_list.append(np.zeros(layer_entries))
             self.effectiveness_num_list.append(np.ones(layer_entries))
@@ -132,10 +135,6 @@ class ConfidencePredictorEnsemble(object):
 
         self.plots_save_folder = params['plots_save_folder']
         self.error_average_steps = params['error_average_steps']
-
-        # for first layer
-        self.debug_x_y_theta_output = np.zeros((self.entries_per_layer[0], 3))
-        self.debug_x_y_theta_input = np.zeros((self.entries_per_layer[0], 3))
 
         self.t = 0
 
@@ -316,12 +315,10 @@ class ConfidencePredictorEnsemble(object):
                                       row_to_table_dists=dists,
                                       fast_init=True)
 
-            # print(self.debug_x_y_theta_output, self.tmp_ind_list[k], x_y_theta_output)
-
             if x_y_theta_output is not None:
-                self.debug_x_y_theta_output[self.tmp_ind_list[k], :] = x_y_theta_output[:]
+                self.debug_x_y_theta_output[k][self.tmp_ind_list[k], :] = x_y_theta_output[:]
             if x_y_theta_input is not None:
-                self.debug_x_y_theta_input[self.tmp_ind_list[k], :] = x_y_theta_input[:]
+                self.debug_x_y_theta_input[k][self.tmp_ind_list[k], :] = x_y_theta_input[:]
 
             self.tmp_ind_list[k] += 1
         else:
@@ -356,8 +353,8 @@ class ConfidencePredictorEnsemble(object):
                                           row_context=train_context,
                                           row_to_table_dists=dists)  # optional arg- if None, cuda_table computes it internally as above
 
-                self.debug_x_y_theta_output[r_r_ind, :] = x_y_theta_output[:]
-                self.debug_x_y_theta_input[r_r_ind, :] = x_y_theta_input[:]
+                self.debug_x_y_theta_output[k][r_r_ind, :] = x_y_theta_output[:]
+                self.debug_x_y_theta_input[k][r_r_ind, :] = x_y_theta_input[:]
 
                 if r_r_ind not in self.replacements_by_layer[k]:
                     self.replacements_by_layer[k][r_r_ind] = 1
@@ -456,7 +453,9 @@ class ConfidencePredictorEnsemble(object):
             ax.get_yaxis().get_major_formatter().set_scientific(False)
             ax.set_xlim([0 - 0.1, self.env_width_height + 0.1])
             ax.set_ylim([0 - 0.1, self.env_width_height + 0.1])
-            ax.plot(self.debug_x_y_theta_input[:, 0],  self.debug_x_y_theta_input[:, 1], 'go')
-            #ax.plot(self.debug_x_y_theta_output[:, 0],  self.debug_x_y_theta_output[:, 1], 'ro')
-            ax.set_title(str(np.count_nonzero(self.debug_x_y_theta_input[:, 0]) * 1.0 / self.debug_x_y_theta_input.shape[0]))
-            fig.savefig(self.plots_save_folder + '/offline_trained_' + self.plots_prefix + '_' + 'debug_td_info' + '.png', dpi=100)
+
+            ax.plot(self.debug_x_y_theta_input[k][:, 0],  self.debug_x_y_theta_input[k][:, 1], 'go')
+            #ax.plot(self.debug_x_y_theta_output[k][:, 0],  self.debug_x_y_theta_output[k][:, 1], 'ro')
+
+            ax.set_title(str(np.count_nonzero(self.debug_x_y_theta_input[k][:, 0]) * 1.0 / self.debug_x_y_theta_input[k].shape[0]))
+            fig.savefig(self.plots_save_folder + '/offline_trained_' + self.plots_prefix + '_' + 'debug_td_info_' + str(k) + '.png', dpi=100)
