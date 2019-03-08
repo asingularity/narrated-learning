@@ -461,7 +461,7 @@ class ConfidencePredictorEnsemble(object):
                 else:
                     self.replacements_by_layer[k][r_r_ind] = self.replacements_by_layer[k][r_r_ind] + 1
 
-        if time.time() > self.last_disp_time + self.disp_every_k_sec:
+        if False and time.time() > self.last_disp_time + self.disp_every_k_sec:
             print('replacements: ')
             for k2 in range(len(self.replacements_by_layer)):
                 print('    layer ' + str(k2) + ': ', self.replacements_by_layer[k2])
@@ -541,7 +541,8 @@ class ConfidencePredictorEnsemble(object):
             # imscale = 5.0
             im = cv2.resize(D, dsize=(0,0), fx=imscale, fy=imscale, interpolation=cv2.INTER_NEAREST)
 
-        print('layer, (min, max), num_unique, dtype, (shape): ' + str(layer_index),  (np.amin(im), np.amax(im)), len(np.unique(im)), im.dtype, im.shape)
+        if False:
+            print('layer, (min, max), num_unique, dtype, (shape): ' + str(layer_index),  (np.amin(im), np.amax(im)), len(np.unique(im)), im.dtype, im.shape)
 
         #if layer_index > 0:
         #    im = None
