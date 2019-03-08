@@ -90,6 +90,7 @@ def run_experiment():
     sim_off_time = 1000000
 
     entries_per_layer =  [20000, 2000, 1000, 1000, 1000]
+    #entries_per_layer =  [2000, 2000, 1000, 1000, 1000]
     #entries_per_layer =  [500, 200, 100, 100, 100]
 
     ensemble = ConfidencePredictorEnsemble(params={'max_history_length': max_history_length,

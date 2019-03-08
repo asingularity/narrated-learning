@@ -147,46 +147,11 @@ class ConfidencePredictorEnsemble(object):
             hard nonlinearity otherwise (maxed out to 0 or 1)
         '''
 
-        # what to do here if max_d == min_d ?
-
-        min_dists = np.amin(dists)
-        max_dists = np.amax(dists)
-
         dists_copy = dists.copy()
-
-        #print('1')
         dists_copy = np.argsort(dists_copy)
-        #print('2')
         dists_copy = (dists_copy * 1.0 / len(dists_copy)).astype(dists.dtype)
-        # dists_range = max_dists - min_dists
-        # if dists_range > 0:
-        #     dists_copy = (dists_copy - min_dists) * 1.0 / (max_dists - min_dists)
-        # else:
-        #     dists_copy[:] = 1.0
-        # above doesn't work either because dists can be uniform, initially
-
-        # TODO
-        # need to define the encoding here
-        # in a way that is stable all of the time, doesn't blow up, work on init, etc.
-
-        # I guess a different question is:
-        # why is it unstable without scaling, in the first place?
 
         return dists_copy
-
-        #
-        # if max_d == min_d:
-        #     #dists[:] = 0.5
-        #     if time.time() > self.last_warn_dist_time + self.warn_dist_int:
-        #         # ???? Warning! max_d==min_d! 0.0 2.09488e+11
-        #
-        #         print('Warning! max_d==min_d!', np.amin(dists), np.amax(dists))
-        #         self.last_warn_dist_time = time.time()
-        # else:
-        #     pass
-        #     #dists = 0.0 + (dists - min_d) * 1.0 / (max_d - min_d)
-        #     #dists[dists < 0.0] = 0.0
-        #     #dists[dists > 1.0] = 1.0
 
     def step(self, input_state, x_y_theta, learn=True):
         '''
@@ -221,14 +186,6 @@ class ConfidencePredictorEnsemble(object):
                                                    query_output=None,
                                                    query_context=layer_context)
 
-            # count nans
-            count_nans = False
-            if count_nans:
-                print('Nan count, layer: ' + str(k),
-                      'dists:',
-                      np.count_nonzero(np.isnan(dists)) * 1.0 / (dists.shape[0]),
-                      )
-
             ind = np.argmin(dists)
             self.table_use_hist_list[k][ind] += 1
             self.row_ages_list[k][:] = self.row_ages_list[k][:] + 1
@@ -258,7 +215,6 @@ class ConfidencePredictorEnsemble(object):
 
         # learning
         # should only happen if guaranteed enough history already
-        # TODO is violation of above the problem?
 
         for k in range(self.num_layers):
             dt_input_output = self.input_output_dt_steps_list[k]  # 2
@@ -279,31 +235,10 @@ class ConfidencePredictorEnsemble(object):
                 # train_context = self.layer_dists_history[k + 1][context_delay]
                 # since context_delay == 0, instead of above, we can use last step dists:
                 train_context = self.last_step_layer_dists[k + 1]
-                # TODO assert that with zero delay from layer_input_history, same vector as above
-
-            # self._learn_seq_kmeans(k=k,
+                # assert that with zero delay from layer_input_history, same vector as above
 
             # here, train_input, train_output, and train_context are all scaled I+C dists, from different layers
             # (from feedforward sweep)
-
-            # count nans
-            count_nans = False
-            if count_nans:
-                layer_index = k
-                try:
-                    print('Nan count, layer: ' + str(layer_index),
-                          'input:',
-                          np.count_nonzero(np.isnan(train_input)) * 1.0 / (train_input.shape[0]),
-                          'prediction:', np.count_nonzero(np.isnan(train_output)) * 1.0 / (
-                              train_output.shape[0]),
-                          'context:',
-                          np.count_nonzero(np.isnan(train_context)) * 1.0 / (train_context.shape[0]))
-                except TypeError:  # last layer no context
-                    print('Nan count, layer: ' + str(layer_index),
-                          'input:',
-                          np.count_nonzero(np.isnan(train_input)) * 1.0 / (train_input.shape[0]),
-                          'prediction:', np.count_nonzero(np.isnan(train_output)) * 1.0 / (
-                              train_output.shape[0]))
 
             self._learn_seq_nn(k=k,
                                cuda_table=self.cuda_tables_list[k],
@@ -380,7 +315,9 @@ class ConfidencePredictorEnsemble(object):
                                       row_context=train_context,
                                       row_to_table_dists=dists,
                                       fast_init=True)
-            #print(self.debug_x_y_theta_output, self.tmp_ind_list[k], x_y_theta_output)
+
+            # print(self.debug_x_y_theta_output, self.tmp_ind_list[k], x_y_theta_output)
+
             if x_y_theta_output is not None:
                 self.debug_x_y_theta_output[self.tmp_ind_list[k], :] = x_y_theta_output[:]
             if x_y_theta_input is not None:
@@ -397,38 +334,6 @@ class ConfidencePredictorEnsemble(object):
                 print('Done')
 
             table_min_dist, table_min_dist_r, table_min_dist_c = cuda_table.get_min_dist()
-            #print('k', k, 'new_min_dist', new_min_dist, 'table_min_dist', table_min_dist, table_min_dist_r, table_min_dist_c)
-
-            # ********************** DEBUGGING ABOVE ******************************
-            # TODO above: why does table_min_dist go negative sometimes?
-            # TODO above: why does table_min_dist_r == table_min_dist_c for all layers eventually?
-            # Happens with DistMatrixhelper, or DumbDistMatrixHelper, either way
-            # Answer: there was a bug with dists[r_r_ind] = 0, not being set that way- so self distance would diverge
-
-            # But now: always replacing same row constantly
-            # k 0 table_min_dist 0.0 0 0
-            # k 1 table_min_dist 0.0 0 0
-            # k 2 table_min_dist 0.0 0 0
-            # k 3 table_min_dist 0.0 0 0
-            # k 4 table_min_dist 0.0 0 0
-
-            # ... now, setting to np.inf instead of 0.0, does this constantly forever:
-            # k 4 table_min_dist 2.057 71 70
-            #   and no replcements occur
-
-            # *********************************************************************
-
-            #if k == 4:
-            #    print('&**************')
-            #    print(new_min_dist, ',,,', table_min_dist, (table_min_dist_r, table_min_dist_c))
-
-            # these are unscaled dists here.
-
-            # TODO fix:
-            # If True:
-            #   always replaces same row
-            # if new_min_dist > table_min_dist:
-            #   eventually, no replacements occur
 
             if new_min_dist > table_min_dist:
                 # minimum distance of new row to current rows is greater than current minimum row-row distance
@@ -436,8 +341,6 @@ class ConfidencePredictorEnsemble(object):
 
                 # get one of the row indices of current minimum dist pair
                 r_r_ind = table_min_dist_r  # could be table_min_dist_c
-                #print('replacing: ' + str(r_r_ind))
-                #print('    ' + str((train_input, train_output, train_context)))
 
                 # zero out its stats in preparation for replacement
                 self.table_use_hist_list[k][r_r_ind] = 0
@@ -461,15 +364,6 @@ class ConfidencePredictorEnsemble(object):
                 else:
                     self.replacements_by_layer[k][r_r_ind] = self.replacements_by_layer[k][r_r_ind] + 1
 
-        if False and time.time() > self.last_disp_time + self.disp_every_k_sec:
-            print('replacements: ')
-            for k2 in range(len(self.replacements_by_layer)):
-                print('    layer ' + str(k2) + ': ', self.replacements_by_layer[k2])
-                print()
-            self.last_disp_time = time.time()
-            for k2 in range(len(self.replacements_by_layer)):
-                self.replacements_by_layer[k2] = {}
-
     def plan_and_get_debug_position_angle_list(self, goal_state, starting_state, visualizer, rays, topdown_info, current_goal_position_angle):
         plan_position_angle_list = None
         return plan_position_angle_list
@@ -491,8 +385,6 @@ class ConfidencePredictorEnsemble(object):
 
         table = np.transpose(self.cuda_tables_list[layer_index].get_table_from_gpu())
 
-        # print('***', layer_index, table.shape, input_dim, output_dim, context_dim)
-
         if layer_index == 0:
             entries = 40 * 2 * 3
         else:
@@ -502,22 +394,6 @@ class ConfidencePredictorEnsemble(object):
         im_prediction = table[0:entries, input_dim:input_dim + output_dim]
         im_context = table[0:entries, input_dim + output_dim::]
 
-        #print('*** ', layer_index, im_input.shape, im_prediction.shape, im_context.shape)
-
-        # count nans
-        count_nans = False
-        if count_nans:
-            try:
-                print('Nan count, layer: ' + str(layer_index),
-                      'input:', np.count_nonzero(np.isnan(im_input)) * 1.0 / (im_input.shape[0] * im_input.shape[1]),
-                      'prediction:', np.count_nonzero(np.isnan(im_prediction)) * 1.0 / (im_prediction.shape[0] * im_prediction.shape[1]),
-                      'context:', np.count_nonzero(np.isnan(im_context)) * 1.0 / (im_context.shape[0] * im_context.shape[1]))
-            except ZeroDivisionError:  # last layer no context
-                print('Nan count, layer: ' + str(layer_index),
-                      'input:', np.count_nonzero(np.isnan(im_input)) * 1.0 / (im_input.shape[0] * im_input.shape[1]),
-                      'prediction:',
-                      np.count_nonzero(np.isnan(im_prediction)) * 1.0 / (im_prediction.shape[0] * im_prediction.shape[1]))
-
         if layer_index == 0:
             A = im_input
             B = im_prediction
@@ -526,8 +402,6 @@ class ConfidencePredictorEnsemble(object):
             C[1::2, :] = B
 
             im = np.reshape(C, (C.shape[0], C.shape[1] / 3, 3))
-
-            #print('**', np.amin(im), np.amax(im), im.dtype, im.shape)
 
             im = cv2.resize(im, dsize=(0,0), fx=3, fy=3, interpolation=cv2.INTER_NEAREST)
         else:
@@ -540,12 +414,6 @@ class ConfidencePredictorEnsemble(object):
             imscale = 0.2  # full table
             # imscale = 5.0
             im = cv2.resize(D, dsize=(0,0), fx=imscale, fy=imscale, interpolation=cv2.INTER_NEAREST)
-
-        if False:
-            print('layer, (min, max), num_unique, dtype, (shape): ' + str(layer_index),  (np.amin(im), np.amax(im)), len(np.unique(im)), im.dtype, im.shape)
-
-        #if layer_index > 0:
-        #    im = None
 
         return im
 
