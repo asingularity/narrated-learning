@@ -159,13 +159,17 @@ def run_experiment():
                 if im is not None:
                     cv2.imshow('im_' + str(layer_num), im)
 
+                predictions_im = ensemble.get_predictions_im()
+                if predictions_im is not None:
+                    cv2.imshow('predictions', predictions_im)
+
                 last_imshow_time = time.time()
 
         cv2.waitKey(1)
 
         if time.time() > last_plot_time + plot_error_every_k_seconds:
             print ('plotting error', time.time())
-            ensemble.plot_error(fig, ax)
+            ensemble.plot_error(fig, ax, skip_slower_plots=True)
             last_plot_time = time.time()
 
         t += 1

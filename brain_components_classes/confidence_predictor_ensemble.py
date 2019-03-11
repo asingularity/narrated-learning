@@ -42,7 +42,7 @@ class ConfidencePredictorEnsemble(object):
         self.dim = params['dim']  # input dim
 
         input_output_dt = 2  # predict time
-        input_context_dt = 4  # context future time
+        input_context_dt = 0  # context future time - NOT USED RIGHT NOW
 
         # input (t), prediction (t+1), context (t+2)
         self.post_init_done = False
@@ -75,6 +75,7 @@ class ConfidencePredictorEnsemble(object):
         self.last_disp_time = time.time()
 
         layer_input_dim_list = []  # for initializing states_history object for input
+        k_end = None
         for k, layer_entries in enumerate(self.entries_per_layer):
             if k == 0:
                 layer_input_dim = self.dim
@@ -127,6 +128,10 @@ class ConfidencePredictorEnsemble(object):
             self.tmp_ind_list.append(0)
 
             layer_input_dim_list.append(layer_input_dim)
+            k_end = k
+
+        # last layer output would be a nonexisting next layer's input dim
+        layer_input_dim_list.append(self.entries_per_layer[k_end])
 
         print ('finished initializing ensemble. total gb: ', total_gb)
 
@@ -205,9 +210,9 @@ class ConfidencePredictorEnsemble(object):
             self.last_step_layer_dists[k] = scaled_ic_dists.copy()
             layer_input = scaled_ic_dists.copy()
 
-            if k < self.num_layers - 1:
-                new_states_list.append(layer_input)
-                extra_data_list.append(x_y_theta)
+            #if k < self.num_layers - 1:
+            new_states_list.append(layer_input)
+            extra_data_list.append(x_y_theta)
 
         # processing stores *scaled* dists
         self.layer_input_history.process_new_states(newest_states_list=new_states_list, extra_data_list=extra_data_list)
@@ -217,14 +222,9 @@ class ConfidencePredictorEnsemble(object):
 
         for k in range(self.num_layers):
             dt_input_output = self.input_output_dt_steps_list[k]  # 2
-            dt_input_context = self.input_context_dt_steps_list[k]  # 4
-            assert dt_input_context > dt_input_output  # context always further future
 
-            input_delay = dt_input_context  # 4
-            output_delay = dt_input_context - dt_input_output  # 2
-
-            train_input, x_y_theta_input = self.layer_input_history.get_state(state_index=k, delay=input_delay)
-            train_output, x_y_theta_output = self.layer_input_history.get_state(state_index=k, delay=output_delay)
+            train_input, x_y_theta_input = self.layer_input_history.get_state(state_index=k, delay=dt_input_output)
+            train_output, x_y_theta_output = self.layer_input_history.get_state(state_index=k, delay=0)
 
             # here, train_input and train_output are I+C dists that have been scaled
 
@@ -233,7 +233,11 @@ class ConfidencePredictorEnsemble(object):
             else:
                 # train_context = self.layer_dists_history[k + 1][context_delay]
                 # since context_delay == 0, instead of above, we can use last step dists:
-                train_context = self.last_step_layer_dists[k + 1]
+
+                # why k + 2? because:
+                #   layer context (k) == layer output (k + 1) == layer input (k + 2)
+                train_context, x_y_theta_context = self.layer_input_history.get_state(state_index=k + 2, delay=dt_input_output)
+
                 # assert that with zero delay from layer_input_history, same vector as above
 
             # here, train_input, train_output, and train_context are all scaled I+C dists, from different layers
@@ -370,6 +374,22 @@ class ConfidencePredictorEnsemble(object):
         pickle.dump(self, f)
         f.close()
 
+    def get_predictions_im(self):
+
+        return None
+
+        newest_states_list = self.layer_input_history.get_newest_states_list()
+
+        # newest_states_list: vectors with rank-values [0, 1.0] for each row of state vector
+        # now for each row, pair with position + angle, multiple by rank-value, and plot
+        # remaining question: what position + angle is associated with each row?
+
+        # ax.plot(self.debug_x_y_theta_input[k][:, 0], self.debug_x_y_theta_input[k][:, 1], 'go')
+        # ax.plot(self.debug_x_y_theta_output[k][:, 0],  self.debug_x_y_theta_output[k][:, 1], 'ro')
+
+
+        return predictions_im
+
     def get_table_im(self, layer_index):
         cuda_table = self.cuda_tables_list[layer_index]
 
@@ -414,7 +434,7 @@ class ConfidencePredictorEnsemble(object):
 
         return im
 
-    def plot_error(self, fig, ax):
+    def plot_error(self, fig, ax, skip_slower_plots):
 
         for k in range(self.num_layers):
             mean_error_history = self.mean_error_histories_list[k]
@@ -433,20 +453,22 @@ class ConfidencePredictorEnsemble(object):
                 ax.plot(thing_to_plot, 'b-')
                 fig.savefig(self.plots_save_folder + '/' + self.plots_prefix + '_' + 'error_history_' + str(k) + '.png', dpi=100)
 
-            ax.cla()
-            ax.get_xaxis().get_major_formatter().set_scientific(False)
-            ax.get_yaxis().get_major_formatter().set_scientific(False)
-            sorted_net_indices = np.argsort(table_use_hist)[::-1]
-            ax.bar(np.arange(table_use_hist.shape[0]), table_use_hist[sorted_net_indices])
-            fig.savefig(self.plots_save_folder + '/' + self.plots_prefix + '_' + 'table_use_hist_' + str(k) + '.png', dpi=100)
+            if not skip_slower_plots:
+                # TODO find faster way to make these- ax.bar here is very slow
+                ax.cla()
+                ax.get_xaxis().get_major_formatter().set_scientific(False)
+                ax.get_yaxis().get_major_formatter().set_scientific(False)
+                sorted_net_indices = np.argsort(table_use_hist)[::-1]
+                ax.bar(np.arange(table_use_hist.shape[0]), table_use_hist[sorted_net_indices])
+                fig.savefig(self.plots_save_folder + '/' + self.plots_prefix + '_' + 'table_use_hist_' + str(k) + '.png', dpi=100)
 
-            ax.cla()
-            ax.get_xaxis().get_major_formatter().set_scientific(False)
-            ax.get_yaxis().get_major_formatter().set_scientific(False)
-            effectiveness_mean = np.divide(effectiveness_sum, effectiveness_num)
-            sorted_effectiveness = np.argsort(effectiveness_mean)[::-1]
-            ax.bar(np.arange(effectiveness_mean.shape[0]), effectiveness_mean[sorted_effectiveness])
-            fig.savefig(self.plots_save_folder + '/' + self.plots_prefix + '_' + 'effectiveness_hist_' + str(k) + '.png', dpi=100)
+                ax.cla()
+                ax.get_xaxis().get_major_formatter().set_scientific(False)
+                ax.get_yaxis().get_major_formatter().set_scientific(False)
+                effectiveness_mean = np.divide(effectiveness_sum, effectiveness_num)
+                sorted_effectiveness = np.argsort(effectiveness_mean)[::-1]
+                ax.bar(np.arange(effectiveness_mean.shape[0]), effectiveness_mean[sorted_effectiveness])
+                fig.savefig(self.plots_save_folder + '/' + self.plots_prefix + '_' + 'effectiveness_hist_' + str(k) + '.png', dpi=100)
 
             ax.cla()
             ax.get_xaxis().get_major_formatter().set_scientific(False)

@@ -78,3 +78,11 @@ class StatesLimitedHistory(object):
         state = self.state_arrays_list[state_index][time_index, :]
         extra_data = self.extra_data_list[state_index][time_index]
         return state, extra_data
+
+    def get_newest_states_list(self):
+        newest_states_list = []
+
+        for k in range(len(self.state_arrays_list)):
+            newest_states_list.append(self.get_state(state_index=k, delay=0))
+
+        return newest_states_list
