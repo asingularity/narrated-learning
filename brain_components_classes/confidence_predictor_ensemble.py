@@ -5,6 +5,8 @@ import time
 import cv2
 import pickle
 import random
+from math import sqrt
+
 import numpy as np
 np.set_printoptions(suppress=True)
 #from PVM.PVM_framework import MLP
@@ -333,7 +335,7 @@ class ConfidencePredictorEnsemble(object):
                 cuda_table.post_init()
                 self.post_init_done = True
                 print('Done')
-
+q
             table_min_dist, table_min_dist_r, table_min_dist_c = cuda_table.get_min_dist()
 
             if new_min_dist > table_min_dist:
@@ -374,19 +376,123 @@ class ConfidencePredictorEnsemble(object):
         pickle.dump(self, f)
         f.close()
 
-    def get_predictions_im(self):
+    def get_predictions_im(self, current_x_y_theta):
+        '''
+        get an image with possible predicted position + angle sequences from current position + angle
+        :return:
+        '''
 
-        return None
+        if False:
+            return None
 
+        predictions_im = None
         newest_states_list = self.layer_input_history.get_newest_states_list()
 
+        N = len(newest_states_list)
+        assert N == self.num_layers + 1
+        assert len(self.cuda_tables_list) == self.num_layers
+
+        print()
+        print('**** prediction_im ****')
+
+        input_pixel_values, x_y_theta = newest_states_list[0]
+
+        # (1) make sure data stored with newest state 0 is actually current position / angle
+        print('*** Check 1 ***')
+        print('        Actual:',
+              (x_y_theta[0], x_y_theta[1]),
+              'Err: ',
+              sqrt(pow(abs(x_y_theta[0] - current_x_y_theta[0]), 2) + pow(abs(x_y_theta[1] - current_x_y_theta[1]), 2)))
+
+        # (2) get best row in table 0, given current state. get error in position/angle to that row's stored data
+        first_layer_dists, _ = newest_states_list[1]
+
+        best_row_index = np.argmax(first_layer_dists)
+        row_input, row_output, _ = self.cuda_tables_list[0].get_matrix_row(row_index=best_row_index)
+        stored_x_y_theta = self.debug_x_y_theta_output[0][best_row_index, :]
+
+        print('*** Check 2 ***')
+        print('        Stored:',
+              (stored_x_y_theta[0], stored_x_y_theta[1]),
+              'Err: ',
+              sqrt(pow(abs(stored_x_y_theta[0] - current_x_y_theta[0]), 2) + pow(abs(stored_x_y_theta[1] - current_x_y_theta[1]), 2)))
+
+        # (3) since above is not working, sanity check: do lookup here explicitly
+
+        dists_tmp = self.cuda_tables_list[0].query(query_input=input_pixel_values,
+                                                   query_output=None,
+                                                   query_context=None)
+
+        best_row_index = np.argmax(dists_tmp)
+        row_input, row_output, _ = self.cuda_tables_list[0].get_matrix_row(row_index=best_row_index)
+        stored_x_y_theta = self.debug_x_y_theta_output[0][best_row_index, :]
+
+        print('*** Check 3 ***')
+        print('        Stored:',
+              (stored_x_y_theta[0], stored_x_y_theta[1]),
+              'Err: ',
+              sqrt(pow(abs(stored_x_y_theta[0] - current_x_y_theta[0]), 2) + pow(abs(stored_x_y_theta[1] - current_x_y_theta[1]), 2)))
+
+        # TODO question: why are check 2, check 3 different above? should be same row?
+        # TODO question: why error so large?
+
+        # (4) cv2 imshow: input, best row input- for comparison
+        #   i.e. row_input, input_pixel_values
+
+        print()
+        return predictions_im
+
+
         # newest_states_list: vectors with rank-values [0, 1.0] for each row of state vector
+        for state_index in range(N - 1, 0, -1):
+            print('     State: ', state_index)
+            # does not include index 0: the input
+            # i.e. for N==5: [4, 3, 2, 1]
+
+            # starts in highest layer
+            scaled_dists, extra_data = newest_states_list[state_index]
+
+            # get argmax -> lowest dist -> highest confindence
+            # TODO should use best "K", not just the one best
+
+            best_row_index = np.argmax(scaled_dists)
+            row_input, row_output, _ = self.cuda_tables_list[state_index - 1].get_matrix_row(row_index=best_row_index)
+
+            # "output" column -> in space of scaled_dists for [l_n-1] -> prediction for this layer
+            # "input" column -> in space of scaled_dists for [l_n-1] -> input for this layer from prev layer
+
+            # correct:
+            row_output_m = row_output.copy()
+            row_input_m = row_input.copy()
+
+            for layer_index in range(state_index - 2, -1, -1):
+                # take output as dists for layer l_m
+                # correct:
+                # scaled_dists_m = row_output_m.copy()
+                # incorrect:
+                scaled_dists_m = row_input_m.copy()
+
+                best_row_index_m = np.argmax(scaled_dists_m)
+                row_input_m, row_output_m, _ = self.cuda_tables_list[layer_index].get_matrix_row(row_index=best_row_index_m)
+                # print('        ', layer_index, '...')
+                if layer_index == 0:
+                    p_r = self.debug_x_y_theta_output[0][best_row_index_m, 0]
+                    p_c = self.debug_x_y_theta_output[0][best_row_index_m, 1]
+                    print('        p:', best_row_index_m, (p_r, p_c))
+                    tmp_x = p_r
+                    tmp_y = p_c
+
+        # TODO now display actual position & angle corresponding to input:
+        _, x_y_theta = newest_states_list[0]
+        print('        Actual:', (x_y_theta[0], x_y_theta[1]), 'Err: ', sqrt(pow(abs(x_y_theta[0] - tmp_x), 2) + pow(abs(x_y_theta[1] - tmp_y), 2)))
+
+        print()
+
         # now for each row, pair with position + angle, multiple by rank-value, and plot
         # remaining question: what position + angle is associated with each row?
 
         # ax.plot(self.debug_x_y_theta_input[k][:, 0], self.debug_x_y_theta_input[k][:, 1], 'go')
         # ax.plot(self.debug_x_y_theta_output[k][:, 0],  self.debug_x_y_theta_output[k][:, 1], 'ro')
-
 
         return predictions_im
 

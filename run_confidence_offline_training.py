@@ -89,7 +89,9 @@ def run_experiment():
     #sim_off_time = np.inf
     sim_off_time = 1000000
 
-    entries_per_layer =  [20000, 2000, 1000, 1000, 1000]
+    # TODO re-enable this:
+    # entries_per_layer = [20000, 2000, 1000, 1000, 1000]
+    entries_per_layer =  [40000]
     #entries_per_layer =  [2000, 2000, 1000, 1000, 1000]
     #entries_per_layer =  [500, 200, 100, 100, 100]
 
@@ -159,7 +161,7 @@ def run_experiment():
                 if im is not None:
                     cv2.imshow('im_' + str(layer_num), im)
 
-                predictions_im = ensemble.get_predictions_im()
+                predictions_im = ensemble.get_predictions_im(current_x_y_theta=x_y_theta)
                 if predictions_im is not None:
                     cv2.imshow('predictions', predictions_im)
 
