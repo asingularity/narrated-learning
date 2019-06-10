@@ -230,34 +230,59 @@ class SingleTableLayer(object):
         :return:
         '''
 
+        show_current = True  # show closest current input rows
+        show_prediction = True  # show predictions of closest current input rows
+
+        num_to_show = 5
+
         im2 = np.zeros((30, 30, 3), np.float)
         scale_factor = 20
 
         im2 = cv2.resize(src=im2, dsize=(0, 0), fx=scale_factor, fy=scale_factor,
                          interpolation=cv2.INTER_NEAREST)
 
-        num_to_show = 5
-
         sorted_indices = np.argsort(scaled_i_c_dists)
 
-        for k in range(num_to_show):  # scaled_i_c_dists.shape[0]
+        if show_current:
+            for k in range(num_to_show):  # scaled_i_c_dists.shape[0]
 
-            ind = sorted_indices[k]
+                ind = sorted_indices[k]
 
-            p_x, p_y, p_theta = self.entries_x_y_theta_input[ind]
+                p_x, p_y, p_theta = self.entries_x_y_theta_input[ind]
 
-            cv2.circle(img=im2,
-                       center=(int(p_x * scale_factor), int(p_y * scale_factor)),
-                       radius=5,
-                       color=(1.0 * (num_to_show - k) / num_to_show, 1.0 * (num_to_show - k) / num_to_show, 1.0 * (num_to_show - k) / num_to_show),
-                       thickness=3)
-            g2_x = p_x + 1. * cos(p_theta)
-            g2_y = p_y + 1. * sin(p_theta)
-            cv2.line(im2,
-                     pt1=(int(p_x * scale_factor), int(p_y * scale_factor)),
-                     pt2=(int(g2_x * scale_factor), int(g2_y * scale_factor)),
-                     color=(1.0, 1.0, 0),
-                     thickness=2)
+                cv2.circle(img=im2,
+                           center=(int(p_x * scale_factor), int(p_y * scale_factor)),
+                           radius=5,
+                           color=(1.0 * (num_to_show - k) / num_to_show, 1.0 * (num_to_show - k) / num_to_show, 0.0 * (num_to_show - k) / num_to_show),
+                           thickness=3)
+                g2_x = p_x + 1. * cos(p_theta)
+                g2_y = p_y + 1. * sin(p_theta)
+                cv2.line(im2,
+                         pt1=(int(p_x * scale_factor), int(p_y * scale_factor)),
+                         pt2=(int(g2_x * scale_factor), int(g2_y * scale_factor)),
+                         color=(1.0, 1.0, 0),
+                         thickness=2)
+
+        if show_prediction:
+            for k in range(num_to_show):  # scaled_i_c_dists.shape[0]
+
+                ind = sorted_indices[k]
+
+                p_x, p_y, p_theta = self.entries_x_y_theta_output[ind]
+
+                cv2.circle(img=im2,
+                           center=(int(p_x * scale_factor), int(p_y * scale_factor)),
+                           radius=5,
+                           color=(0.0 * (num_to_show - k) / num_to_show, 1.0 * (num_to_show - k) / num_to_show,
+                                  1.0 * (num_to_show - k) / num_to_show),
+                           thickness=3)
+                g2_x = p_x + 1. * cos(p_theta)
+                g2_y = p_y + 1. * sin(p_theta)
+                cv2.line(im2,
+                         pt1=(int(p_x * scale_factor), int(p_y * scale_factor)),
+                         pt2=(int(g2_x * scale_factor), int(g2_y * scale_factor)),
+                         color=(0.0, 1.0, 1.0),
+                         thickness=2)
 
         cur_x, cur_y, cur_theta = current_x_y_theta
         if cur_x is not None:
@@ -296,7 +321,7 @@ def test_run_single_table_layer():
         'output_dim': dim,
         'context_dim': 0,
         'num_entries': 4000,
-        'predict_time': 2,
+        'predict_time': 8,
         'include_layers': ['io_only', 'i_only']  # no context, io: lookup for learning, i: lookup for testing
     })
 
