@@ -17,7 +17,7 @@ class CudaTable(object):
         cuda_table_test.py
     '''
 
-    def __init__(self, num_entries, input_dim, output_dim, context_dim, include_layers, table=None, use_dumb_dist=False):
+    def __init__(self, num_entries, input_dim, output_dim, context_dim, include_layers, table=None, use_dumb_dist=False, disable_row_row_dist=False):
         '''
 
         need to init twice: input + context, input + output + context
@@ -35,6 +35,7 @@ class CudaTable(object):
 
         '''
 
+        self.post_init_done = False
         self.compute_d = True
 
         self.include_layers = include_layers
@@ -44,15 +45,19 @@ class CudaTable(object):
         self.output_dim = output_dim
         self.context_dim = context_dim
 
+        self.disable_row_row_dist = disable_row_row_dist
+
         linalg.init()
         self.size_gb = 0.0
 
+        self.row_ages = np.zeros(self.num_entries, np.int)
 
         # row-row distance matrix
-        if use_dumb_dist:
-            self.d = DumbDistMatrixHelper(num_rows=num_entries, init_dists_val=0.0)
-        else:
-            self.d = DistMatrixHelper(num_rows=num_entries, init_dists_val=0.0)
+        if not self.disable_row_row_dist:
+            if use_dumb_dist:
+                self.d = DumbDistMatrixHelper(num_rows=num_entries, init_dists_val=0.0)
+            else:
+                self.d = DistMatrixHelper(num_rows=num_entries, init_dists_val=0.0)
 
         # set back to zero init
         # table = np.random.random((num_entries, input_dim + context_dim + output_dim)).astype(np.float32)
@@ -128,7 +133,9 @@ class CudaTable(object):
         return self.size_gb
 
     def post_init(self):
-        self.d.post_init()
+        self.post_init_done = True
+        if not self.disable_row_row_dist:
+            self.d.post_init()
 
     def query(self, query_input, query_output, query_context):
         '''
@@ -265,21 +272,32 @@ class CudaTable(object):
             misc.set_by_index(dest_gpu=self.table_i_gpu, ind=col + cols * np.arange(rows_i), src_gpu=arr_gpu_i, ind_which='dest')
             self.term_2_i[row_index] = np.sum(row_data_i ** 2)
 
-        # print(self.num_entries, row_to_table_dists.shape, row_to_table_dists.dtype)
-        # THIS IS A BOTTLENECK SLOW STEP:
-        self.d.set_row_dists(row_index=row_index, new_dists=row_to_table_dists, fast_init=fast_init)
+        if not self.disable_row_row_dist:
+            # print(self.num_entries, row_to_table_dists.shape, row_to_table_dists.dtype)
+            # THIS IS A BOTTLENECK SLOW STEP:
+            self.d.set_row_dists(row_index=row_index, new_dists=row_to_table_dists, fast_init=fast_init)
+
+        self.row_ages = self.row_ages + 1
+        self.row_ages[row_index] = 0
+
+    def get_oldest_row_ind(self):
+        return np.argmax(self.row_ages)
 
     def get_min_dist(self):
         '''
 
         :return: min_dist, index_r, index_c
         '''
-
-        return self.d.get_min_dist()
+        if not self.disable_row_row_dist:
+            return self.d.get_min_dist()
+        else:
+            return None
 
     def get_max_dist(self):
-
-        return self.d.get_max_dist()
+        if not self.disable_row_row_dist:
+            return self.d.get_max_dist()
+        else:
+            return None
 
     def get_matrix_row(self, row_index):
         if self.include_ioc:

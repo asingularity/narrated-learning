@@ -44,45 +44,55 @@ class StatesLimitedHistory(object):
         self.states_dim_list = params['states_dim_list']
         self.state_arrays_list = []
         self.extra_data_list = []
-        for k in range(len(self.states_dim_list)):
-            self.state_arrays_list.append(np.zeros((self.max_delay, self.states_dim_list[k])).astype(np.float32))
-            self.extra_data_list.append([None] * self.max_delay)
+
+        self.active = False
+
+        if self.states_dim_list[0] > 0:
+            self.active = True
+            for k in range(len(self.states_dim_list)):
+                self.state_arrays_list.append(np.zeros((self.max_delay, self.states_dim_list[k])).astype(np.float32))
+                self.extra_data_list.append([None] * self.max_delay)
         self.t_mod = 0
 
     def process_new_states(self, newest_states_list, extra_data_list):
+        if self.active:
+            assert len(newest_states_list) == len(self.state_arrays_list), 'Error: invalid states length!'
+            assert len(extra_data_list) == len(self.extra_data_list), 'Error: invalid extra data length!'
+            assert len(newest_states_list) == len(self.extra_data_list), 'Error: invalid extra data length!'
 
-        assert len(newest_states_list) == len(self.state_arrays_list), 'Error: invalid states length!'
-        assert len(extra_data_list) == len(self.extra_data_list), 'Error: invalid extra data length!'
-        assert len(newest_states_list) == len(self.extra_data_list), 'Error: invalid extra data length!'
+            self.t_mod += 1
+            if self.t_mod == self.max_delay:
+                self.t_mod = 0
 
-        self.t_mod += 1
-        if self.t_mod == self.max_delay:
-            self.t_mod = 0
-
-        state_index = 0
-        for state in newest_states_list:
-            self.state_arrays_list[state_index][self.t_mod, :] = state[:]
-            self.extra_data_list[state_index][self.t_mod] = extra_data_list[state_index]
-            state_index += 1
+            state_index = 0
+            for state in newest_states_list:
+                self.state_arrays_list[state_index][self.t_mod, :] = state[:]
+                self.extra_data_list[state_index][self.t_mod] = extra_data_list[state_index]
+                state_index += 1
 
     def get_state(self, state_index, delay):
+        if self.active:
+            assert self.t_mod < self.max_delay
+            # t_mod is where most recent data point is stored
 
-        assert self.t_mod < self.max_delay
-        # t_mod is where most recent data point is stored
+            time_index = self.t_mod - delay
 
-        time_index = self.t_mod - delay
+            if time_index < 0:
+                time_index = self.max_delay + time_index
 
-        if time_index < 0:
-            time_index = self.max_delay + time_index
-
-        state = self.state_arrays_list[state_index][time_index, :]
-        extra_data = self.extra_data_list[state_index][time_index]
-        return state, extra_data
+            state = self.state_arrays_list[state_index][time_index, :]
+            extra_data = self.extra_data_list[state_index][time_index]
+            return state, extra_data
+        else:
+            return None, None
 
     def get_newest_states_list(self):
-        newest_states_list = []
+        if self.active:
+            newest_states_list = []
 
-        for k in range(len(self.state_arrays_list)):
-            newest_states_list.append(self.get_state(state_index=k, delay=0))
+            for k in range(len(self.state_arrays_list)):
+                newest_states_list.append(self.get_state(state_index=k, delay=0))
 
-        return newest_states_list
+            return newest_states_list
+        else:
+            return None

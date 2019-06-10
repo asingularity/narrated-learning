@@ -335,7 +335,7 @@ class ConfidencePredictorEnsemble(object):
                 cuda_table.post_init()
                 self.post_init_done = True
                 print('Done')
-q
+
             table_min_dist, table_min_dist_r, table_min_dist_c = cuda_table.get_min_dist()
 
             if new_min_dist > table_min_dist:
