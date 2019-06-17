@@ -163,7 +163,7 @@ class Visualizer(object):
         BACK = 115
         LEFT = 97
         RIGHT = 100
-        ENTER = 10
+        ENTER = 13
 
         if k == -1:
             self.linear_speed_from_key = 0.0
