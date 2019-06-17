@@ -244,7 +244,7 @@ class RobotEnvironment(object):
         debug_max_theta = -np.inf
 
         for r1 in range(rows):
-            print 'processing: ', r1, ' of ', rows
+            print ('processing: ', r1, ' of ', rows)
             for c1 in range(cols):
                 for r2 in range(rows):
                     for c2 in range(cols):

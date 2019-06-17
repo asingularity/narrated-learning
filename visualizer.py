@@ -169,7 +169,7 @@ class Visualizer(object):
             self.linear_speed_from_key = 0.0
             self.angular_speed_from_key = 0.0
         else:
-            print 'KEY PRESSED: ' + str(k)
+            print( 'KEY PRESSED: ' + str(k))
             if k == ENTER:
                 self.toggle_viewer_slow = not self.toggle_viewer_slow
                 if self.toggle_viewer_slow:
@@ -193,13 +193,13 @@ class Visualizer(object):
         error_names_predictor, error_histories_predictor, \
         error_names_inverse, error_histories_inverse, \
         error_names_no_context_predictor, error_histories_no_context_predictor = robot_brain.get_error_names_histories()
-        print self.frames
+        print( self.frames)
 
         for k in range(len(error_names_autoenc)):
             error_name = error_names_autoenc[k]
             error_history = error_histories_autoenc[k]
-            print error_name
-            print error_history.shape
+            print( error_name)
+            print( error_history.shape)
             self.ax.cla()
             self.ax.set_ylim([0, 0.12])
             self.ax.plot(error_history)
@@ -209,8 +209,8 @@ class Visualizer(object):
             for k in range(len(error_names_predictor)):
                 error_name = error_names_predictor[k]
                 error_history = error_histories_predictor[k]
-                print error_name
-                print error_history.shape
+                print( error_name)
+                print( error_history.shape)
                 self.ax.cla()
                 self.ax.plot(error_history, 'b-')
 
@@ -223,8 +223,8 @@ class Visualizer(object):
             for k in range(len(error_names_inverse)):
                 error_name = error_names_inverse[k]
                 error_history = error_histories_inverse[k]
-                print error_name
-                print error_history.shape
+                print( error_name)
+                print( error_history.shape)
                 self.ax.cla()
                 self.ax.plot(error_history, 'b-')
                 self.fig.savefig(plots_save_folder + '/' + error_name + '.png', dpi=100)

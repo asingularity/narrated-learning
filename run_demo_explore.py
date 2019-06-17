@@ -41,8 +41,8 @@ def get_sensors_params():
 def get_sim_folder_manager_params():
     params = {
         'sim_prefix': 'test',
-        'sim_folders_path': '/home/' + USERNAME + '/NL-sim/',
-        'scripts_folder_path': '/home/' + USERNAME + '/projects/NL/'
+        'sim_folders_path': '/srv/projects/NL-sim/',
+        'scripts_folder_path': '/srv/projects/NL/'
     }
     return params
 
@@ -186,12 +186,12 @@ def run_demo(demo_components):
                              plan_position_angle_list=robot_brain.get_plan_position_angle_list(rays=robot_sensors.get_rays(),
                                                                                                goal_states=task_manager.get_task_goal_states()))
 
-    print 'Finished Simulation.'
+    print ('Finished Simulation.')
 
     robot_brain.save_states_history(plots_save_folder=sim_folder_manager.get_plots_save_folder(), state_indices_list=[0])
     robot_brain.save_debug_topdown_info_history(plots_save_folder=sim_folder_manager.get_plots_save_folder())
     task_manager.evaluate(plots_save_folder=sim_folder_manager.get_plots_save_folder())
-    print 'Finished Evaluation.'
+    print ('Finished Evaluation.')
 
 
 def demo():

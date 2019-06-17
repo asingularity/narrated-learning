@@ -3,17 +3,8 @@ import time
 import cv2
 import numpy as np
 np.set_printoptions(suppress=True)
-from fast_save_matrix import savetxt
-from brain_components import Autoencoder, StatesHistory, MotorHistory, Predictor, InverseModel, DebugTopdownInfoHistory
 
-import pycuda.driver as cuda
-import pycuda.autoinit
-from pycuda.compiler import SourceModule
-import pycuda.gpuarray as gpuarray
-import pycuda.cumath as cumath
-import skcuda.linalg as linalg
-
-from brain_components_classes.predictor_ensemble import PredictorEnsemble
+from brain_components import StatesHistory, MotorHistory, DebugTopdownInfoHistory
 
 
 class RobotBrain(object):
@@ -25,15 +16,15 @@ class RobotBrain(object):
         self.motor_history = self._init_motor_history(params)
 
         if params['predictor_ensemble_load_from_file']:
-            print 'loading predictor ensemble...'
+            print( 'loading predictor ensemble...')
             f = open(params['predictor_ensemble_filename'], 'r')
             self.predictor_ensemble = pickle.load(f)
             f.close()
-            print 'done loading predictor ensemble.'
+            print( 'done loading predictor ensemble.')
 
-            print 'precomputing...'
+            print( 'precomputing...')
             self.predictor_ensemble.precompute()
-            print 'done precomputing.'
+            print( 'done precomputing.')
         else:
             self.predictor_ensemble = None
 
@@ -99,7 +90,7 @@ class RobotBrain(object):
         starting_state = self.states_history.get_state(state_index=0, delay=0)
 
         if starting_state is not None:
-            print 'planning...'
+            print( 'planning...')
 
             plan_position_angle_list = self.predictor_ensemble.plan_and_get_debug_position_angle_list(goal_state=goal_states,
                                                                                                       starting_state=starting_state,
@@ -108,13 +99,13 @@ class RobotBrain(object):
                                                                                                       topdown_info=topdown_info,
                                                                                                       current_goal_position_angle=current_goal_position_angle)
 
-            print 'finished planning. showing plan for 1 seconds.'
+            print( 'finished planning. showing plan for 1 seconds.')
 
             # change this to public function. pass in plan_position_angle_list as computed here, and display here as planning converges:
 
             # later, next motor command will be computed here or in process_input based on proximal states in the plan
         else:
-            print 'starting state is None. skipping planning.'
+            print( 'starting state is None. skipping planning.')
 
     def get_plan_position_angle_list(self, rays, goal_states):
         '''
@@ -227,11 +218,11 @@ class RobotBrain(object):
         return self.ctx_predictor_debug_images
 
     def save_states_history(self, plots_save_folder, state_indices_list):
-        print 'saving states history...'
+        print( 'saving states history...')
         self.states_history.save_states(plots_save_folder, state_indices_list)
 
     def save_debug_topdown_info_history(self, plots_save_folder):
-        print 'saving debug topdown info history...'
+        print( 'saving debug topdown info history...')
         self.debug_topdown_info_history.save_history(plots_save_folder)
 
 

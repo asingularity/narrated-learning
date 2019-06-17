@@ -31,7 +31,6 @@ class SimFolderManager(object):
                      'performance_evaluator.py',
                      'setup.py',
                      'setup_fast_save_matrix.py',
-                     'setup_knn_parallel.py',
                      'task_manager.py',
                      'visualizer.py',
                      'install_cython_libraries.sh']

@@ -1,10 +1,6 @@
 import pickle
-from PVM.PVM_framework import MLP
 import numpy as np
 np.set_printoptions(suppress=True)
-
-from fast_save_matrix import savetxt
-from knn_parallel import knn_query as knn_parallel_query
 
 
 class MotorHistory(object):
