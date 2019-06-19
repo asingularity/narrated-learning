@@ -59,6 +59,8 @@ def get_brain_params():
         # TO DO: add online training back in
         'predictor_ensemble_load_from_file': False,
         'predictor_ensemble_filename': None,
+        'entries_per_layer': [200, 200],
+        'predict_time_per_layer': [8, 8],
     }
     return params
 
@@ -147,12 +149,7 @@ def run_demo(demo_components):
                                                          robot_brain=robot_brain)
 
         if new_goal_chosen_this_step:
-            robot_brain.process_new_goal_states(goal_states=task_manager.get_task_goal_states(),
-                                                # these parameters are needed for displaying planned paths:
-                                                visualizer=visualizer,
-                                                rays=robot_sensors.get_rays(),
-                                                topdown_info=robot_environment.get_topdown_info(),
-                                                current_goal_position_angle=task_manager.get_current_goal_position_angle())
+            robot_brain.process_new_goal_states(goal_states=task_manager.get_task_goal_states())
 
         robot_sensors.read_input(nonzero_tiles=robot_environment.get_nonzero_tiles(),
                                  robot_theta=robot_environment.get_robot_theta())
@@ -160,12 +157,12 @@ def run_demo(demo_components):
         #   robot_sensors.rays updated from environment: STATE_T+1
         #   robot_model.last_motor_command: CMD_T
 
-        robot_brain.process_input(rays=robot_sensors.get_rays(),
-                                  last_motor_command=robot_model.get_last_motor_command(),
-                                  models_save_folder=sim_folder_manager.get_models_save_folder(),
-                                  debug_topdown_info=robot_environment.get_topdown_info())  # for storing robot position, angle for debugging planning
+        new_motor_out = robot_brain.process_input_get_motor(rays=robot_sensors.get_rays(),
+                                                            last_motor_command=robot_model.get_last_motor_command(),
+                                                            models_save_folder=sim_folder_manager.get_models_save_folder(),
+                                                            debug_topdown_info=robot_environment.get_topdown_info())  # for storing robot position, angle for debugging planning
 
-        robot_model.act_upon_processing(motor_command=robot_brain.get_motor_output())
+        robot_model.act_upon_processing(motor_command=new_motor_out)
 
         if use_keyboard_input:
             linear_speed, angular_speed = visualizer.get_linear_angular_speed()
@@ -179,12 +176,9 @@ def run_demo(demo_components):
         #   robot_environment state updated with motor cmd CMD_T: STATE_T -> STATE_T+1
 
         visualizer.visualize(rays=robot_sensors.get_rays(),
-                             robot_brain=robot_brain,  # get_autoenc_images, get_predictor_images, get_error_names_histories
                              topdown_info=robot_environment.get_topdown_info(),
                              plots_save_folder=sim_folder_manager.get_plots_save_folder(),
-                             current_goal_position_angle=task_manager.get_current_goal_position_angle(),
-                             plan_position_angle_list=robot_brain.get_plan_position_angle_list(rays=robot_sensors.get_rays(),
-                                                                                               goal_states=task_manager.get_task_goal_states()))
+                             current_goal_position_angle=task_manager.get_current_goal_position_angle())
 
     print ('Finished Simulation.')
 

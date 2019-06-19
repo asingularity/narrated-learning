@@ -174,8 +174,7 @@ class SingleTableLayer(object):
                 if input_x_y_theta is not None:
                     self.entries_x_y_theta_input[r_r_ind, :] = input_x_y_theta[:]
 
-    def get_table_im(self):
-        layer_index = 0
+    def get_table_im(self, layer_index=0):
         cuda_table = self.cuda_table
 
         # layer 0: display as color images below

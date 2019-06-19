@@ -46,7 +46,7 @@ class Visualizer(object):
             self.last_FPS_time = time.time()
         self.fps_frames += 1
 
-    def _get_topdown_map(self, rays, topdown_info, current_goal_position_angle, plan_position_angle_list):
+    def _get_topdown_map(self, rays, topdown_info, current_goal_position_angle):
         im = topdown_info['env_map_copy']
         robot_x = topdown_info['robot_x']
         robot_y = topdown_info['robot_y']
@@ -63,55 +63,6 @@ class Visualizer(object):
         resized_image = cv2.resize(src=im, dsize=(0, 0), fx=self.scale_topdown_factor, fy=self.scale_topdown_factor, interpolation=cv2.INTER_NEAREST)
 
         # rays should be drawn on resized image so always width 1
-
-        if plan_position_angle_list is not None:
-            if 0:
-                input_td_info = plan_position_angle_list[0]
-                context_td_info = plan_position_angle_list[1]
-                output_td_info = plan_position_angle_list[2]
-
-                br = 1.0
-                for td_info in [input_td_info, context_td_info]: #, output_td_info]:
-                    r_x = td_info[0]
-                    r_y = td_info[1]
-                    r_theta = td_info[2]
-
-                    cv2.circle(img=resized_image,
-                               center=(int(r_x * self.scale_topdown_factor), int(r_y * self.scale_topdown_factor)),
-                               radius=5,
-                               color=(1.0 * br, 1.0 * br, 1.0 * br),
-                               thickness=3)
-                    g2_x = r_x + 0.5 * cos(r_theta)
-                    g2_y = r_y + 0.5 * sin(r_theta)
-                    cv2.line(resized_image,
-                             pt1=(int(r_x * self.scale_topdown_factor), int(r_y * self.scale_topdown_factor)),
-                             pt2=(int(g2_x * self.scale_topdown_factor), int(g2_y * self.scale_topdown_factor)),
-                             color=(0.5, 0.5, 0),
-                             thickness=2)
-                    br *= 0.5
-
-            # plan
-            if True:
-                br = 1.0
-                for td_info in plan_position_angle_list:
-                    r_x = td_info[0]
-                    r_y = td_info[1]
-                    r_theta = td_info[2]
-
-                    cv2.circle(img=resized_image,
-                               center=(int(r_x * self.scale_topdown_factor), int(r_y * self.scale_topdown_factor)),
-                               radius=5,
-                               color=(1.0 * br, 1.0 * br, 1.0 * br),
-                               thickness=3)
-                    g2_x = r_x + 0.5 * cos(r_theta)
-                    g2_y = r_y + 0.5 * sin(r_theta)
-                    cv2.line(resized_image,
-                             pt1=(int(r_x * self.scale_topdown_factor), int(r_y * self.scale_topdown_factor)),
-                             pt2=(int(g2_x * self.scale_topdown_factor), int(g2_y * self.scale_topdown_factor)),
-                             color=(0.5 * br, 0.5 * br, 0),
-                             thickness=2)
-
-                    br *= 0.85
 
         goal_x, goal_y, goal_theta = current_goal_position_angle
         if goal_x is not None:
@@ -144,9 +95,9 @@ class Visualizer(object):
 
         return resized_image
 
-    def _display_graphic_map(self, rays, robot_brain, topdown_info, current_goal_position_angle, plan_position_angle_list):
+    def _display_graphic_map(self, rays, topdown_info, current_goal_position_angle):
         ray_colors = rays['ray_colors'].reshape((len(rays['ray_colors']) / 3, 3))
-        resized_image = self._get_topdown_map(rays, topdown_info, current_goal_position_angle, plan_position_angle_list)
+        resized_image = self._get_topdown_map(rays, topdown_info, current_goal_position_angle)
 
         cv2.imshow('env_map', resized_image)
 
@@ -188,54 +139,13 @@ class Visualizer(object):
             if k == RIGHT:
                 self.angular_speed_from_key = 0.2
 
-    def _plot_brain_errors(self, robot_brain, plots_save_folder):
-        error_names_autoenc, error_histories_autoenc, \
-        error_names_predictor, error_histories_predictor, \
-        error_names_inverse, error_histories_inverse, \
-        error_names_no_context_predictor, error_histories_no_context_predictor = robot_brain.get_error_names_histories()
-        print( self.frames)
-
-        for k in range(len(error_names_autoenc)):
-            error_name = error_names_autoenc[k]
-            error_history = error_histories_autoenc[k]
-            print( error_name)
-            print( error_history.shape)
-            self.ax.cla()
-            self.ax.set_ylim([0, 0.12])
-            self.ax.plot(error_history)
-            self.fig.savefig(plots_save_folder + '/' + error_name + '.png', dpi=100)
-
-        if error_names_predictor is not None:
-            for k in range(len(error_names_predictor)):
-                error_name = error_names_predictor[k]
-                error_history = error_histories_predictor[k]
-                print( error_name)
-                print( error_history.shape)
-                self.ax.cla()
-                self.ax.plot(error_history, 'b-')
-
-                #error_name_nc = error_names_no_context_predictor[k]
-                #error_history_nc = error_histories_no_context_predictor[k, :]
-                #self.ax.plot(error_history_nc, 'r-')
-                #  + '_' + error_name_nc
-                self.fig.savefig(plots_save_folder + '/' + error_name + '.png', dpi=100)
-
-            for k in range(len(error_names_inverse)):
-                error_name = error_names_inverse[k]
-                error_history = error_histories_inverse[k]
-                print( error_name)
-                print( error_history.shape)
-                self.ax.cla()
-                self.ax.plot(error_history, 'b-')
-                self.fig.savefig(plots_save_folder + '/' + error_name + '.png', dpi=100)
-
-    def visualize(self, rays, robot_brain, topdown_info, plots_save_folder, current_goal_position_angle, plan_position_angle_list):
+    def visualize(self, rays, topdown_info, plots_save_folder, current_goal_position_angle):
         if self.image_display_frames is not None:
             if self.frames % self.image_display_frames == 0:
-                self._display_graphic_map(rays, robot_brain, topdown_info, current_goal_position_angle, plan_position_angle_list)
+                self._display_graphic_map(rays, topdown_info, current_goal_position_angle)
 
-        if self.plot_brain_error_frames is not None and self.frames % self.plot_brain_error_frames == 0:
-            self._plot_brain_errors(robot_brain, plots_save_folder)
+        # if self.plot_brain_error_frames is not None and self.frames % self.plot_brain_error_frames == 0:
+        #     self._plot_brain_errors(robot_brain, plots_save_folder)
 
         self._display_fps()
 

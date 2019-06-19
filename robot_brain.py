@@ -59,7 +59,7 @@ class RobotBrain(object):
 
     # ************ process ************
 
-    def process_input(self, rays, last_motor_command, models_save_folder, debug_topdown_info):
+    def process_input_get_motor(self, rays, last_motor_command, models_save_folder, debug_topdown_info):
 
         current_visual_input = self._process_sensors(rays=rays)
         # previous_motor_command was initiated at T-1, applied [T-1, T],
@@ -84,77 +84,14 @@ class RobotBrain(object):
             self.motor_out = None
 
         self.t += 1
-
-    def process_new_goal_states(self, goal_states, visualizer, rays, topdown_info, current_goal_position_angle):
-        self.goal_states = goal_states
-        starting_state = self.states_history.get_state(state_index=0, delay=0)
-
-        if starting_state is not None:
-            print( 'planning...')
-
-            plan_position_angle_list = self.predictor_ensemble.plan_and_get_debug_position_angle_list(goal_state=goal_states,
-                                                                                                      starting_state=starting_state,
-                                                                                                      visualizer=visualizer,
-                                                                                                      rays=rays,
-                                                                                                      topdown_info=topdown_info,
-                                                                                                      current_goal_position_angle=current_goal_position_angle)
-
-            print( 'finished planning. showing plan for 1 seconds.')
-
-            # change this to public function. pass in plan_position_angle_list as computed here, and display here as planning converges:
-
-            # later, next motor command will be computed here or in process_input based on proximal states in the plan
-        else:
-            print( 'starting state is None. skipping planning.')
-
-    def get_plan_position_angle_list(self, rays, goal_states):
-        '''
-        compute plan here
-
-        procedure:
-        for each predictor, starting from farthest in time:
-            current input, farthest prediction -> get nearer prediction
-            get px, py, theta for nearer prediction
-            set nearer prediction as (farthest prediction) for next iteration
-
-        :param rays: current visual input
-        :param goal_states: [goal visual input, goal autoencoder level 0, level 1, ...]
-        :return: list: [[px, py, theta], [px, py, theta], ...]
-        '''
-
-        plan_position_angle = False
-        if not plan_position_angle:
-            return None
-
-        if goal_states is None:
-            return None
-
-        states_history = self.states_history
-        current_visual_input = self._process_sensors(rays=rays)
-
-        predictor_2_1 = self.predictors_list[0]
-        predictor_4_2 = self.predictors_list[1]
-        predictor_8_4 = self.predictors_list[2]
-        predictor_16_8 = self.predictors_list[3]
-
-        new_goal, dist, ind, input_td_info_8, context_td_info_8, output_td_info_8 = predictor_16_8.predict_and_get_debug_td_info(input_state=states_history.get_state(state_index=0, delay=0),
-                                                                                                                                 context_state=goal_states[0])
-
-        return [list(input_td_info_8), list(context_td_info_8), list(output_td_info_8)]
-
-        #new_goal, dist, ind, output_td_info_4 = predictor_16_8.predict_and_get_debug_td_info(input_state=states_history.get_state(state_index=0, delay=0),
-        #                                                                                     context_state=new_goal)
-
-        #new_goal, dist, ind, output_td_info_2 = predictor_16_8.predict_and_get_debug_td_info(input_state=states_history.get_state(state_index=0, delay=0),
-        #                                                                                     context_state=new_goal)
-
-        #new_goal, dist, ind, output_td_info_1 = predictor_16_8.predict_and_get_debug_td_info(input_state=states_history.get_state(state_index=0, delay=0),
-        #                                                                                     context_state=new_goal)
-
-        #return [list(output_td_info_8), list(output_td_info_4), list(output_td_info_2), list(output_td_info_1)]
-
-    def get_motor_output(self):
         return self.motor_out
+
+    def process_new_goal_states(self, goal_states):
+        '''
+        do any planning if needed
+        :return:
+        '''
+        self.goal_states = goal_states
 
     def _process_sensors(self, rays):
         ray_radians = rays['ray_radians']
@@ -173,49 +110,6 @@ class RobotBrain(object):
 
     def _process_debug_topdown_info_history(self, newest_topdown_info, debug_topdown_info_history):
         debug_topdown_info_history.process_new_topdown_info(newest_topdown_info)
-
-    # ************ functions for other interfaces to retrieve information ************
-    # TODO undefined now
-    def get_error_names_histories(self):
-
-        error_names_autoenc = []
-        error_histories_autoenc = []
-        for net_index in range(len(self.autoencoders_list)):
-            error_names_autoenc.append('autoencoder_' + str(net_index))
-            error_histories_autoenc.append(self.autoencoders_list[net_index].get_mean_error_history())
-
-        error_names_predictor = []
-        error_histories_predictor = []
-        error_names_inverse = []
-        error_histories_inverse = []
-
-        for net_index in range(len(self.predictors_list)):
-            error_names_predictor.append('predictor_' + str(net_index))
-            error_histories_predictor.append(self.predictors_list[net_index].get_mean_error_history())
-        #error_names_no_context_predictor = []
-        #for net_index in range(len(self.predictor_networks)):
-        #    error_names_no_context_predictor.append('no_context_predictor_' + str(net_index))
-        #error_histories_no_context_predictor = self.averaged_no_context_predictor_error_histories[:, self.error_histories_average_steps + 1:self.no_context_predictor_error_history_step]
-
-        for net_index in range(len(self.inverse_list)):
-            error_names_inverse.append('inverse_' + str(net_index))
-            error_histories_inverse.append(self.inverse_list[net_index].get_mean_error_history())
-
-        error_names_no_context_predictor = None
-        error_histories_no_context_predictor = None
-
-        return error_names_autoenc, error_histories_autoenc, \
-               error_names_predictor, error_histories_predictor, \
-               error_names_inverse, error_histories_inverse, \
-               error_names_no_context_predictor, error_histories_no_context_predictor
-
-    # TODO undefined now
-    def get_autoenc_images(self):
-        return self.autoencoder_images
-
-    # TODO undefined now
-    def get_predictor_images(self):
-        return self.ctx_predictor_debug_images
 
     def save_states_history(self, plots_save_folder, state_indices_list):
         print( 'saving states history...')
