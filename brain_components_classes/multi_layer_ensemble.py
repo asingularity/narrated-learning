@@ -54,6 +54,11 @@ class MultiLayerEnsemble(object):
 
             self.last_i_c_dists.append(np.zeros(params['entries_per_layer'][layer_index], np.float32))
 
+        # stats
+        self.stat_row_replaces = np.zeros(self.n_layers, np.int)
+        self.stat_disp_last_time = time.time()
+        self.stat_disp_interval = 10
+
     def step(self, input_state, input_x_y_theta, learn):
         '''
 
@@ -64,6 +69,7 @@ class MultiLayerEnsemble(object):
         '''
 
         scaled_i_c_dists = None
+        invalidate_stats = np.zeros((self.n_layers, 2))
 
         for layer_index in range(self.n_layers):
 
@@ -79,12 +85,49 @@ class MultiLayerEnsemble(object):
             else:
                 layer_context_state = self.last_i_c_dists[layer_index + 1]
 
-            scaled_i_c_dists = self.tables[layer_index].step(input_state=layer_input_state,
-                                                             context_state=layer_context_state,
-                                                             input_x_y_theta=layer_input_x_y_theta,
-                                                             learn=learn)
+            # ODO need to add in: invalidate other layers' indices on replace (more difficult)
+            # ODO need to add: refresh if needed (easy)
+            # TODO also need to ignore invalid entries in lookups without biasing based on number of invalid
+            # ODO also refresh valid_table wherever a row is replaced
+            # ODO question- refreshing a row should count as replacement? will then trigger more invalidate?
+
+            #   need to visualize / debug how many are invalidated (what percent of table of each layer over time)
+
+            scaled_i_c_dists, replaced_row_index = self.tables[layer_index].step(input_state=layer_input_state,
+                                                                                 context_state=layer_context_state,
+                                                                                 input_x_y_theta=layer_input_x_y_theta,
+                                                                                 learn=learn,
+                                                                                 debug_print=layer_index==1
+                                                                                 )
+
+            if replaced_row_index is not None:
+
+                # invalidate this index for layer below in context
+                if layer_index > 0:
+                    # invalidate whole "column" of table
+                    self.tables[layer_index - 1].invalidate_index_context(column_index=replaced_row_index)
+
+                # invalidate this index for layer above in input
+                if layer_index < self.n_layers - 1:
+                    # invalidate whole "column" of table
+                    self.tables[layer_index + 1].invalidate_index_input(column_index=replaced_row_index)
+
+                self.stat_row_replaces[layer_index] += 1
 
             self.last_i_c_dists[layer_index] = scaled_i_c_dists.copy()
+
+            prop_table_valid, prop_rows_refreshed = self.tables[layer_index].get_invalidate_stats()
+            invalidate_stats[layer_index, 0] = prop_table_valid
+            invalidate_stats[layer_index, 1] = prop_rows_refreshed
+
+        if time.time() - self.stat_disp_last_time > self.stat_disp_interval:
+            print('row_replaces:')
+            print(self.stat_row_replaces)
+            print('table_valid, rows_refreshed:')
+            print(invalidate_stats)
+
+            self.stat_row_replaces = np.zeros(self.n_layers, np.int)
+            self.stat_disp_last_time = time.time()
 
     def get_table_ims(self):
         im_list = []
@@ -116,7 +159,7 @@ def test_run_multi_layer_ensemble():
 
     # show image
     last_imshow_time = time.time()
-    imshow_every_k_seconds = 2.0
+    imshow_every_k_seconds = 1.0
 
     for t in range(max_history_length):
 

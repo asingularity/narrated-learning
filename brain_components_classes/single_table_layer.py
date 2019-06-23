@@ -48,6 +48,9 @@ class SingleTableLayer(object):
                                     context_dim=self.context_dim,
                                     include_layers=self.include_layers)
 
+        self.valid_table = np.ones((self.num_entries, self.input_dim + self.output_dim + self.context_dim), np.int)
+        self.row_last_replaced_by_refresh = np.zeros(self.num_entries, np.int)
+
         self.input_history = StatesLimitedHistory(params={'max_delay': self.predict_time,
                                                           'states_dim_list': [self.input_dim]})
 
@@ -70,7 +73,7 @@ class SingleTableLayer(object):
 
         return _scale_dists(dists=dists)
 
-    def step(self, input_state, context_state, input_x_y_theta, learn):
+    def step(self, input_state, context_state, input_x_y_theta, learn, debug_print=False):
 
         assert input_state.shape[0] == self.input_dim
         if self.context_dim == 0:
@@ -83,6 +86,8 @@ class SingleTableLayer(object):
                                       query_context=context_state)
 
         ind = np.argmin(dists)
+        if debug_print:
+            print('min dist ind IC:', ind)
         min_d, _, _ = self.cuda_table.get_min_dist()  # TODO base on input + context
         max_d, _, _ = self.cuda_table.get_max_dist()  # TODO base on input + context
 
@@ -100,21 +105,91 @@ class SingleTableLayer(object):
         assert sum(train_output - input_state) == 0, 'state mismatch! ' + str(train_output) + ', ' + str(input_state)
 
         if learn:
-            self._learn(input_state=train_input,
-                        output_state=train_output,
-                        context_state=train_context,
-                        input_x_y_theta=train_input_x_y_theta,
-                        output_x_y_theta=train_output_x_y_theta)
+            rep_row_ind = self._learn(input_state=train_input,
+                                      output_state=train_output,
+                                      context_state=train_context,
+                                      input_x_y_theta=train_input_x_y_theta,
+                                      output_x_y_theta=train_output_x_y_theta,
+                                      debug_print=debug_print)
+        else:
+            rep_row_ind = None
 
-        return scaled_ic_dists
+        replaced_row_index = rep_row_ind
+        return scaled_ic_dists, replaced_row_index
 
-    def _learn(self, input_state, output_state, context_state, input_x_y_theta=None, output_x_y_theta=None):
+    def get_invalidate_stats(self):
+        prop_table_valid = np.sum(self.valid_table) * 1.0 / (self.valid_table.shape[0] * self.valid_table.shape[1])
+
+        prop_rows_refreshed = np.sum(self.row_last_replaced_by_refresh) * 1.0 / (self.row_last_replaced_by_refresh.shape[0])
+
+        return prop_table_valid, prop_rows_refreshed
+
+    def invalidate_index_context(self, column_index):
+        '''
+        invalidate this column_index for all rows of table in the context of the row
+        will need to store for whole table- refresh will fix rows individually
+
+        :param column_index:
+        :return:
+        '''
+
+        self.valid_table[:, self.input_dim + self.output_dim + column_index] = 0
+
+    def invalidate_index_input(self, column_index):
+        '''
+        invalidate this column_index for all rows of table in the input part of the row
+        will need to store for whole table- refresh will fix rows individually
+
+        :param column_index:
+        :return:
+        '''
+
+        self.valid_table[:, column_index] = 0
+
+    def _refresh_invalidated_indices(self, row_index, input_state, output_state, context_state, row_to_table_dists, debug_print=False):
+        '''
+
+        :param row_index:
+        :param input_state:
+        :param output_state:
+        :param context_state:
+        :return:
+        '''
+
+        #print('new_min_ind for learning: ', row_index)
+        return False
+
+        dists = row_to_table_dists
+
+        did_replace = False
+        if np.sum(self.valid_table[row_index, :]) < self.input_dim + self.output_dim + self.context_dim:
+            dists[row_index] = np.inf
+            self.cuda_table.set_matrix_row(row_index=row_index,
+                                           row_input=input_state,
+                                           row_output=output_state,
+                                           row_context=context_state,
+                                           row_to_table_dists=dists)
+
+            if debug_print:
+                print('refreshing row: ', row_index)
+            self.valid_table[row_index, :] = 1
+            self.row_last_replaced_by_refresh[row_index] = 1
+            did_replace = True
+        else:
+            if debug_print:
+                print('NOT refreshing row: ', row_index)
+
+        return did_replace
+
+    def _learn(self, input_state, output_state, context_state, input_x_y_theta=None, output_x_y_theta=None, debug_print=False):
         assert input_state.shape[0] == self.input_dim
         assert output_state.shape[0] == self.output_dim
         if self.context_dim == 0:
             assert context_state is None
         else:
             assert context_state.shape[0] == self.context_dim
+
+        rep_row_ind = None
 
         # (1) get distance of new row to all current rows in table
 
@@ -124,8 +199,13 @@ class SingleTableLayer(object):
 
         sorted_dist_indices = np.argsort(dists)
         new_min_ind = sorted_dist_indices[0]
+
+        if debug_print:
+            print('min dist ind IOC:', new_min_ind)
+
         new_min_dist = dists[new_min_ind]
         ind2 = sorted_dist_indices[1]
+        #print(new_min_ind)
 
         if self.init_row_num is None:
             self.init_row_num = 0
@@ -139,6 +219,9 @@ class SingleTableLayer(object):
                                            row_context=context_state,
                                            row_to_table_dists=dists,
                                            fast_init=True)
+            self.valid_table[self.init_row_num, :] = 1
+            self.row_last_replaced_by_refresh[self.init_row_num] = 0
+            rep_row_ind = self.init_row_num
 
             # This only really makes sense for the first layer
             if output_x_y_theta is not None:
@@ -151,28 +234,53 @@ class SingleTableLayer(object):
             if not self.cuda_table.post_init_done:
                 self.cuda_table.post_init()
 
-            table_min_dist, table_min_dist_r, table_min_dist_c = self.cuda_table.get_min_dist()
+            did_replace = self._refresh_invalidated_indices(row_index=new_min_ind,
+                                                            input_state=input_state,
+                                                            output_state=output_state,
+                                                            context_state=context_state,
+                                                            row_to_table_dists=dists,
+                                                            debug_print=debug_print)
 
-            if new_min_dist > table_min_dist:
-                # minimum distance of new row to current rows is greater than current minimum row-row distance
-                # so: replace one row of current minimum, with new row
+            # TODO set or not set rep_row_ind based on did_replace?
 
-                # get one of the row indices of current minimum dist pair
-                r_r_ind = table_min_dist_r  # could be table_min_dist_c
+            if not did_replace:
+                table_min_dist, table_min_dist_r, table_min_dist_c = self.cuda_table.get_min_dist()
 
-                dists[r_r_ind] = np.inf
+                skip_min_dist_condition = True
 
-                # replace the current min dist row, with the new row
-                self.cuda_table.set_matrix_row(row_index=r_r_ind,
-                                               row_input=input_state,
-                                               row_output=output_state,
-                                               row_context=context_state,
-                                               row_to_table_dists=dists)
+                if new_min_dist > table_min_dist or skip_min_dist_condition:
+                    # minimum distance of new row to current rows is greater than current minimum row-row distance
+                    # so: replace one row of current minimum, with new row
 
-                if output_x_y_theta is not None:
-                    self.entries_x_y_theta_output[r_r_ind, :] = output_x_y_theta[:]
-                if input_x_y_theta is not None:
-                    self.entries_x_y_theta_input[r_r_ind, :] = input_x_y_theta[:]
+                    # get one of the row indices of current minimum dist pair
+                    r_r_ind = table_min_dist_r  # could be table_min_dist_c
+
+                    if debug_print:
+                        print('YES: replacing row: ', (table_min_dist, table_min_dist_r, table_min_dist_c), np.min(dists))
+                        # if skip_min_dist_conditio is True: I+O min index is always I+O+C min index, which is one of rows being replaced
+
+                    dists[r_r_ind] = np.inf
+
+                    # replace the current min dist row, with the new row
+                    self.cuda_table.set_matrix_row(row_index=r_r_ind,
+                                                   row_input=input_state,
+                                                   row_output=output_state,
+                                                   row_context=context_state,
+                                                   row_to_table_dists=dists)
+                    self.valid_table[r_r_ind, :] = 1
+                    self.row_last_replaced_by_refresh[r_r_ind] = 0
+                    rep_row_ind = r_r_ind
+
+                    if output_x_y_theta is not None:
+                        self.entries_x_y_theta_output[r_r_ind, :] = output_x_y_theta[:]
+                    if input_x_y_theta is not None:
+                        self.entries_x_y_theta_input[r_r_ind, :] = input_x_y_theta[:]
+                else:
+                    if debug_print:
+                        print('NOT: replacing row: ', (table_min_dist, table_min_dist_r, table_min_dist_c), np.min(dists))
+
+
+        return rep_row_ind
 
     def get_table_im(self, layer_index=0):
         cuda_table = self.cuda_table
@@ -212,7 +320,7 @@ class SingleTableLayer(object):
             # D = np.hstack((A, B, C))
             D = table
 
-            imscale = 0.2  # full table
+            imscale = 4.0  # full table
             # imscale = 5.0
             im = cv2.resize(D, dsize=(0,0), fx=imscale, fy=imscale, interpolation=cv2.INTER_NEAREST)
 
@@ -335,10 +443,10 @@ def test_run_single_table_layer():
         input_state = states_history[t, :]
         x_y_theta = td_info_history[t, :]
 
-        scaled_i_c_dists = table.step(input_state=input_state,
-                                      context_state=None,
-                                      input_x_y_theta=x_y_theta,
-                                      learn=True)
+        scaled_i_c_dists, _ = table.step(input_state=input_state,
+                                         context_state=None,
+                                         input_x_y_theta=x_y_theta,
+                                         learn=True)
 
         if time.time() > last_imshow_time + imshow_every_k_seconds:
             im = table.get_table_im()
