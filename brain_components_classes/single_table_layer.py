@@ -100,13 +100,15 @@ class SingleTableLayer(object):
         assert sum(train_output - input_state) == 0, 'state mismatch! ' + str(train_output) + ', ' + str(input_state)
 
         if learn:
-            self._learn(input_state=train_input,
-                        output_state=train_output,
-                        context_state=train_context,
-                        input_x_y_theta=train_input_x_y_theta,
-                        output_x_y_theta=train_output_x_y_theta)
+            row_replaced = self._learn(input_state=train_input,
+                                       output_state=train_output,
+                                       context_state=train_context,
+                                       input_x_y_theta=train_input_x_y_theta,
+                                       output_x_y_theta=train_output_x_y_theta)
+        else:
+            row_replaced = False
 
-        return scaled_ic_dists
+        return scaled_ic_dists, row_replaced
 
     def _learn(self, input_state, output_state, context_state, input_x_y_theta=None, output_x_y_theta=None):
         assert input_state.shape[0] == self.input_dim
@@ -115,6 +117,8 @@ class SingleTableLayer(object):
             assert context_state is None
         else:
             assert context_state.shape[0] == self.context_dim
+
+        row_replaced = False
 
         # (1) get distance of new row to all current rows in table
 
@@ -146,6 +150,7 @@ class SingleTableLayer(object):
             if input_x_y_theta is not None:
                 self.entries_x_y_theta_input[self.init_row_num, :] = input_x_y_theta[:]
 
+            row_replaced = True
             self.init_row_num += 1
         else:
             if not self.cuda_table.post_init_done:
@@ -173,6 +178,10 @@ class SingleTableLayer(object):
                     self.entries_x_y_theta_output[r_r_ind, :] = output_x_y_theta[:]
                 if input_x_y_theta is not None:
                     self.entries_x_y_theta_input[r_r_ind, :] = input_x_y_theta[:]
+
+                row_replaced = True
+
+        return row_replaced
 
     def get_table_im(self, layer_index=0):
         cuda_table = self.cuda_table
@@ -335,10 +344,10 @@ def test_run_single_table_layer():
         input_state = states_history[t, :]
         x_y_theta = td_info_history[t, :]
 
-        scaled_i_c_dists = table.step(input_state=input_state,
-                                      context_state=None,
-                                      input_x_y_theta=x_y_theta,
-                                      learn=True)
+        scaled_i_c_dists, _ = table.step(input_state=input_state,
+                                         context_state=None,
+                                         input_x_y_theta=x_y_theta,
+                                         learn=True)
 
         if time.time() > last_imshow_time + imshow_every_k_seconds:
             im = table.get_table_im()

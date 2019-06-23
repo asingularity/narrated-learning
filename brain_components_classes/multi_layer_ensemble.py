@@ -54,6 +54,11 @@ class MultiLayerEnsemble(object):
 
             self.last_i_c_dists.append(np.zeros(params['entries_per_layer'][layer_index], np.float32))
 
+        # stats
+        self.stat_row_replaces = np.zeros(self.n_layers, np.int)
+        self.stat_disp_last_time = time.time()
+        self.stat_disp_interval = 10
+
     def step(self, input_state, input_x_y_theta, learn):
         '''
 
@@ -79,12 +84,21 @@ class MultiLayerEnsemble(object):
             else:
                 layer_context_state = self.last_i_c_dists[layer_index + 1]
 
-            scaled_i_c_dists = self.tables[layer_index].step(input_state=layer_input_state,
-                                                             context_state=layer_context_state,
-                                                             input_x_y_theta=layer_input_x_y_theta,
-                                                             learn=learn)
+            scaled_i_c_dists, row_replaced = self.tables[layer_index].step(input_state=layer_input_state,
+                                                                           context_state=layer_context_state,
+                                                                           input_x_y_theta=layer_input_x_y_theta,
+                                                                           learn=learn)
+
+            if row_replaced:
+                self.stat_row_replaces[layer_index] += 1
 
             self.last_i_c_dists[layer_index] = scaled_i_c_dists.copy()
+
+        if time.time() - self.stat_disp_last_time > self.stat_disp_interval:
+            print('row_replaces:', self.stat_row_replaces)
+
+            self.stat_row_replaces = np.zeros(self.n_layers, np.int)
+            self.stat_disp_last_time = time.time()
 
     def get_table_ims(self):
         im_list = []
