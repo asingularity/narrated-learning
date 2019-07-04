@@ -221,7 +221,7 @@ class SingleTableLayer(object):
             # D = np.hstack((A, B, C))
             D = table
 
-            imscale = 0.2  # full table
+            imscale = 2.0  # 0.2: full table
             # imscale = 5.0
             im = cv2.resize(D, dsize=(0,0), fx=imscale, fy=imscale, interpolation=cv2.INTER_NEAREST)
 
