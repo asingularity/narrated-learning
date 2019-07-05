@@ -292,6 +292,9 @@ class SingleMultiContextLayer(object):
                 min_row_C = r_r_ind
                 row_replaced = True
 
+                # zero out its connections to IO
+                self.IO_to_C_W[r_r_ind, :] = 0
+
         # *****
         # (2) learn IO to Context association table: IO_to_C_W
         # *****
@@ -355,10 +358,14 @@ class SingleMultiContextLayer(object):
 
         return im
 
-    def get_IO_im(self):
-        return self._get_table_im(cuda_table=self.cuda_table_IO, layer_index=0)
+    def get_IO_im(self, layer_index=0):
+        return self._get_table_im(cuda_table=self.cuda_table_IO, layer_index=layer_index)
 
     def get_C_im(self, force_layer_0=False):
+
+        if self.cuda_table_C is None:
+            return None
+
         layer_index = 1
         if force_layer_0:
             layer_index = 0
@@ -366,6 +373,9 @@ class SingleMultiContextLayer(object):
         return self._get_table_im(cuda_table=self.cuda_table_C, layer_index=layer_index)
 
     def get_W_im(self):
+        if self.IO_to_C_W is None:
+            return None
+
         return self.IO_to_C_W.astype(np.uint8) * 255
 
     def get_prediction_im(self, current_x_y_theta, scaled_i_c_dists, env_size):
@@ -505,7 +515,7 @@ def test_run_single_multi_context_layer():
                                                                learn_C=t > num_IO_entries)
 
         if time.time() > last_imshow_time + imshow_every_k_seconds:
-            im = table.get_IO_im()
+            im = table.get_IO_im(layer_index=0)
             if im is not None:
                 cv2.imshow('IO_im', im)
 
