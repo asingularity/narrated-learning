@@ -13,6 +13,9 @@ class StatesHistory(object):
             self.state_arrays_list.append(np.zeros((self.max_history_length, self.states_dim_list[k])).astype(np.float32))
         self.t = 0
 
+    def store_new_states(self, newest_states_list):
+        self.process_new_states(newest_states_list=newest_states_list)
+
     def process_new_states(self, newest_states_list):
 
         assert len(newest_states_list) == len(self.state_arrays_list), 'Error: invalid states length!'
@@ -53,6 +56,9 @@ class StatesLimitedHistory(object):
                 self.state_arrays_list.append(np.zeros((self.max_delay, self.states_dim_list[k])).astype(np.float32))
                 self.extra_data_list.append([None] * self.max_delay)
         self.t_mod = 0
+
+    def store_new_states(self, newest_states_list, extra_data_list):
+        self.process_new_states(newest_states_list=newest_states_list, extra_data_list=extra_data_list)
 
     def process_new_states(self, newest_states_list, extra_data_list):
         if self.active:
