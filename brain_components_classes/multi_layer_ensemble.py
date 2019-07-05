@@ -17,8 +17,6 @@ class MultiLayerEnsemble(object):
 
         :param params:
             {
-                'predictor_ensemble_load_from_file': False,
-                'predictor_ensemble_filename': None,
                 'input_dim': dim,
                 'IO_entries_per_layer': [200, 200],
                 'C_entries_per_layer': [800, 800],
@@ -207,8 +205,6 @@ def test_run_multi_layer_ensemble():
     layer_C_learn_times = [IO_entries_per_layer[0] * learn_time_factor, IO_entries_per_layer[1] * learn_time_factor, 0]
 
     ensemble = MultiLayerEnsemble(params={
-        'predictor_ensemble_load_from_file': False,
-        'predictor_ensemble_filename': None,
         'input_dim': dim,
         'IO_entries_per_layer': IO_entries_per_layer,
         'C_entries_per_layer': C_entries_per_layer,
