@@ -15,10 +15,14 @@ class RobotBrain(object):
         self.debug_topdown_info_history = self._init_debug_topdown_info_history(params)
         self.motor_history = self._init_motor_history(params)
 
+        self.ensemble_save_every_k_secs = params['predictor_ensemble_save_every_k_secs']
+        self.last_ensemble_save_time = time.time()
+
         if params['predictor_ensemble_load_from_file']:
             print( 'loading predictor ensemble...')
-            f = open(params['predictor_ensemble_filename'], 'r')
+            f = open(params['predictor_ensemble_filename'], 'rb')
             self.predictor_ensemble = pickle.load(f)
+            self.predictor_ensemble.init_after_load()
             f.close()
             print( 'done loading predictor ensemble.')
         else:
@@ -115,6 +119,15 @@ class RobotBrain(object):
         else:
             # this informs robot model to apply random movement
             self.motor_out = None
+
+        # save if needed
+        if self.ensemble_save_every_k_secs is not None:
+            if time.time() - self.last_ensemble_save_time > self.ensemble_save_every_k_secs:
+                print('saving ensemble...')
+                self.predictor_ensemble.save_to_pkl(file_path=models_save_folder,
+                                                    file_name='ensemble.pkl')
+                print('done saving ensemble.')
+                self.last_ensemble_save_time = time.time()
 
         self.t += 1
         return self.motor_out

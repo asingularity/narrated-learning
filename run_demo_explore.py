@@ -57,8 +57,8 @@ def get_brain_params():
 
         # ************ load from file ************
         'predictor_ensemble_load_from_file': False,
-        'predictor_ensemble_filename': None,
-        'predictor_ensemble_save_every_k_secs': 10 * 60,
+        'predictor_ensemble_filename': '/srv/projects/NL-sim/2019-07-06T22:14:59.538523/ensemble.pkl',
+        'predictor_ensemble_save_every_k_secs': 10 * 60,  # None: never save
 
         # ************ I-O-C predictor ensemble ************
         'IO_entries_per_layer': [400, 200, 200],

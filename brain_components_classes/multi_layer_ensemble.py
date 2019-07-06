@@ -187,10 +187,19 @@ class MultiLayerEnsemble(object):
         return IO_im_list, C_im_list, W_im_list
 
     def save_to_pkl(self, file_path, file_name):
+
+        for table in self.tables:
+            table.prepare_for_save()
+
         assert '.pkl' in file_name, 'invalid pickle filename: ' + file_name
-        f = open(file_path + '/' + file_name, 'w')
+        f = open(file_path + '/' + file_name, 'wb')
         pickle.dump(self, f)
         f.close()
+
+    def init_after_load(self):
+        for table in self.tables:
+            table.init_after_load()
+        pass
 
 def test_run_multi_layer_ensemble():
     sim_load_name = '48DIMx1M_states_positions_saved_2018-01-31T13:09:15.676826'

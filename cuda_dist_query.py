@@ -126,6 +126,41 @@ class CudaTable(object):
             self.X_i = np.zeros((1, table_i_only.shape[1])).astype(np.float32)
             self.term_2_i = np.sum(table_i_only ** 2, axis=1)
 
+        self.pickle_save_temp = {}
+
+    def prepare_for_save(self):
+        # here prepare each layer's cuda table for save: offload matrices from gpu to local!
+
+        self.pickle_save_temp = {}
+
+        if self.include_ioc:
+            self.pickle_save_temp['ioc'] = self.table_gpu.get()
+
+        if self.include_ic:
+            self.pickle_save_temp['ic'] = self.table_ic_gpu.get()
+
+        if self.include_io:
+            self.pickle_save_temp['io'] = self.table_io_gpu.get()
+
+        if self.include_i:
+            self.pickle_save_temp['i'] = self.table_i_gpu.get()
+
+    def init_after_load(self):
+        # load tables onto GPU!
+        linalg.init()
+
+        if self.include_ioc:
+            self.table_gpu = gpuarray.to_gpu(self.pickle_save_temp['ioc'])
+
+        if self.include_ic:
+            self.table_ic_gpu = gpuarray.to_gpu(self.pickle_save_temp['ic'])
+
+        if self.include_io:
+            self.table_io_gpu = gpuarray.to_gpu(self.pickle_save_temp['io'])
+
+        if self.include_i:
+            self.table_i_gpu = gpuarray.to_gpu(self.pickle_save_temp['i'])
+
     def get_num_rows(self):
         return self.num_entries
 

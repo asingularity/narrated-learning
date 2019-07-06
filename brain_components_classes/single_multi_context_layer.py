@@ -82,6 +82,16 @@ class SingleMultiContextLayer(object):
         self.init_IO_row_num = None
         self.init_C_row_num = None
 
+    def prepare_for_save(self):
+        self.cuda_table_IO.prepare_for_save()
+        if self.cuda_table_C is not None:
+            self.cuda_table_C.prepare_for_save()
+
+    def init_after_load(self):
+        self.cuda_table_IO.init_after_load()
+        if self.cuda_table_C is not None:
+            self.cuda_table_C.init_after_load()
+
     def _scale_dists(self, dists):
         '''
             such that linear for:
