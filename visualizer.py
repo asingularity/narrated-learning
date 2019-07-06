@@ -22,9 +22,9 @@ class Visualizer(object):
         self.plot_brain_error_frames =params['plot_brain_error_frames']
         self.no_wall_ray_color = params['no_wall_ray_color']
         self.waitKey_time_slow = params['waitKey_time_slow']
-        self.image_display_frames_slow = params['image_display_frames_slow']
+        self.image_display_secs_slow = params['image_display_secs_slow']
         self.waitKey_time_fast = params['waitKey_time_fast']
-        self.image_display_frames_fast = params['image_display_frames_fast']
+        self.image_display_secs_fast = params['image_display_secs_fast']
         self.auto_switch_to_slow_disp_time = params['auto_switch_to_slow_disp_time']
 
         self.show_table_ims = params['show_table_ims']
@@ -32,11 +32,13 @@ class Visualizer(object):
         self.linear_speed_from_key = 0.0
         self.angular_speed_from_key = 0.0
         self.toggle_viewer_slow = False
-        self.image_display_frames = self.image_display_frames_fast
+        self.image_display_secs = self.image_display_secs_fast
         self.waitKey_time = self.waitKey_time_fast
 
         self.fig = plt.figure(figsize=(10, 10))
         self.ax = self.fig.add_subplot(1, 1, 1)
+
+        self.last_image_display_time = time.time()
 
     def get_linear_angular_speed(self):
         return self.linear_speed_from_key, self.angular_speed_from_key
@@ -99,6 +101,7 @@ class Visualizer(object):
         return resized_image
 
     def _display_graphic_map(self, rays, topdown_info, current_goal_position_angle):
+
         ray_colors = rays['ray_colors'].reshape((len(rays['ray_colors']) / 3, 3))
         resized_image = self._get_topdown_map(rays, topdown_info, current_goal_position_angle)
 
@@ -111,36 +114,6 @@ class Visualizer(object):
         resized_camera = cv2.resize(src=camera_image, dsize=(0, 0), fx=self.scale_camera_factor, fy=self.scale_camera_factor, interpolation=cv2.INTER_NEAREST)
 
         cv2.imshow('camera', resized_camera)
-        k = cv2.waitKey(self.waitKey_time)
-
-        FWD = 119
-        BACK = 115
-        LEFT = 97
-        RIGHT = 100
-        ENTER = 13
-
-        if k == -1:
-            self.linear_speed_from_key = 0.0
-            self.angular_speed_from_key = 0.0
-        else:
-            print( 'KEY PRESSED: ' + str(k))
-            if k == ENTER:
-                self.toggle_viewer_slow = not self.toggle_viewer_slow
-                if self.toggle_viewer_slow:
-                    self.image_display_frames = self.image_display_frames_slow
-                    self.waitKey_time = self.waitKey_time_slow
-                else:
-                    self.image_display_frames = self.image_display_frames_fast
-                    self.waitKey_time = self.waitKey_time_fast
-
-            if k == FWD:
-                self.linear_speed_from_key = 0.25
-            if k == BACK:
-                self.linear_speed_from_key = -0.25
-            if k == LEFT:
-                self.angular_speed_from_key = -0.2
-            if k == RIGHT:
-                self.angular_speed_from_key = 0.2
 
     def _display_table_ims(self, IO_im_list, C_im_list, W_im_list):
 
@@ -177,23 +150,63 @@ class Visualizer(object):
                 # print(k, None)
             k += 1
 
-    def visualize(self, rays, table_ims, topdown_info, plots_save_folder, current_goal_position_angle):
+    def _toggle_with_key_press(self, last_key):
+        k = last_key
+
+        FWD = 119
+        BACK = 115
+        LEFT = 97
+        RIGHT = 100
+        ENTER = 13
+
+        if k == -1:
+            self.linear_speed_from_key = 0.0
+            self.angular_speed_from_key = 0.0
+        else:
+            print( 'KEY PRESSED: ' + str(k))
+            if k == ENTER:
+                self.toggle_viewer_slow = not self.toggle_viewer_slow
+                if self.toggle_viewer_slow:
+                    self.image_display_secs = self.image_display_secs_slow
+                    self.waitKey_time = self.waitKey_time_slow
+                else:
+                    self.image_display_secs = self.image_display_secs_fast
+                    self.waitKey_time = self.waitKey_time_fast
+
+            if k == FWD:
+                self.linear_speed_from_key = 0.25
+            if k == BACK:
+                self.linear_speed_from_key = -0.25
+            if k == LEFT:
+                self.angular_speed_from_key = -0.2
+            if k == RIGHT:
+                self.angular_speed_from_key = 0.2
+
+    def visualize(self, rays, topdown_info, plots_save_folder, current_goal_position_angle, robot_brain):
         self._display_fps()
 
-        if self.image_display_frames is not None:
-            if self.frames % self.image_display_frames == 0:
+        if self.image_display_secs is not None:
+
+            display_now = (time.time() - self.last_image_display_time > self.image_display_secs)
+
+            if display_now:
                 self._display_graphic_map(rays, topdown_info, current_goal_position_angle)
 
                 if self.show_table_ims:
+                    table_ims = robot_brain.get_table_ims()
+
                     IO_im_list, C_im_list, W_im_list = table_ims
                     self._display_table_ims(IO_im_list=IO_im_list,
                                             C_im_list=C_im_list,
                                             W_im_list=W_im_list)
 
+                self.last_image_display_time = time.time()
+
         # if self.plot_brain_error_frames is not None and self.frames % self.plot_brain_error_frames == 0:
         #     self._plot_brain_errors(robot_brain, plots_save_folder)
 
-        cv2.waitKey(1)
+        last_key = cv2.waitKey(1)
+        self._toggle_with_key_press(last_key=last_key)
 
         self.frames += 1
         if self.auto_switch_to_slow_disp_time is not None:

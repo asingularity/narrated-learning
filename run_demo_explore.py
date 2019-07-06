@@ -58,6 +58,7 @@ def get_brain_params():
         # ************ load from file ************
         'predictor_ensemble_load_from_file': False,
         'predictor_ensemble_filename': None,
+        'predictor_ensemble_save_every_k_secs': 10 * 60,
 
         # ************ I-O-C predictor ensemble ************
         'IO_entries_per_layer': [400, 200, 200],
@@ -90,15 +91,15 @@ def get_visualizer_params():
     params = {
         'fps_display_interval': 3,
         'plot_brain_error_frames': None,
-        'image_display_frames_fast': 1000,  # 1  # 1000
+        'image_display_secs_fast': 4,  # 1  # 1000
         'waitKey_time_fast': 1,  # 1, 100, 5000
-        'image_display_frames_slow': 1,  # 1  # 1000
+        'image_display_secs_slow': 0,  # 0: every frame
         'waitKey_time_slow': 10,  # 1, 100, 5000
         'scale_topdown_factor': 20,
         'scale_camera_factor': 20,
         'no_wall_ray_color': (0.1, 0.1, 0.1),
         'auto_switch_to_slow_disp_time': None,
-        'show_table_ims': False
+        'show_table_ims': True
     }
     return params
 
@@ -185,17 +186,19 @@ def run_demo(demo_components):
         #   robot_environment state updated with motor cmd CMD_T: STATE_T -> STATE_T+1
         t_process_0 = time.time()
         visualizer.visualize(rays=robot_sensors.get_rays(),
-                             table_ims=robot_brain.get_table_ims(),  #  TODO this is slow on every frame! Refactor!
                              topdown_info=robot_environment.get_topdown_info(),
                              plots_save_folder=sim_folder_manager.get_plots_save_folder(),
-                             current_goal_position_angle=task_manager.get_current_goal_position_angle())
+                             current_goal_position_angle=task_manager.get_current_goal_position_angle(),
+                             robot_brain=robot_brain)  # So it can call .get_table_ims() only sometimes
         t_process += (time.time() - t_process_0)
 
         t_total += (time.time() - t_total_0)
 
-        if time.time() - last_disp_t > 5:
+        if time.time() - last_disp_t > 10:
             last_disp_t = time.time()
             print('t_process / t_total: ', t_process / t_total)
+            t_process = 0
+            t_total = 0
 
     print ('Finished Simulation.')
 

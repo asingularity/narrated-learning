@@ -1,6 +1,7 @@
 import time
 import cv2
 import numpy as np
+import pickle
 from math import sin, cos
 from cuda_dist_query import CudaTable
 from utils.load_sim_history import load_states_history, load_td_info_history
@@ -185,6 +186,11 @@ class MultiLayerEnsemble(object):
 
         return IO_im_list, C_im_list, W_im_list
 
+    def save_to_pkl(self, file_path, file_name):
+        assert '.pkl' in file_name, 'invalid pickle filename: ' + file_name
+        f = open(file_path + '/' + file_name, 'w')
+        pickle.dump(self, f)
+        f.close()
 
 def test_run_multi_layer_ensemble():
     sim_load_name = '48DIMx1M_states_positions_saved_2018-01-31T13:09:15.676826'
