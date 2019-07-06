@@ -4,7 +4,7 @@ import cv2
 import numpy as np
 np.set_printoptions(suppress=True)
 
-from brain_components import StatesHistory, MotorHistory, DebugTopdownInfoHistory
+from brain_components import StatesHistory, MotorHistory, DebugTopdownInfoHistory, MultiLayerEnsemble
 
 
 class RobotBrain(object):
@@ -21,12 +21,42 @@ class RobotBrain(object):
             self.predictor_ensemble = pickle.load(f)
             f.close()
             print( 'done loading predictor ensemble.')
-
-            print( 'precomputing...')
-            self.predictor_ensemble.precompute()
-            print( 'done precomputing.')
         else:
-            self.predictor_ensemble = None
+
+            dim = params['input_dim']
+
+
+            IO_entries_per_layer = params['IO_entries_per_layer']
+            n_layers = len(IO_entries_per_layer)
+
+            C_entries_factor = params['C_entries_factor']
+            IO_learn_time_factor = params['IO_learn_time_factor']
+            C_learn_time_factor = params['C_learn_time_factor']
+
+            C_entries_per_layer = []
+            layer_IO_learn_times = []
+            layer_C_learn_times = []
+
+            for k in range(n_layers):
+                IO_entries = IO_entries_per_layer[k]
+                layer_IO_learn_times.append(IO_entries * IO_learn_time_factor)
+
+                if k < n_layers - 1:
+                    C_entries = IO_entries * C_entries_factor
+                    C_entries_per_layer.append(C_entries)
+                    layer_C_learn_times.append(C_entries * C_learn_time_factor)
+                else:
+                    C_entries_per_layer.append(0)
+                    layer_C_learn_times.append(0)
+
+            self.predictor_ensemble = MultiLayerEnsemble(params={
+                'input_dim': dim,
+                'IO_entries_per_layer': IO_entries_per_layer,
+                'C_entries_per_layer': C_entries_per_layer,
+                'predict_time_per_layer': [params['predict_time']] * n_layers,
+                'layer_IO_learn_times': layer_IO_learn_times,
+                'layer_C_learn_times': layer_C_learn_times,
+            })
 
     def _init_globals(self, params):
         self.t = 0
@@ -76,9 +106,12 @@ class RobotBrain(object):
         self._process_debug_topdown_info_history(newest_topdown_info=debug_topdown_info,
                                                  debug_topdown_info_history=self.debug_topdown_info_history)
 
+        self.predictor_ensemble.step(input_state=newest_states_list[0],
+                                     input_x_y_theta=self.debug_topdown_info_history.get_td_info(delay=0))
+
         if self.goal_states is not None and self.predictor_ensemble is not None:
-            # this may still be None for current (planning-only) testing
-            self.motor_out = None  # 0: straight line
+            # TODO this is where "task mode" is enabled
+            self.motor_out = None
         else:
             # this informs robot model to apply random movement
             self.motor_out = None

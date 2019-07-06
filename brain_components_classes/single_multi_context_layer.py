@@ -133,7 +133,7 @@ class SingleMultiContextLayer(object):
         train_output, train_output_x_y_theta = self.input_history.get_state(state_index=0, delay=0)
         train_context, _ = self.context_history.get_state(state_index=0, delay=self.predict_time)
 
-        assert sum(train_output - input_state) == 0, 'state mismatch! ' + str(train_output) + ', ' + str(input_state)
+        assert abs(sum(train_output - input_state)) < 1e-5, 'state mismatch! ' + str(train_output) + ', ' + str(input_state) + ', sum: ' + str(sum(train_output - input_state))
 
         if learn_IO:
             IO_row_replaced = self._learn_IO(input_state=train_input,

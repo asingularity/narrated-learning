@@ -55,12 +55,16 @@ def get_brain_params():
         'training_delay': 128,
         'input_dim': INPUT_DIM,
 
-        # ************ I-O-C predictor ensemble ************
-        # TO DO: add online training back in
+        # ************ load from file ************
         'predictor_ensemble_load_from_file': False,
         'predictor_ensemble_filename': None,
-        'entries_per_layer': [200, 200],
-        'predict_time_per_layer': [8, 8],
+
+        # ************ I-O-C predictor ensemble ************
+        'IO_entries_per_layer': [400, 200, 200],
+        'C_entries_factor': 4,  # C table entries = factor * IO table entries
+        'IO_learn_time_factor': 200,  # learn time = factor * IO table entries
+        'C_learn_time_factor': 200,  # learn time = factor * C table entries
+        'predict_time': 8,  # assume all layers same predict time for now
     }
     return params
 
