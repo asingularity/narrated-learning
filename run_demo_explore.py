@@ -97,7 +97,8 @@ def get_visualizer_params():
         'scale_topdown_factor': 20,
         'scale_camera_factor': 20,
         'no_wall_ray_color': (0.1, 0.1, 0.1),
-        'auto_switch_to_slow_disp_time': None
+        'auto_switch_to_slow_disp_time': None,
+        'show_table_ims': False
     }
     return params
 
@@ -129,7 +130,6 @@ def init_demo():
         'task_manager': TaskManager(get_task_manager_params())
     }
 
-
 def run_demo(demo_components):
     robot_environment = demo_components['robot_environment']
     robot_brain = demo_components['robot_brain']
@@ -145,7 +145,12 @@ def run_demo(demo_components):
     # TODO fix see through walls from left side of vertical wall viewing right
     # TODO is this fixed?
 
+    t_process = 0
+    t_total = 0
+    last_disp_t = time.time()
+
     while not task_manager.finished_sim():
+        t_total_0 = time.time()
 
         new_goal_chosen_this_step = task_manager.do_step(topdown_info=robot_environment.get_topdown_info(),
                                                          robot_environment=robot_environment,
@@ -178,11 +183,19 @@ def run_demo(demo_components):
 
         #   robot_model.last_motor_command updated to new random command CMD_T
         #   robot_environment state updated with motor cmd CMD_T: STATE_T -> STATE_T+1
-
+        t_process_0 = time.time()
         visualizer.visualize(rays=robot_sensors.get_rays(),
+                             table_ims=robot_brain.get_table_ims(),  #  TODO this is slow on every frame! Refactor!
                              topdown_info=robot_environment.get_topdown_info(),
                              plots_save_folder=sim_folder_manager.get_plots_save_folder(),
                              current_goal_position_angle=task_manager.get_current_goal_position_angle())
+        t_process += (time.time() - t_process_0)
+
+        t_total += (time.time() - t_total_0)
+
+        if time.time() - last_disp_t > 5:
+            last_disp_t = time.time()
+            print('t_process / t_total: ', t_process / t_total)
 
     print ('Finished Simulation.')
 
@@ -191,6 +204,8 @@ def run_demo(demo_components):
     task_manager.evaluate(plots_save_folder=sim_folder_manager.get_plots_save_folder())
     print ('Finished Evaluation.')
 
+    while True:
+        cv2.waitKey(1)
 
 def demo():
     demo_components = init_demo()

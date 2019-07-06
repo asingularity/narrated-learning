@@ -352,7 +352,9 @@ class SingleMultiContextLayer(object):
             # D = np.hstack((A, B, C))
             D = table
 
-            imscale = 2.0  # 0.2: full table
+            max_dim = max(D.shape[0], D.shape[1])
+
+            imscale = 500. / max_dim  # 0.2: full table, 2.0
             # imscale = 5.0
             im = cv2.resize(D, dsize=(0,0), fx=imscale, fy=imscale, interpolation=cv2.INTER_NEAREST)
 
@@ -376,7 +378,15 @@ class SingleMultiContextLayer(object):
         if self.IO_to_C_W is None:
             return None
 
-        return self.IO_to_C_W.astype(np.uint8) * 255
+        D = self.IO_to_C_W.astype(np.uint8) * 255
+
+        max_dim = max(D.shape[0], D.shape[1])
+
+        imscale = 500. / max_dim  # 0.2: full table, 2.0
+        # imscale = 5.0
+        im = cv2.resize(D, dsize=(0, 0), fx=imscale, fy=imscale, interpolation=cv2.INTER_NEAREST)
+
+        return im
 
     def get_prediction_im(self, current_x_y_theta, scaled_i_c_dists, env_size):
         '''

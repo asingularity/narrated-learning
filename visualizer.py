@@ -26,6 +26,9 @@ class Visualizer(object):
         self.waitKey_time_fast = params['waitKey_time_fast']
         self.image_display_frames_fast = params['image_display_frames_fast']
         self.auto_switch_to_slow_disp_time = params['auto_switch_to_slow_disp_time']
+
+        self.show_table_ims = params['show_table_ims']
+
         self.linear_speed_from_key = 0.0
         self.angular_speed_from_key = 0.0
         self.toggle_viewer_slow = False
@@ -139,15 +142,58 @@ class Visualizer(object):
             if k == RIGHT:
                 self.angular_speed_from_key = 0.2
 
-    def visualize(self, rays, topdown_info, plots_save_folder, current_goal_position_angle):
+    def _display_table_ims(self, IO_im_list, C_im_list, W_im_list):
+
+        k = 0
+        # print('*** IO ***')
+        for im in IO_im_list:
+            if im is not None:
+                cv2.imshow('IO_' + str(k), im)
+                # print(k, im.shape, im.dtype, np.amin(im), np.amax(im))
+            else:
+                pass
+                # print(k, None)
+            k += 1
+
+        k = 0
+        # print('*** C ***')
+        for im in C_im_list:
+            if im is not None:
+                cv2.imshow('C_' + str(k), im)
+                # print(k,im.shape, im.dtype, np.amin(im), np.amax(im))
+            else:
+                pass
+                # print(k, None)
+            k += 1
+
+        k = 0
+        # print('*** W ***')
+        for im in W_im_list:
+            if im is not None:
+                cv2.imshow('W_' + str(k), im)
+                # print(k,im.shape, im.dtype, np.amin(im), np.amax(im))
+            else:
+                pass
+                # print(k, None)
+            k += 1
+
+    def visualize(self, rays, table_ims, topdown_info, plots_save_folder, current_goal_position_angle):
+        self._display_fps()
+
         if self.image_display_frames is not None:
             if self.frames % self.image_display_frames == 0:
                 self._display_graphic_map(rays, topdown_info, current_goal_position_angle)
 
+                if self.show_table_ims:
+                    IO_im_list, C_im_list, W_im_list = table_ims
+                    self._display_table_ims(IO_im_list=IO_im_list,
+                                            C_im_list=C_im_list,
+                                            W_im_list=W_im_list)
+
         # if self.plot_brain_error_frames is not None and self.frames % self.plot_brain_error_frames == 0:
         #     self._plot_brain_errors(robot_brain, plots_save_folder)
 
-        self._display_fps()
+        cv2.waitKey(1)
 
         self.frames += 1
         if self.auto_switch_to_slow_disp_time is not None:

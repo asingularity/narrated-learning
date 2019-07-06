@@ -152,6 +152,9 @@ class RobotBrain(object):
         print( 'saving debug topdown info history...')
         self.debug_topdown_info_history.save_history(plots_save_folder)
 
+    def get_table_ims(self):
+        IO_im_list, C_im_list, W_im_list = self.predictor_ensemble.get_table_ims()
+        return IO_im_list, C_im_list, W_im_list
 
 
 
