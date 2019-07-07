@@ -121,6 +121,38 @@ class Visualizer(object):
 
         cv2.imshow('camera', resized_camera)
 
+    def _toggle_with_key_press(self, last_key):
+        k = last_key
+
+        FWD = 119
+        BACK = 115
+        LEFT = 97
+        RIGHT = 100
+        ENTER = 13
+
+        if k == -1:
+            self.linear_speed_from_key = 0.0
+            self.angular_speed_from_key = 0.0
+        else:
+            print( 'KEY PRESSED: ' + str(k))
+            if k == ENTER:
+                self.toggle_viewer_slow = not self.toggle_viewer_slow
+                if self.toggle_viewer_slow:
+                    self.image_display_secs = self.image_display_secs_slow
+                    self.waitKey_time = self.waitKey_time_slow
+                else:
+                    self.image_display_secs = self.image_display_secs_fast
+                    self.waitKey_time = self.waitKey_time_fast
+
+            if k == FWD:
+                self.linear_speed_from_key = 0.25
+            if k == BACK:
+                self.linear_speed_from_key = -0.25
+            if k == LEFT:
+                self.angular_speed_from_key = -0.2
+            if k == RIGHT:
+                self.angular_speed_from_key = 0.2
+
     def _display_table_ims(self, IO_im_list, C_im_list, W_im_list):
 
         k = 0
@@ -156,37 +188,67 @@ class Visualizer(object):
                 # print(k, None)
             k += 1
 
-    def _toggle_with_key_press(self, last_key):
-        k = last_key
+    def _concat_with_spacer(self, concat_im, new_im):
+        if new_im is not None:
 
-        FWD = 119
-        BACK = 115
-        LEFT = 97
-        RIGHT = 100
-        ENTER = 13
+            if new_im.dtype == np.uint8:
+                new_im = new_im.astype(np.float) * 1.0 / 255.0
 
-        if k == -1:
-            self.linear_speed_from_key = 0.0
-            self.angular_speed_from_key = 0.0
-        else:
-            print( 'KEY PRESSED: ' + str(k))
-            if k == ENTER:
-                self.toggle_viewer_slow = not self.toggle_viewer_slow
-                if self.toggle_viewer_slow:
-                    self.image_display_secs = self.image_display_secs_slow
-                    self.waitKey_time = self.waitKey_time_slow
-                else:
-                    self.image_display_secs = self.image_display_secs_fast
-                    self.waitKey_time = self.waitKey_time_fast
+            spacer = 0.2
+            # adjust height
+            # if concat_im taller: add spacer to new_im below it
+            if concat_im.shape[0] > new_im.shape[0]:
+                new_im = np.vstack((new_im, spacer * np.ones((concat_im.shape[0] - new_im.shape[0], new_im.shape[1]))))
 
-            if k == FWD:
-                self.linear_speed_from_key = 0.25
-            if k == BACK:
-                self.linear_speed_from_key = -0.25
-            if k == LEFT:
-                self.angular_speed_from_key = -0.2
-            if k == RIGHT:
-                self.angular_speed_from_key = 0.2
+            # if new_im taller: add spacer to concat_im below it
+            if new_im.shape[0] > concat_im.shape[0]:
+                concat_im = np.vstack((new_im, spacer * np.ones((new_im.shape[0] - concat_im.shape[0], concat_im.shape[1]))))
+
+            concat_im = np.hstack((concat_im, spacer * np.ones((concat_im.shape[0], 20)), new_im))
+
+        return concat_im
+
+    def _display_table_ims_tiled(self, IO_im_list, C_im_list, W_im_list):
+        '''
+
+        | IO | C | W | /// | IO | C | W | /// ...
+
+        :param IO_im_list:
+        :param C_im_list:
+        :param W_im_list:
+        :return:
+        '''
+
+        concat_im = None
+
+        cv2.imshow('IO_0', IO_im_list[0])
+
+        for k in range(len(IO_im_list)):
+            IO_im = IO_im_list[k]
+            if k == 0:
+                IO_im = None
+
+            C_im = C_im_list[k]
+            W_im = W_im_list[k]
+
+            if concat_im is None and IO_im is not None:
+                concat_im = IO_im.copy()
+                if concat_im.dtype == np.uint8:
+                    concat_im = concat_im.astype(np.float) * 1.0 / 255.0
+            else:
+                concat_im = self._concat_with_spacer(concat_im=concat_im, new_im=IO_im)
+
+            if concat_im is None:
+                concat_im = C_im.copy()
+                if concat_im.dtype == np.uint8:
+                    concat_im = concat_im.astype(np.float) * 1.0 / 255.0
+            else:
+                if C_im is not None:
+                    concat_im = self._concat_with_spacer(concat_im=concat_im, new_im=C_im)
+            if W_im is not None:
+                concat_im = self._concat_with_spacer(concat_im=concat_im, new_im=W_im)
+
+        cv2.imshow('all_tables', concat_im)
 
     def visualize(self, rays, topdown_info, plots_save_folder, current_goal_position_angle, robot_brain):
         self._display_fps()
@@ -203,17 +265,17 @@ class Visualizer(object):
                     table_ims = robot_brain.get_table_ims()
 
                     IO_im_list, C_im_list, W_im_list = table_ims
-                    self._display_table_ims(IO_im_list=IO_im_list,
-                                            C_im_list=C_im_list,
-                                            W_im_list=W_im_list)
+                    self._display_table_ims_tiled(IO_im_list=IO_im_list,
+                                                  C_im_list=C_im_list,
+                                                  W_im_list=W_im_list)
 
                 self.last_image_display_time = time.time()
 
+                last_key = cv2.waitKey(self.waitKey_time)
+                self._toggle_with_key_press(last_key=last_key)
+
         # if self.plot_brain_error_frames is not None and self.frames % self.plot_brain_error_frames == 0:
         #     self._plot_brain_errors(robot_brain, plots_save_folder)
-
-        last_key = cv2.waitKey(self.waitKey_time)
-        self._toggle_with_key_press(last_key=last_key)
 
         self.frames += 1
         if self.auto_switch_to_slow_disp_time is not None:

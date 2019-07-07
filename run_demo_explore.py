@@ -1,3 +1,4 @@
+import cv2
 import random
 import numpy as np
 random.seed(6)
@@ -58,7 +59,7 @@ def get_brain_params():
         # ************ load from file ************
         'predictor_ensemble_load_from_file': False,
         'predictor_ensemble_filename': '/srv/projects/NL-sim/2019-07-06T22:14:59.538523/ensemble.pkl',
-        'predictor_ensemble_save_every_k_secs': None, # 10 * 60,  # None: never save
+        'predictor_ensemble_save_every_k_secs': 10 * 60,  # None: never save
 
         # ************ I-O-C predictor ensemble ************
         'IO_entries_per_layer': [1000, 500, 500, 500],
@@ -91,7 +92,7 @@ def get_visualizer_params():
     params = {
         'fps_display_interval': 3,
         'plot_brain_error_frames': None,
-        'image_display_secs_fast': 6,  # 1  # 1000
+        'image_display_secs_fast': 5,  # 1  # 1000
         'waitKey_time_fast': 1,  # 1, 100, 5000
         'image_display_secs_slow': 0,  # 0: every frame
         'waitKey_time_slow': 500,  # 1, 100, 5000
@@ -201,6 +202,7 @@ def run_demo(demo_components):
             t_process = 0
             t_total = 0
 
+    robot_brain.save_model(models_save_folder=sim_folder_manager.get_models_save_folder())
     print ('Finished Simulation.')
 
     robot_brain.save_states_history(plots_save_folder=sim_folder_manager.get_plots_save_folder(), state_indices_list=[0])
@@ -210,6 +212,7 @@ def run_demo(demo_components):
 
     while True:
         cv2.waitKey(1)
+
 
 def demo():
     demo_components = init_demo()

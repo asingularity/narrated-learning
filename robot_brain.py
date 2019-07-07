@@ -169,6 +169,10 @@ class RobotBrain(object):
         IO_im_list, C_im_list, W_im_list = self.predictor_ensemble.get_table_ims()
         return IO_im_list, C_im_list, W_im_list
 
+    def save_model(self, models_save_folder):
+        self.predictor_ensemble.save_to_pkl(file_path=models_save_folder,
+                                            file_name='ensemble.pkl')
+
 
 
 
