@@ -337,7 +337,7 @@ class SingleMultiContextLayer(object):
         table = np.transpose(cuda_table.get_table_from_gpu())
 
         if layer_index == 0:
-            entries = 40 * 2 * 3
+            entries = 40 * 1 * 3
         else:
             entries = table.shape[0]
 
@@ -354,7 +354,7 @@ class SingleMultiContextLayer(object):
 
             im = np.reshape(C, (C.shape[0], C.shape[1] / 3, 3))
 
-            im = cv2.resize(im, dsize=(0,0), fx=3, fy=3, interpolation=cv2.INTER_NEAREST)
+            im = cv2.resize(im, dsize=(0,0), fx=6, fy=6, interpolation=cv2.INTER_NEAREST)
         else:
             # A = im_input
             # B = im_prediction

@@ -24,7 +24,7 @@ SIM_LOAD_NAME = None
 
 def get_model_params():
     params = {
-        'max_angular_velocity': 0.25,
+        'max_angular_velocity': 0.35,
         'linear_velocity': 0.4
     }
     return params
@@ -61,25 +61,25 @@ def get_brain_params():
         'predictor_ensemble_save_every_k_secs': None, # 10 * 60,  # None: never save
 
         # ************ I-O-C predictor ensemble ************
-        'IO_entries_per_layer': [10000, 2000, 2000, 1000],
+        'IO_entries_per_layer': [1000, 500, 500, 500],
         'C_entries_factor': 4,  # C table entries = factor * IO table entries
         'IO_learn_time_factor': 100,  # learn time = factor * IO table entries
         'C_learn_time_factor': 100,  # learn time = factor * C table entries
-        'predict_time': 8,  # assume all layers same predict time for now
+        'predict_time_per_layer': [1, 2, 4, 8],
     }
     return params
 
 
 def get_environment_params():
     params = {
-        'width': 30,
-        'height': 30,
+        'width': 10,
+        'height': 10,
         'add_random_color_boundary_walls': False,
-        'min_num_walls': 8,
-        'max_num_walls': 8,
-        'wall_min_length': 8,
-        'wall_max_length': 10,
-        'min_space_between_walls': 2,
+        'min_num_walls': 4,
+        'max_num_walls': 4,
+        'wall_min_length': 2,
+        'wall_max_length': 3,
+        'min_space_between_walls': 3,
         'init_robot_x': 5,
         'init_robot_y': 5,
         'init_robot_theta': 45
@@ -91,15 +91,16 @@ def get_visualizer_params():
     params = {
         'fps_display_interval': 3,
         'plot_brain_error_frames': None,
-        'image_display_secs_fast': 12,  # 1  # 1000
+        'image_display_secs_fast': 6,  # 1  # 1000
         'waitKey_time_fast': 1,  # 1, 100, 5000
         'image_display_secs_slow': 0,  # 0: every frame
-        'waitKey_time_slow': 10,  # 1, 100, 5000
+        'waitKey_time_slow': 500,  # 1, 100, 5000
         'scale_topdown_factor': 20,
         'scale_camera_factor': 20,
-        'no_wall_ray_color': (0.1, 0.1, 0.1),
+        'no_wall_ray_color': (0.3, 0.3, 0.3),
         'auto_switch_to_slow_disp_time': None,
-        'show_table_ims': True
+        'show_table_ims': True,
+        'init_fast': True  # start with "fast" display
     }
     return params
 

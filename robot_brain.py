@@ -57,7 +57,7 @@ class RobotBrain(object):
                 'input_dim': dim,
                 'IO_entries_per_layer': IO_entries_per_layer,
                 'C_entries_per_layer': C_entries_per_layer,
-                'predict_time_per_layer': [params['predict_time']] * n_layers,
+                'predict_time_per_layer': params['predict_time_per_layer'],
                 'layer_IO_learn_times': layer_IO_learn_times,
                 'layer_C_learn_times': layer_C_learn_times,
             })

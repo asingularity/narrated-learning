@@ -31,9 +31,15 @@ class Visualizer(object):
 
         self.linear_speed_from_key = 0.0
         self.angular_speed_from_key = 0.0
-        self.toggle_viewer_slow = False
-        self.image_display_secs = self.image_display_secs_fast
-        self.waitKey_time = self.waitKey_time_fast
+
+        if params['init_fast']:
+            self.toggle_viewer_slow = False
+            self.image_display_secs = self.image_display_secs_fast
+            self.waitKey_time = self.waitKey_time_fast
+        else:
+            self.toggle_viewer_slow = True
+            self.image_display_secs = self.image_display_secs_slow
+            self.waitKey_time = self.waitKey_time_slow
 
         self.fig = plt.figure(figsize=(10, 10))
         self.ax = self.fig.add_subplot(1, 1, 1)
@@ -190,6 +196,7 @@ class Visualizer(object):
             display_now = (time.time() - self.last_image_display_time > self.image_display_secs)
 
             if display_now:
+                # print('displaying now:', time.time() - self.last_image_display_time, self.image_display_secs)
                 self._display_graphic_map(rays, topdown_info, current_goal_position_angle)
 
                 if self.show_table_ims:
@@ -205,12 +212,12 @@ class Visualizer(object):
         # if self.plot_brain_error_frames is not None and self.frames % self.plot_brain_error_frames == 0:
         #     self._plot_brain_errors(robot_brain, plots_save_folder)
 
-        last_key = cv2.waitKey(1)
+        last_key = cv2.waitKey(self.waitKey_time)
         self._toggle_with_key_press(last_key=last_key)
 
         self.frames += 1
         if self.auto_switch_to_slow_disp_time is not None:
             if self.frames >= self.auto_switch_to_slow_disp_time:
                 self.toggle_viewer_slow = True
-                self.image_display_frames = self.image_display_frames_slow
+                self.image_display_secs = self.image_display_secs_slow
                 self.waitKey_time = self.waitKey_time_slow
