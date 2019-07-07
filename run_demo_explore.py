@@ -14,7 +14,7 @@ import time
 from math import pi
 
 
-MAX_HISTORY_LENGTH = 1000000 + 1
+MAX_HISTORY_LENGTH = 7000000 + 1
 USERNAME = 'intec'
 NUM_INPUT_RAYS = 16
 INPUT_DIM = NUM_INPUT_RAYS * 3
@@ -58,13 +58,13 @@ def get_brain_params():
         # ************ load from file ************
         'predictor_ensemble_load_from_file': False,
         'predictor_ensemble_filename': '/srv/projects/NL-sim/2019-07-06T22:14:59.538523/ensemble.pkl',
-        'predictor_ensemble_save_every_k_secs': 10 * 60,  # None: never save
+        'predictor_ensemble_save_every_k_secs': None, # 10 * 60,  # None: never save
 
         # ************ I-O-C predictor ensemble ************
-        'IO_entries_per_layer': [400, 200, 200],
+        'IO_entries_per_layer': [10000, 2000, 2000, 1000],
         'C_entries_factor': 4,  # C table entries = factor * IO table entries
-        'IO_learn_time_factor': 200,  # learn time = factor * IO table entries
-        'C_learn_time_factor': 200,  # learn time = factor * C table entries
+        'IO_learn_time_factor': 100,  # learn time = factor * IO table entries
+        'C_learn_time_factor': 100,  # learn time = factor * C table entries
         'predict_time': 8,  # assume all layers same predict time for now
     }
     return params
@@ -91,7 +91,7 @@ def get_visualizer_params():
     params = {
         'fps_display_interval': 3,
         'plot_brain_error_frames': None,
-        'image_display_secs_fast': 4,  # 1  # 1000
+        'image_display_secs_fast': 12,  # 1  # 1000
         'waitKey_time_fast': 1,  # 1, 100, 5000
         'image_display_secs_slow': 0,  # 0: every frame
         'waitKey_time_slow': 10,  # 1, 100, 5000
@@ -194,7 +194,7 @@ def run_demo(demo_components):
 
         t_total += (time.time() - t_total_0)
 
-        if time.time() - last_disp_t > 10:
+        if time.time() - last_disp_t > 30:
             last_disp_t = time.time()
             print('t_process / t_total: ', t_process / t_total)
             t_process = 0
