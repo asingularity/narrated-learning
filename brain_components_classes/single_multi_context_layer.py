@@ -139,6 +139,10 @@ class SingleMultiContextLayer(object):
 
         # define input, output, context for learning
 
+        # input and context: use same time (but delayed) input and context that the layer received
+        # assumes context is already predictive from further future.
+        # output: use current time, i.e. future.
+
         train_input, train_input_x_y_theta = self.input_history.get_state(state_index=0, delay=self.predict_time)
         train_output, train_output_x_y_theta = self.input_history.get_state(state_index=0, delay=0)
         train_context, _ = self.context_history.get_state(state_index=0, delay=self.predict_time)
@@ -156,7 +160,7 @@ class SingleMultiContextLayer(object):
         if learn_C and self.include_context:
             C_row_replaced = self._learn_C(input_state=train_input,
                                            output_state=train_output,
-                                           context_state=context_state)
+                                           context_state=train_context)
         else:
             C_row_replaced = False
 
