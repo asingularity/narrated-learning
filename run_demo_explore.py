@@ -102,7 +102,7 @@ def get_visualizer_params():
         'no_wall_ray_color': (0.3, 0.3, 0.3),
         'auto_switch_to_slow_disp_time': None,
         'show_table_ims': True,
-        'init_fast': False  # start with "fast" display
+        'init_fast': True  # start with "fast" display
     }
     return params
 

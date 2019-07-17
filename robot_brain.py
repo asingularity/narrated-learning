@@ -116,7 +116,9 @@ class RobotBrain(object):
         goal_context_state = self._get_context_for_goal_state(goal_index=goal_index)
 
         if goal_context_state[0] > 0:
-            print('goal_context_state:', goal_context_state)
+            debug_print = False
+            if debug_print:
+                print('goal_context_state:', goal_context_state)
 
         current_visual_input = self._process_sensors(rays=rays)
         # previous_motor_command was initiated at T-1, applied [T-1, T],
