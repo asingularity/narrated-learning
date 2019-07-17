@@ -102,40 +102,42 @@ class SingleMultiContextLayer(object):
 
         return _scale_dists(dists=dists)
 
-    def step(self, input_state, context_state, input_x_y_theta, learn_IO, learn_C):
+    def step(self, input_state, learning_context_state, learning_context_delay, input_x_y_theta, learn_IO, learn_C):
         '''
 
         step once in real-time
 
         :param input_state:
-        :param context_state:
+        :param learning_context_state:
         :param input_x_y_theta:
         :param learn_IO: True/False: learning of IO currently enabled
         :param learn_C: True/False: learning of C currently enabled
         :return:
         '''
 
+        # TODO need to deal with learning context delay > 0 in this whole function !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
         assert input_state.shape[0] == self.input_dim
         if self.context_dim == 0:
-            assert context_state is None
+            assert learning_context_state is None
         else:
-            if learn_C or context_state is not None:
-                assert context_state.shape[0] == self.context_dim
+            if learn_C or learning_context_state is not None:
+                assert learning_context_state.shape[0] == self.context_dim, str((learning_context_state.shape, self.context_dim))
 
         # compute dists
         #   if context not defined, then based on I alone
         #   if context defined, then based on I+C (TBD)
-        #   so - same line- context_state is None or valid here:
+        #   so - same line- learning_context_state is None or valid here:
 
-        # TODO how to incorporate a valid context_state here??
+        # TODO how to incorporate a valid learning_context_state here??
         dists = self.cuda_table_IO.query(query_input=input_state,
                                          query_output=None,
-                                         query_context=None)  # TODO incorporate context but from context table!
+                                         query_context=None)  # TODO task mode: incorporate context but from context table!
 
         scaled_ic_dists = self._scale_dists(dists)
 
         self.input_history.store_new_states(newest_states_list=[input_state], extra_data_list=[input_x_y_theta])
-        self.context_history.store_new_states(newest_states_list=[context_state], extra_data_list=[input_x_y_theta])
+        self.context_history.store_new_states(newest_states_list=[learning_context_state], extra_data_list=[input_x_y_theta])
 
         # define input, output, context for learning
 
@@ -533,7 +535,8 @@ def test_run_single_multi_context_layer():
         context_state_for_testing = states_history[t + testing_dt_for_context, :]
 
         scaled_i_c_dists, IO_replaced, C_replaced = table.step(input_state=input_state,
-                                                               context_state=context_state_for_testing,
+                                                               learning_context_state=context_state_for_testing,
+                                                               learning_context_delay=0,
                                                                input_x_y_theta=x_y_theta,
                                                                learn_IO=True,
                                                                learn_C=t > num_IO_entries)

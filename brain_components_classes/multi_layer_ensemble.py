@@ -2,6 +2,8 @@ import time
 import cv2
 import numpy as np
 import pickle
+from tabulate import tabulate
+
 from math import sin, cos
 from cuda_dist_query import CudaTable
 from utils.load_sim_history import load_states_history, load_td_info_history
@@ -85,30 +87,43 @@ class MultiLayerEnsemble(object):
         print('IO_C learn:', self.layer_C_learn_time_ranges)
         print()
 
+        disp_table = []
+
         for layer_index in range(self.n_layers):
+            num_io_entries = params['IO_entries_per_layer'][layer_index]
+            num_c_entries = params['C_entries_per_layer'][layer_index]
+
             if layer_index == 0:
                 input_dim = params['input_dim']
             else:
                 input_dim = params['IO_entries_per_layer'][layer_index - 1]
 
             if layer_index == self.n_layers - 1:
-                context_dim = 0
-                include_context = False
+                context_dim = params['goal_context_dim']
+                include_context = True
             else:
                 context_dim = params['IO_entries_per_layer'][layer_index + 1]
                 include_context = True
+
+            disp_table.append([layer_index,
+                               '(' + str(num_io_entries) + ' X ' + str(input_dim) + '+' + str(input_dim) + ')',
+                               '(' + str(num_c_entries) + ' X ' + str(context_dim) + ')'])
 
             self.tables.append(SingleMultiContextLayer(params={
                 'input_dim': input_dim,
                 'output_dim': input_dim,
                 'context_dim': context_dim,
-                'num_IO_entries': params['IO_entries_per_layer'][layer_index],
-                'num_C_entries': params['C_entries_per_layer'][layer_index],
+                'num_IO_entries': num_io_entries,
+                'num_C_entries': num_c_entries,
                 'predict_time': params['predict_time_per_layer'][layer_index],
                 'include_context': include_context
             }))
 
             self.last_i_c_dists.append(np.zeros(params['IO_entries_per_layer'][layer_index], np.float32))
+
+        print()
+        print(tabulate(disp_table, headers=['layer', 'input-output', 'context']))
+        print()
 
         # stats
         self.stat_IO_row_replaces = np.zeros(self.n_layers, np.int)
@@ -119,14 +134,22 @@ class MultiLayerEnsemble(object):
 
         self.t = 0
 
-    def step(self, input_state, input_x_y_theta):
+        self.predict_time_per_layer = np.array(params['predict_time_per_layer'])
+
+    def step(self, input_state, input_x_y_theta, goal_context_state):
         '''
 
         :param input_state:
         :param input_x_y_theta:
         :param learn:
+        :param goal_context_state: None or a context state for a currently reached goal
         :return:
         '''
+
+        # TODO actually in this function: goal_context_state should never be None
+        #   because: even a none-goal state has a context
+
+        assert goal_context_state is not None
 
         scaled_i_c_dists = None
 
@@ -140,9 +163,49 @@ class MultiLayerEnsemble(object):
                 layer_input_x_y_theta = None
 
             if layer_index == self.n_layers - 1:
-                layer_context_state = None
+
+                # TODO how to properly introduce goal state? passing correct "future" layer_context state here? or everything delayed?
+                # here we either need goal-context from the future, or we need to apply it with a separate function (not passed in step)
+
+                '''
+                what is context delay here?
+
+                say current time is 't'
+
+                say this layer's output is "in the future" by a total of 'tau2'
+                and this layer's input is "in the future" by a total of 'tau1'
+                i.e. overall, it is meant to be predicting tau2 into the future, accounting for all
+                previous layers and their prediction times (tau1) as well as last layer's prediction time (tau2 - tau1).
+
+                means in layer.step, to last layer, you are passing:
+                    input: at (t + tau1)
+                    output: at (t + tau2)
+
+                what should context be? at minimum,
+                    context: at (t + tau2)  -   but, could be at a later time
+
+                say currently, agent encounters a goal state (now at time t) - what should we do with it?
+                    let's say in task mode we always want to say:
+                    "when you get this goal-context, be at the goal at time: (t + tau2)"
+
+                * any time we encounter the goal right now at time t: *
+                * give learning_context_delay as tau2 *
+
+                '''
+
+                # TODO define goal_encountered, goal_context_state
+                # TODO make sure single_multi_context_layer can deal with both scenarios below
+                # TODO for task mode- we need to add a "task_context_state" which will be same for most layers
+
+                if goal_context_state is not None:
+                    layer_context_state = goal_context_state
+                    layer_context_delay = np.sum(self.predict_time_per_layer)
+                else:
+                    layer_context_state = None
+                    layer_context_delay = 0
             else:
                 layer_context_state = self.last_i_c_dists[layer_index + 1]
+                layer_context_delay = 0
 
             IO_learn_t_range = self.layer_IO_learn_time_ranges[layer_index]
             C_learn_t_range = self.layer_C_learn_time_ranges[layer_index]
@@ -150,8 +213,10 @@ class MultiLayerEnsemble(object):
             learn_IO = IO_learn_t_range[0] <= self.t < IO_learn_t_range[1]
             learn_C = C_learn_t_range[0] <= self.t < C_learn_t_range[1]
 
+            # if context
             scaled_i_c_dists, IO_replaced, C_replaced = self.tables[layer_index].step(input_state=layer_input_state,
-                                                                                      context_state=layer_context_state,
+                                                                                      learning_context_state=layer_context_state,
+                                                                                      learning_context_delay=layer_context_delay,  # how much is this context delayed compared to I/O? normally zero, but for goal-context, it is delayed
                                                                                       input_x_y_theta=layer_input_x_y_theta,
                                                                                       learn_IO=learn_IO,
                                                                                       learn_C=learn_C)
@@ -240,7 +305,8 @@ def test_run_multi_layer_ensemble():
         x_y_theta = td_info_history[t, :]
 
         ensemble.step(input_state=input_state,
-                      input_x_y_theta=x_y_theta)
+                      input_x_y_theta=x_y_theta,
+                      goal_context_state=None)
 
         if time.time() > last_imshow_time + imshow_every_k_seconds:
             last_imshow_time = time.time()

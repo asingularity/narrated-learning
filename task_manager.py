@@ -31,6 +31,7 @@ class TaskManager(object):
         self.min_distance = params['min_distance']
         self.max_distance = params['max_distance']
         self.constrain_to_params = params['constrain_to_params']
+        self.goal_regions = params['goal_regions']
 
         self.goal_states = None
         self.goal_r_x = None
@@ -56,6 +57,9 @@ class TaskManager(object):
 
         self.all_sets_done = False
         self.task_goal_states = None
+
+    def get_goal_regions(self):
+        return self.goal_regions
 
     def do_step(self, topdown_info, robot_environment, robot_sensors, robot_brain):
         new_goal = False
@@ -98,8 +102,25 @@ class TaskManager(object):
                 if self.sleep_every_trial > 0 and self.t_trial == 1:
                     time.sleep(self.sleep_every_trial)
 
+        robot_x = topdown_info['robot_x']
+        robot_y = topdown_info['robot_y']
+
+        # zero: means no goal reached / default state
+        goal_index_reached_this_step = 0
+
+        goal_index = 1
+        for goal_region in self.goal_regions:
+            gr_c, gr_r, gr_w, gr_h = goal_region
+
+            if gr_r <= robot_y <= gr_r + gr_h and gr_c <= robot_x <= gr_c + gr_w:
+                assert goal_index_reached_this_step == 0, 'cannot have overlapping goal regions!'
+
+                goal_index_reached_this_step = goal_index
+
+            goal_index += 1
+
         self.step += 1
-        return new_goal
+        return new_goal, goal_index_reached_this_step
 
     def finished_sim(self):
         '''

@@ -18,6 +18,8 @@ class RobotBrain(object):
         self.ensemble_save_every_k_secs = params['predictor_ensemble_save_every_k_secs']
         self.last_ensemble_save_time = time.time()
 
+        self.max_num_goal_states = params['max_num_goal_states']
+
         if params['predictor_ensemble_load_from_file']:
             print( 'loading predictor ensemble...')
             f = open(params['predictor_ensemble_filename'], 'rb')
@@ -41,20 +43,23 @@ class RobotBrain(object):
             layer_IO_learn_times = []
             layer_C_learn_times = []
 
+            goal_states_dim = 1
+
             for k in range(n_layers):
                 IO_entries = IO_entries_per_layer[k]
                 layer_IO_learn_times.append(IO_entries * IO_learn_time_factor)
 
+                C_entries = IO_entries * C_entries_factor
+                layer_C_learn_times.append(C_entries * C_learn_time_factor)
+
                 if k < n_layers - 1:
-                    C_entries = IO_entries * C_entries_factor
                     C_entries_per_layer.append(C_entries)
-                    layer_C_learn_times.append(C_entries * C_learn_time_factor)
                 else:
-                    C_entries_per_layer.append(0)
-                    layer_C_learn_times.append(0)
+                    C_entries_per_layer.append(self.max_num_goal_states + 1)  # why + 1? It is the "non-goal" operating state.
 
             self.predictor_ensemble = MultiLayerEnsemble(params={
                 'input_dim': dim,
+                'goal_context_dim': goal_states_dim,
                 'IO_entries_per_layer': IO_entries_per_layer,
                 'C_entries_per_layer': C_entries_per_layer,
                 'predict_time_per_layer': params['predict_time_per_layer'],
@@ -91,9 +96,27 @@ class RobotBrain(object):
         motor_history = MotorHistory(motor_history_params)
         return motor_history
 
+    def _get_context_for_goal_state(self, goal_index):
+        '''
+
+        uses self.num_goal_states
+
+        :param goal_index:
+        :return:
+        '''
+        goal_context = np.zeros(1, np.float32)
+        goal_context[0] = goal_index
+
+        return goal_context
+
     # ************ process ************
 
-    def process_input_get_motor(self, rays, last_motor_command, models_save_folder, debug_topdown_info):
+    def process_input_get_motor(self, rays, last_motor_command, models_save_folder, debug_topdown_info, goal_index):
+
+        goal_context_state = self._get_context_for_goal_state(goal_index=goal_index)
+
+        if goal_context_state[0] > 0:
+            print('goal_context_state:', goal_context_state)
 
         current_visual_input = self._process_sensors(rays=rays)
         # previous_motor_command was initiated at T-1, applied [T-1, T],
@@ -111,7 +134,8 @@ class RobotBrain(object):
                                                  debug_topdown_info_history=self.debug_topdown_info_history)
 
         self.predictor_ensemble.step(input_state=newest_states_list[0],
-                                     input_x_y_theta=self.debug_topdown_info_history.get_td_info(delay=0))
+                                     input_x_y_theta=self.debug_topdown_info_history.get_td_info(delay=0),
+                                     goal_context_state=goal_context_state)
 
         if self.goal_states is not None and self.predictor_ensemble is not None:
             # TODO this is where "task mode" is enabled

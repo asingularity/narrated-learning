@@ -57,7 +57,7 @@ class Visualizer(object):
             self.last_FPS_time = time.time()
         self.fps_frames += 1
 
-    def _get_topdown_map(self, rays, topdown_info, current_goal_position_angle):
+    def _get_topdown_map(self, rays, topdown_info, current_goal_position_angle, goal_regions):
         im = topdown_info['env_map_copy']
         robot_x = topdown_info['robot_x']
         robot_y = topdown_info['robot_y']
@@ -71,9 +71,8 @@ class Visualizer(object):
 
         im[round_y, round_x] = 1.0
 
-        resized_image = cv2.resize(src=im, dsize=(0, 0), fx=self.scale_topdown_factor, fy=self.scale_topdown_factor, interpolation=cv2.INTER_NEAREST)
-
         # rays should be drawn on resized image so always width 1
+        resized_image = cv2.resize(src=im, dsize=(0, 0), fx=self.scale_topdown_factor, fy=self.scale_topdown_factor, interpolation=cv2.INTER_NEAREST)
 
         goal_x, goal_y, goal_theta = current_goal_position_angle
         if goal_x is not None:
@@ -104,12 +103,25 @@ class Visualizer(object):
                      color=(ray_color[0], ray_color[1], ray_color[2]),
                      thickness=1)
 
+        # goal regions also drawn on resized image in case they are only size 1
+        for goal_region in goal_regions:
+            gr_c, gr_r, gr_w, gr_h = goal_region
+            gr_c = gr_c * self.scale_topdown_factor
+            gr_r = gr_r * self.scale_topdown_factor
+            gr_w = gr_w * self.scale_topdown_factor
+            gr_h = gr_h * self.scale_topdown_factor
+
+            resized_image[gr_r:gr_r + gr_h / 4, gr_c:gr_c+gr_w / 4] = 1.0
+            resized_image[gr_r + gr_h / 4:gr_r + gr_h / 2, gr_c + gr_w / 4:gr_c+gr_w / 2] = 1.0
+            resized_image[gr_r + gr_h / 2:gr_r + 3 * gr_h / 4, gr_c + gr_w / 2:gr_c+ 3 * gr_w / 4] = 1.0
+            resized_image[gr_r + 3 * gr_h / 4:gr_r + gr_h, gr_c + 3 * gr_w / 4:gr_c+gr_w] = 1.0
+
         return resized_image
 
-    def _display_graphic_map(self, rays, topdown_info, current_goal_position_angle):
+    def _display_graphic_map(self, rays, topdown_info, current_goal_position_angle, goal_regions):
 
         ray_colors = rays['ray_colors'].reshape((len(rays['ray_colors']) / 3, 3))
-        resized_image = self._get_topdown_map(rays, topdown_info, current_goal_position_angle)
+        resized_image = self._get_topdown_map(rays, topdown_info, current_goal_position_angle, goal_regions)
 
         cv2.imshow('env_map', resized_image)
 
@@ -250,7 +262,7 @@ class Visualizer(object):
 
         cv2.imshow('all_tables', concat_im)
 
-    def visualize(self, rays, topdown_info, plots_save_folder, current_goal_position_angle, robot_brain):
+    def visualize(self, rays, topdown_info, plots_save_folder, current_goal_position_angle, goal_regions, robot_brain):
         self._display_fps()
 
         if self.image_display_secs is not None:
@@ -259,7 +271,7 @@ class Visualizer(object):
 
             if display_now:
                 # print('displaying now:', time.time() - self.last_image_display_time, self.image_display_secs)
-                self._display_graphic_map(rays, topdown_info, current_goal_position_angle)
+                self._display_graphic_map(rays, topdown_info, current_goal_position_angle, goal_regions)
 
                 if self.show_table_ims:
                     table_ims = robot_brain.get_table_ims()
