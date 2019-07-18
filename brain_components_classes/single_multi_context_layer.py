@@ -119,9 +119,6 @@ class SingleMultiContextLayer(object):
         :return:
         '''
 
-        if self.include_motor:
-            print(self.motor_table, np.count_nonzero(self.motor_table))
-
         assert learning_context_delay is not None
 
         if self.learning_context_delay is None:
