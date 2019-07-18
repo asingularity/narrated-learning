@@ -95,8 +95,10 @@ class MultiLayerEnsemble(object):
 
             if layer_index == 0:
                 input_dim = params['input_dim']
+                include_motor = True
             else:
                 input_dim = params['IO_entries_per_layer'][layer_index - 1]
+                include_motor = False
 
             if layer_index == self.n_layers - 1:
                 context_dim = params['goal_context_dim']
@@ -116,7 +118,8 @@ class MultiLayerEnsemble(object):
                 'num_IO_entries': num_io_entries,
                 'num_C_entries': num_c_entries,
                 'predict_time': params['predict_time_per_layer'][layer_index],
-                'include_context': include_context
+                'include_context': include_context,
+                'include_motor': include_motor
             }))
 
             self.last_i_c_dists.append(np.zeros(params['IO_entries_per_layer'][layer_index], np.float32))
@@ -136,7 +139,7 @@ class MultiLayerEnsemble(object):
 
         self.predict_time_per_layer = np.array(params['predict_time_per_layer'])
 
-    def step(self, input_state, input_x_y_theta, goal_context_state):
+    def step(self, input_state, input_x_y_theta, goal_context_state, last_motor_command):
         '''
 
         :param input_state:
@@ -210,7 +213,7 @@ class MultiLayerEnsemble(object):
             IO_learn_t_range = self.layer_IO_learn_time_ranges[layer_index]
             C_learn_t_range = self.layer_C_learn_time_ranges[layer_index]
 
-            learn_IO = IO_learn_t_range[0] <= self.t < IO_learn_t_range[1]
+            learn_IO = max(1, IO_learn_t_range[0]) <= self.t < IO_learn_t_range[1]
             learn_C = C_learn_t_range[0] <= self.t < C_learn_t_range[1]
 
             # if context
@@ -220,6 +223,7 @@ class MultiLayerEnsemble(object):
                                                                                       input_x_y_theta=layer_input_x_y_theta,
                                                                                       learn_IO=learn_IO,
                                                                                       learn_C=learn_C,
+                                                                                      last_motor_command=last_motor_command,
                                                                                       debug_info='layer_index=' + str(layer_index))
 
             if IO_replaced:

@@ -42,6 +42,7 @@ class SingleMultiContextLayer(object):
         self.predict_time = params['predict_time']
 
         self.include_context = params['include_context']  # bool
+        self.include_motor = params['include_motor']
 
         assert (self.include_context and self.context_dim > 0) or (not self.include_context and self.context_dim == 0)
         #include_layers = ['io_only', 'i_only']  # last layer: io: learning, i: running
@@ -69,11 +70,15 @@ class SingleMultiContextLayer(object):
 
             self.IO_to_C_W = np.zeros((self.num_C_entries, self.num_IO_entries), np.int)
 
+        if self.include_motor:
+            self.motor_table = np.zeros((self.num_IO_entries, 2), np.float)
+
         self.entries_x_y_theta_input = np.zeros((self.num_IO_entries, 3), np.float)
         self.entries_x_y_theta_output = np.zeros((self.num_IO_entries, 3), np.float)
 
         self.learning_context_delay = None
         self.input_history = None  # needs learning_context_delay to be set, in order to be initialized properly
+        self.motor_history = None
         self.context_history = StatesLimitedHistory(params={'max_delay': self.predict_time,
                                                             'states_dim_list': [self.context_dim]})
 
@@ -101,7 +106,7 @@ class SingleMultiContextLayer(object):
 
         return _scale_dists(dists=dists)
 
-    def step(self, input_state, learning_context_state, learning_context_delay, input_x_y_theta, learn_IO, learn_C, debug_info=None):
+    def step(self, input_state, learning_context_state, learning_context_delay, input_x_y_theta, learn_IO, learn_C, last_motor_command=None, debug_info=None):
         '''
 
         step once in real-time
@@ -114,7 +119,8 @@ class SingleMultiContextLayer(object):
         :return:
         '''
 
-        # TODO need to deal with learning context delay > 0 in this whole function !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        if self.include_motor:
+            print(self.motor_table, np.count_nonzero(self.motor_table))
 
         assert learning_context_delay is not None
 
@@ -122,6 +128,10 @@ class SingleMultiContextLayer(object):
             self.learning_context_delay = learning_context_delay
             self.input_history = StatesLimitedHistory(params={'max_delay': self.predict_time + self.learning_context_delay,
                                                               'states_dim_list': [self.input_dim]})
+            if self.include_motor:
+                # why +1? so we guarantee enough to be able to get motor that gets us from input to output
+                self.motor_history = StatesLimitedHistory(params={'max_delay': self.predict_time + self.learning_context_delay + 1,
+                                                                  'states_dim_list': [2]})
         else:
             assert self.learning_context_delay == learning_context_delay, 'cannot have multiple learning_context_delay per layer!'
 
@@ -137,7 +147,7 @@ class SingleMultiContextLayer(object):
         #   if context defined, then based on I+C (TBD)
         #   so - same line- learning_context_state is None or valid here:
 
-        # TODO how to incorporate a valid learning_context_state here??
+        # TODO how to incorporate a valid learning_context_state here?? learning_context_delay???
         dists = self.cuda_table_IO.query(query_input=input_state,
                                          query_output=None,
                                          query_context=None)  # TODO task mode: must incorporate context but from context table!
@@ -146,6 +156,9 @@ class SingleMultiContextLayer(object):
 
         self.input_history.store_new_states(newest_states_list=[input_state], extra_data_list=[input_x_y_theta])
         self.context_history.store_new_states(newest_states_list=[learning_context_state], extra_data_list=[input_x_y_theta])
+
+        if self.include_motor:
+            self.motor_history.store_new_states(newest_states_list=[last_motor_command], extra_data_list=[None])
 
         # define input, output, context for learning
 
@@ -158,6 +171,14 @@ class SingleMultiContextLayer(object):
 
         train_input, train_input_x_y_theta = self.input_history.get_state(state_index=0, delay=self.predict_time + self.learning_context_delay)
         train_output, train_output_x_y_theta = self.input_history.get_state(state_index=0, delay=0 + self.learning_context_delay)
+
+        if self.include_motor:
+            # since motor is "last motor command" i.e. what got us to same time's input state,
+            # get "last_motor_command" corresponding to output state (after predict_time)
+            train_motor, _ = self.motor_history.get_state(state_index=0, delay=0 + self.learning_context_delay)
+        else:
+            train_motor = None
+
         train_context, _ = self.context_history.get_state(state_index=0, delay=self.predict_time)
 
         if self.learning_context_delay == 0:
@@ -167,7 +188,8 @@ class SingleMultiContextLayer(object):
             IO_row_replaced = self._learn_IO(input_state=train_input,
                                              output_state=train_output,
                                              input_x_y_theta=train_input_x_y_theta,
-                                             output_x_y_theta=train_output_x_y_theta)
+                                             output_x_y_theta=train_output_x_y_theta,
+                                             motor_command=train_motor)
         else:
             IO_row_replaced = False
 
@@ -180,7 +202,7 @@ class SingleMultiContextLayer(object):
 
         return scaled_ic_dists, IO_row_replaced, C_row_replaced
 
-    def _learn_IO(self, input_state, output_state, input_x_y_theta, output_x_y_theta):
+    def _learn_IO(self, input_state, output_state, input_x_y_theta, output_x_y_theta, motor_command):
         row_replaced = False
 
         assert input_state.shape[0] == self.input_dim
@@ -206,6 +228,9 @@ class SingleMultiContextLayer(object):
                                            row_context=None,
                                            row_to_table_dists=dists,
                                            fast_init=True)
+
+            if self.include_motor:
+                self.motor_table[self.init_IO_row_num, :] = motor_command[:]
 
             # This only really makes sense for the first layer
             if output_x_y_theta is not None:
@@ -236,6 +261,9 @@ class SingleMultiContextLayer(object):
                                                row_output=output_state,
                                                row_context=None,
                                                row_to_table_dists=dists)
+
+                if self.include_motor:
+                    self.motor_table[r_r_ind, :] = motor_command[:]
 
                 if output_x_y_theta is not None:
                     self.entries_x_y_theta_output[r_r_ind, :] = output_x_y_theta[:]

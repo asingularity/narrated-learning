@@ -31,7 +31,6 @@ class RobotBrain(object):
 
             dim = params['input_dim']
 
-
             IO_entries_per_layer = params['IO_entries_per_layer']
             n_layers = len(IO_entries_per_layer)
 
@@ -147,7 +146,8 @@ class RobotBrain(object):
 
         self.predictor_ensemble.step(input_state=newest_states_list[0],
                                      input_x_y_theta=self.debug_topdown_info_history.get_td_info(delay=0),
-                                     goal_context_state=goal_context_state)
+                                     goal_context_state=goal_context_state,
+                                     last_motor_command=last_motor_command)
 
         if self.goal_states is not None and self.predictor_ensemble is not None:
             # TODO this is where "task mode" is enabled
