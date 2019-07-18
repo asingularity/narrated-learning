@@ -219,7 +219,8 @@ class MultiLayerEnsemble(object):
                                                                                       learning_context_delay=layer_context_delay,  # how much is this context delayed compared to I/O? normally zero, but for goal-context, it is delayed
                                                                                       input_x_y_theta=layer_input_x_y_theta,
                                                                                       learn_IO=learn_IO,
-                                                                                      learn_C=learn_C)
+                                                                                      learn_C=learn_C,
+                                                                                      debug_info='layer_index=' + str(layer_index))
 
             if IO_replaced:
                 self.stat_IO_row_replaces[layer_index] += 1

@@ -69,14 +69,13 @@ class SingleMultiContextLayer(object):
 
             self.IO_to_C_W = np.zeros((self.num_C_entries, self.num_IO_entries), np.int)
 
-        self.input_history = StatesLimitedHistory(params={'max_delay': self.predict_time,
-                                                          'states_dim_list': [self.input_dim]})
-
-        self.context_history = StatesLimitedHistory(params={'max_delay': self.predict_time,
-                                                            'states_dim_list': [self.context_dim]})
-
         self.entries_x_y_theta_input = np.zeros((self.num_IO_entries, 3), np.float)
         self.entries_x_y_theta_output = np.zeros((self.num_IO_entries, 3), np.float)
+
+        self.learning_context_delay = None
+        self.input_history = None  # needs learning_context_delay to be set, in order to be initialized properly
+        self.context_history = StatesLimitedHistory(params={'max_delay': self.predict_time,
+                                                            'states_dim_list': [self.context_dim]})
 
         # used for init
         self.init_IO_row_num = None
@@ -102,7 +101,7 @@ class SingleMultiContextLayer(object):
 
         return _scale_dists(dists=dists)
 
-    def step(self, input_state, learning_context_state, learning_context_delay, input_x_y_theta, learn_IO, learn_C):
+    def step(self, input_state, learning_context_state, learning_context_delay, input_x_y_theta, learn_IO, learn_C, debug_info=None):
         '''
 
         step once in real-time
@@ -116,6 +115,15 @@ class SingleMultiContextLayer(object):
         '''
 
         # TODO need to deal with learning context delay > 0 in this whole function !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+        assert learning_context_delay is not None
+
+        if self.learning_context_delay is None:
+            self.learning_context_delay = learning_context_delay
+            self.input_history = StatesLimitedHistory(params={'max_delay': self.predict_time + self.learning_context_delay,
+                                                              'states_dim_list': [self.input_dim]})
+        else:
+            assert self.learning_context_delay == learning_context_delay, 'cannot have multiple learning_context_delay per layer!'
 
         assert input_state.shape[0] == self.input_dim
         if self.context_dim == 0:
@@ -132,7 +140,7 @@ class SingleMultiContextLayer(object):
         # TODO how to incorporate a valid learning_context_state here??
         dists = self.cuda_table_IO.query(query_input=input_state,
                                          query_output=None,
-                                         query_context=None)  # TODO task mode: incorporate context but from context table!
+                                         query_context=None)  # TODO task mode: must incorporate context but from context table!
 
         scaled_ic_dists = self._scale_dists(dists)
 
@@ -145,11 +153,15 @@ class SingleMultiContextLayer(object):
         # assumes context is already predictive from further future.
         # output: use current time, i.e. future.
 
-        train_input, train_input_x_y_theta = self.input_history.get_state(state_index=0, delay=self.predict_time)
-        train_output, train_output_x_y_theta = self.input_history.get_state(state_index=0, delay=0)
+        # how does this change if self.learning_context_delay > 0?
+        # hypothesis:  [+ self.learning_context_delay] to everything else, so that getting context "from the future"
+
+        train_input, train_input_x_y_theta = self.input_history.get_state(state_index=0, delay=self.predict_time + self.learning_context_delay)
+        train_output, train_output_x_y_theta = self.input_history.get_state(state_index=0, delay=0 + self.learning_context_delay)
         train_context, _ = self.context_history.get_state(state_index=0, delay=self.predict_time)
 
-        assert abs(sum(train_output - input_state)) < 1e-5, 'state mismatch! ' + str(train_output) + ', ' + str(input_state) + ', sum: ' + str(sum(train_output - input_state))
+        if self.learning_context_delay == 0:
+            assert abs(sum(train_output - input_state)) < 1e-5, 'state mismatch! ' + str(train_output) + ', ' + str(input_state) + ', sum: ' + str(sum(train_output - input_state)) + ', debug_info: ' + str(debug_info)
 
         if learn_IO:
             IO_row_replaced = self._learn_IO(input_state=train_input,
