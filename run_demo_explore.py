@@ -26,7 +26,7 @@ SIM_LOAD_NAME = None
 def get_model_params():
     params = {
         'max_angular_velocity': 0.35,
-        'linear_velocity': 0.4
+        'max_linear_velocity': 0.4
     }
     return params
 

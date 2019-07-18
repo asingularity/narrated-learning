@@ -112,6 +112,16 @@ class RobotBrain(object):
     # ************ process ************
 
     def process_input_get_motor(self, rays, last_motor_command, models_save_folder, debug_topdown_info, goal_index):
+        '''
+
+        :param rays:
+        :param last_motor_command:
+        :param models_save_folder:
+        :param debug_topdown_info:
+        :param goal_index:
+        :return: motor_out: (linear_velocity, angular_velocity)
+
+        '''
 
         goal_context_state = self._get_context_for_goal_state(goal_index=goal_index)
 
@@ -141,7 +151,7 @@ class RobotBrain(object):
 
         if self.goal_states is not None and self.predictor_ensemble is not None:
             # TODO this is where "task mode" is enabled
-            self.motor_out = None
+            self.motor_out = None  # (linear_velocity, angular_velocity)
         else:
             # this informs robot model to apply random movement
             self.motor_out = None
