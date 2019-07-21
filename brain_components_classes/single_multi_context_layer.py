@@ -61,12 +61,29 @@ class SingleMultiContextLayer(object):
 
         if self.include_context:
             # C table
+
+            pre_init_goal_contexts = params['pre_init_goal_contexts']
+            if pre_init_goal_contexts is not None:
+                # TODO init the table here, and set a flag not to learn/overwrite table rows later!
+                assert self.context_dim == 1, 'assumes self.context_dim is 1! got instead: ' + str(self.context_dim)
+                assert len(pre_init_goal_contexts) == self.num_C_entries, str(len(pre_init_goal_contexts)) + ' != ' + str(self.num_C_entries)
+
+                table = np.zeros((self.num_C_entries, self.context_dim))
+                for k in range(self.num_C_entries):
+                    table[k, 0] = pre_init_goal_contexts[k]
+                table = table.astype(np.float32)
+                self.enable_learn_C_table = False
+            else:
+                self.enable_learn_C_table = True
+                table = None
+
             # *important but confusing*: this is storing context but internal to CudaTable, calling it "input"!
             self.cuda_table_C = CudaTable(num_entries=self.num_C_entries,
                                           input_dim=self.context_dim,
                                           output_dim=0,
                                           context_dim=0,
-                                          include_layers=['i_only'])
+                                          include_layers=['i_only'],
+                                          table=table)
 
             self.IO_to_C_W = np.zeros((self.num_C_entries, self.num_IO_entries), np.int)
 
@@ -307,46 +324,47 @@ class SingleMultiContextLayer(object):
         if self.init_C_row_num is None:
             self.init_C_row_num = 0
 
-        if self.init_C_row_num < self.cuda_table_C.get_num_rows():
-            # necessary so dist matrix helper is not so slow at start
-            dists[self.init_C_row_num] = np.inf
-            self.cuda_table_C.set_matrix_row(row_index=self.init_C_row_num,
-                                             row_input=context_state,
-                                             row_output=None,
-                                             row_context=None,
-                                             row_to_table_dists=dists,
-                                             fast_init=True)
-            row_replaced = True
-            min_row_C = self.init_C_row_num
-
-            self.init_C_row_num += 1
-        else:
-            if not self.cuda_table_C.post_init_done:
-                self.cuda_table_C.post_init()
-
-            table_min_dist, table_min_dist_r, table_min_dist_c = self.cuda_table_C.get_min_dist()
-
-            if new_min_dist > table_min_dist:
-                # minimum distance of new row to current rows is greater than current minimum row-row distance
-                # so: replace one row of current minimum, with new row
-
-                # get one of the row indices of current minimum dist pair
-                r_r_ind = table_min_dist_r  # could be table_min_dist_c
-
-                dists[r_r_ind] = np.inf
-
-                # replace the current min dist row, with the new row
-                self.cuda_table_C.set_matrix_row(row_index=r_r_ind,
+        if self.enable_learn_C_table:
+            if self.init_C_row_num < self.cuda_table_C.get_num_rows():
+                # necessary so dist matrix helper is not so slow at start
+                dists[self.init_C_row_num] = np.inf
+                self.cuda_table_C.set_matrix_row(row_index=self.init_C_row_num,
                                                  row_input=context_state,
                                                  row_output=None,
                                                  row_context=None,
-                                                 row_to_table_dists=dists)
-
-                min_row_C = r_r_ind
+                                                 row_to_table_dists=dists,
+                                                 fast_init=True)
                 row_replaced = True
+                min_row_C = self.init_C_row_num
 
-                # zero out its connections to IO
-                self.IO_to_C_W[r_r_ind, :] = 0
+                self.init_C_row_num += 1
+            else:
+                if not self.cuda_table_C.post_init_done:
+                    self.cuda_table_C.post_init()
+
+                table_min_dist, table_min_dist_r, table_min_dist_c = self.cuda_table_C.get_min_dist()
+
+                if new_min_dist > table_min_dist:
+                    # minimum distance of new row to current rows is greater than current minimum row-row distance
+                    # so: replace one row of current minimum, with new row
+
+                    # get one of the row indices of current minimum dist pair
+                    r_r_ind = table_min_dist_r  # could be table_min_dist_c
+
+                    dists[r_r_ind] = np.inf
+
+                    # replace the current min dist row, with the new row
+                    self.cuda_table_C.set_matrix_row(row_index=r_r_ind,
+                                                     row_input=context_state,
+                                                     row_output=None,
+                                                     row_context=None,
+                                                     row_to_table_dists=dists)
+
+                    min_row_C = r_r_ind
+                    row_replaced = True
+
+                    # zero out its connections to IO
+                    self.IO_to_C_W[r_r_ind, :] = 0
 
         # *****
         # (2) learn IO to Context association table: IO_to_C_W

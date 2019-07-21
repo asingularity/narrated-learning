@@ -64,6 +64,7 @@ class RobotBrain(object):
                 'predict_time_per_layer': params['predict_time_per_layer'],
                 'layer_IO_learn_times': layer_IO_learn_times,
                 'layer_C_learn_times': layer_C_learn_times,
+                'pre_init_goal_contexts': self._get_goal_contexts_list(),  # this matches _get_context_for_goal_state
             })
 
     def _init_globals(self, params):
@@ -94,6 +95,13 @@ class RobotBrain(object):
 
         motor_history = MotorHistory(motor_history_params)
         return motor_history
+
+    def _get_goal_contexts_list(self):
+        '''
+        return list of all goal contexts, matching _get_context_for_goal_state
+        :return:
+        '''
+        return list(range(self.max_num_goal_states + 1))
 
     def _get_context_for_goal_state(self, goal_index):
         '''

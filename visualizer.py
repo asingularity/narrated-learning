@@ -241,6 +241,10 @@ class Visualizer(object):
                 IO_im = None
 
             C_im = C_im_list[k]
+
+            if np.amax(C_im) > 1.0:
+                C_im = C_im * 1.0 / np.amax(C_im)
+
             W_im = W_im_list[k]
 
             if concat_im is None and IO_im is not None:

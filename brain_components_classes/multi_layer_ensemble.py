@@ -103,9 +103,13 @@ class MultiLayerEnsemble(object):
             if layer_index == self.n_layers - 1:
                 context_dim = params['goal_context_dim']
                 include_context = True
+                pre_init_goal_contexts = params['pre_init_goal_contexts']
+                # C entries in robot_brain.py for last layer defined as:
+                # C_entries_per_layer.append(self.max_num_goal_states + 1)
             else:
                 context_dim = params['IO_entries_per_layer'][layer_index + 1]
                 include_context = True
+                pre_init_goal_contexts = None
 
             disp_table.append([layer_index,
                                '(' + str(num_io_entries) + ' X ' + str(input_dim) + '+' + str(input_dim) + ')',
@@ -119,7 +123,8 @@ class MultiLayerEnsemble(object):
                 'num_C_entries': num_c_entries,
                 'predict_time': params['predict_time_per_layer'][layer_index],
                 'include_context': include_context,
-                'include_motor': include_motor
+                'include_motor': include_motor,
+                'pre_init_goal_contexts': pre_init_goal_contexts
             }))
 
             self.last_i_c_dists.append(np.zeros(params['IO_entries_per_layer'][layer_index], np.float32))
