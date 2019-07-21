@@ -34,6 +34,6 @@ class DebugTopdownInfoHistory(object):
             return None
 
     def save_history(self, plots_save_folder):
-        f = open(plots_save_folder + '/debug_td_info_history.pkl', 'w')
+        f = open(plots_save_folder + '/debug_td_info_history.pkl', 'wb')
         pickle.dump(self.td_info_array[0:self.t, :], f)
         f.close()

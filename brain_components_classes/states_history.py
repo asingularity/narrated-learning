@@ -36,7 +36,7 @@ class StatesHistory(object):
 
     def save_states(self, plots_save_folder, state_indices_list):
         for state_index in state_indices_list:
-            f = open(plots_save_folder + '/states_history_' + str(state_index) + '.pkl', 'w')
+            f = open(plots_save_folder + '/states_history_' + str(state_index) + '.pkl', 'wb')
             pickle.dump(self.state_arrays_list[state_index], f)
             f.close()
 
