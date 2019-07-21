@@ -66,7 +66,7 @@ def get_brain_params():
         'C_entries_factor': 4,  # C table entries = factor * IO table entries
         'IO_learn_time_factor': 100,  # learn time = factor * IO table entries
         'C_learn_time_factor': 100,  # learn time = factor * C table entries
-        'predict_time_per_layer': [1, 2, 4, 8],
+        'predict_time_per_layer': [2, 4, 8, 8],
         'max_num_goal_states': 9
     }
     return params

@@ -88,7 +88,10 @@ class SingleMultiContextLayer(object):
             self.IO_to_C_W = np.zeros((self.num_C_entries, self.num_IO_entries), np.int)
 
         if self.include_motor:
-            self.motor_table = np.zeros((self.num_IO_entries, 2), np.float)
+            self.store_motor_steps = self.predict_time
+
+            # why * 2? store linear velocity, angular velocity - so two values per step
+            self.motor_table = np.zeros((self.num_IO_entries, self.store_motor_steps * 2), np.float)
 
         self.entries_x_y_theta_input = np.zeros((self.num_IO_entries, 3), np.float)
         self.entries_x_y_theta_output = np.zeros((self.num_IO_entries, 3), np.float)
@@ -187,9 +190,13 @@ class SingleMultiContextLayer(object):
         train_output, train_output_x_y_theta = self.input_history.get_state(state_index=0, delay=0 + self.learning_context_delay)
 
         if self.include_motor:
+            train_motor = []
             # since motor is "last motor command" i.e. what got us to same time's input state,
             # get "last_motor_command" corresponding to output state (after predict_time)
-            train_motor, _ = self.motor_history.get_state(state_index=0, delay=0 + self.learning_context_delay)
+            for k in range(self.store_motor_steps):
+                tmp, _ = self.motor_history.get_state(state_index=0, delay=k + self.learning_context_delay)
+                train_motor.append(tmp[0])
+                train_motor.append(tmp[1])
         else:
             train_motor = None
 

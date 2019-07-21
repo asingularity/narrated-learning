@@ -226,7 +226,7 @@ class MultiLayerEnsemble(object):
             IO_learn_t_range = self.layer_IO_learn_time_ranges[layer_index]
             C_learn_t_range = self.layer_C_learn_time_ranges[layer_index]
 
-            learn_IO = max(1, IO_learn_t_range[0]) <= self.t < IO_learn_t_range[1]
+            learn_IO = max(self.predict_time_per_layer[layer_index], IO_learn_t_range[0]) <= self.t < IO_learn_t_range[1]
             learn_C = C_learn_t_range[0] <= self.t < C_learn_t_range[1]
 
             # if context
