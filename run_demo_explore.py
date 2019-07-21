@@ -15,7 +15,7 @@ import time
 from math import pi
 
 
-MAX_HISTORY_LENGTH = 7000000 + 1
+MAX_HISTORY_LENGTH = 1100000 + 1
 USERNAME = 'intec'
 NUM_INPUT_RAYS = 16
 INPUT_DIM = NUM_INPUT_RAYS * 3

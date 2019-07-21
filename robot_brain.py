@@ -65,6 +65,7 @@ class RobotBrain(object):
                 'layer_IO_learn_times': layer_IO_learn_times,
                 'layer_C_learn_times': layer_C_learn_times,
                 'pre_init_goal_contexts': self._get_goal_contexts_list(),  # this matches _get_context_for_goal_state
+                'max_history_length': params['max_history_length']  # so it can check that learn time ranges are within!
             })
 
     def _init_globals(self, params):

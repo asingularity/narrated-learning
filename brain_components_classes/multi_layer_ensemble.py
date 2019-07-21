@@ -74,8 +74,16 @@ class MultiLayerEnsemble(object):
             step_stop_t = step_start_t + step_learn_time
 
             if IO_learn_layer is not None:
+                assert step_stop_t < params[
+                    'max_history_length'], 'step learn time outside max history length! step_stop_t: ' + str(
+                    step_stop_t) + ', max history length: ' + str(params['max_history_length'])
+
                 self.layer_IO_learn_time_ranges[IO_learn_layer] = (step_start_t, step_stop_t)
             if IO_C_learn_layer is not None:
+                assert step_stop_t < params[
+                    'max_history_length'], 'step learn time outside max history length! step_stop_t: ' + str(
+                    step_stop_t) + ', max history length: ' + str(params['max_history_length'])
+
                 self.layer_C_learn_time_ranges[IO_C_learn_layer] = (step_start_t, step_stop_t)
 
             step_start_t += step_learn_time
