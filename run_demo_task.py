@@ -1,4 +1,4 @@
-
+import cv2
 import random
 import numpy as np
 random.seed(6)
@@ -15,18 +15,18 @@ import time
 from math import pi
 
 
-MAX_HISTORY_LENGTH = 1000000 + 1
+MAX_HISTORY_LENGTH = 1100000 + 1
 USERNAME = 'intec'
 NUM_INPUT_RAYS = 16
 INPUT_DIM = NUM_INPUT_RAYS * 3
 
-SIM_LOAD_NAME = '48DIMx1M_states_positions_saved_2018-01-31T13:09:15.676826'
+SIM_LOAD_NAME = None
 
 
 def get_model_params():
     params = {
-        'max_angular_velocity': 0.25,
-        'linear_velocity': 0.4
+        'max_angular_velocity': 0.35,
+        'max_linear_velocity': 0.4
     }
     return params
 
@@ -42,8 +42,8 @@ def get_sensors_params():
 def get_sim_folder_manager_params():
     params = {
         'sim_prefix': 'test',
-        'sim_folders_path': '/home/' + USERNAME + '/NL-sim/',
-        'scripts_folder_path': '/home/' + USERNAME + '/projects/NL/'
+        'sim_folders_path': '/srv/projects/NL-sim/',
+        'scripts_folder_path': '/srv/projects/NL/'
     }
     return params
 
@@ -56,29 +56,35 @@ def get_brain_params():
         'training_delay': 128,
         'input_dim': INPUT_DIM,
 
+        # ************ load from file ************
+        'predictor_ensemble_load_from_file': False,
+        'predictor_ensemble_filename': '/srv/projects/NL-sim/2019-07-06T22:14:59.538523/ensemble.pkl',
+        'predictor_ensemble_save_every_k_secs': 10 * 60,  # None: never save
+
         # ************ I-O-C predictor ensemble ************
-        # TO DO: add online training back in
-        'predictor_ensemble_load_from_file': True,
-        #'predictor_ensemble_filename': '/home/' + USERNAME + '/NL-sim/' + SIM_LOAD_NAME + '/offline_trained_init_0_adapt_1_repl_1_800_entries_learn_off_500K__PredictorEnsemble.pkl',
-        'predictor_ensemble_filename': '/home/' + USERNAME + '/NL-sim/' + SIM_LOAD_NAME + '/offline_trained_init_1_adapt_1_repl_1_8000_entries_learn_off_900K__PredictorEnsemble.pkl'
-        #'predictor_ensemble_filename': '/home/' + USERNAME + '/NL-sim/' + SIM_LOAD_NAME + '/offline_trained_EXPR_init_1_adapt_1_repl_1_40K_entries_learn_off_900K__PredictorEnsemble.pkl'
+        'IO_entries_per_layer': [1000, 500, 400, 300],
+        'C_entries_factor': 4,  # C table entries = factor * IO table entries
+        'IO_learn_time_factor': 100,  # learn time = factor * IO table entries
+        'C_learn_time_factor': 100,  # learn time = factor * C table entries
+        'predict_time_per_layer': [2, 4, 8, 8],
+        'max_num_goal_states': 9
     }
     return params
 
 
 def get_environment_params():
     params = {
-        'width': 30,
-        'height': 30,
+        'width': 10,
+        'height': 10,
         'add_random_color_boundary_walls': False,
-        'min_num_walls': 8,
-        'max_num_walls': 8,
-        'wall_min_length': 8,
-        'wall_max_length': 10,
-        'min_space_between_walls': 2,
-        'init_robot_x': 15,
-        'init_robot_y': 2,
-        'init_robot_theta': 90
+        'min_num_walls': 4,
+        'max_num_walls': 4,
+        'wall_min_length': 2,
+        'wall_max_length': 3,
+        'min_space_between_walls': 3,
+        'init_robot_x': 5,
+        'init_robot_y': 5,
+        'init_robot_theta': 45
     }
     return params
 
@@ -87,14 +93,16 @@ def get_visualizer_params():
     params = {
         'fps_display_interval': 3,
         'plot_brain_error_frames': None,
-        'image_display_frames_fast': 1000,  # 1  # 1000
+        'image_display_secs_fast': 5,  # 1  # 1000
         'waitKey_time_fast': 1,  # 1, 100, 5000
-        'image_display_frames_slow': 1,  # 1  # 1000
-        'waitKey_time_slow': 10,  # 1, 100, 5000
+        'image_display_secs_slow': 0,  # 0: every frame
+        'waitKey_time_slow': 1,  # 1, 100, 5000
         'scale_topdown_factor': 20,
         'scale_camera_factor': 20,
-        'no_wall_ray_color': (0.1, 0.1, 0.1),
-        'auto_switch_to_slow_disp_time': 0
+        'no_wall_ray_color': (0.3, 0.3, 0.3),
+        'auto_switch_to_slow_disp_time': None,
+        'show_table_ims': True,
+        'init_fast': True  # start with "fast" display
     }
     return params
 
@@ -102,7 +110,7 @@ def get_visualizer_params():
 def get_task_manager_params():
     params = {
         'run_steps_if_task_mode_disabled': MAX_HISTORY_LENGTH,
-        'enabled': True,
+        'enabled': False,
         'num_trials_per_set': 5000,
         'sleep_every_trial': 0.5,  # to be able to see the next goal
         'constrain_to_params': True,
@@ -110,7 +118,13 @@ def get_task_manager_params():
         'min_delta_theta': -pi/6.0,
         'max_delta_theta': pi/6.0,
         'min_distance': 5,
-        'max_distance': 5
+        'max_distance': 5,
+        'goal_regions': [  # c, r, w, h
+            [0, 0, 2, 2],
+            [0, 8, 2, 2],
+            [8, 0, 2, 2],
+            [8, 8, 2, 2]
+        ]
     }
     return params
 
@@ -126,7 +140,6 @@ def init_demo():
         'task_manager': TaskManager(get_task_manager_params())
     }
 
-
 def run_demo(demo_components):
     robot_environment = demo_components['robot_environment']
     robot_brain = demo_components['robot_brain']
@@ -137,26 +150,25 @@ def run_demo(demo_components):
     task_manager = demo_components['task_manager']
 
     use_keyboard_input = False
-    #random.seed(1233)  # change to make movement different, without different walls
-    random.seed(346)  # change to make movement different, without different walls
+    random.seed(1233)  # change to make movement different, without different walls
 
     # TODO fix see through walls from left side of vertical wall viewing right
     # TODO is this fixed?
 
-    while not task_manager.finished_sim():
+    t_process = 0
+    t_total = 0
+    last_disp_t = time.time()
 
-        new_goal_chosen_this_step = task_manager.do_step(topdown_info=robot_environment.get_topdown_info(),
-                                                         robot_environment=robot_environment,
-                                                         robot_sensors=robot_sensors,
-                                                         robot_brain=robot_brain)
+    while not task_manager.finished_sim():
+        t_total_0 = time.time()
+
+        new_goal_chosen_this_step, goal_index_reached_this_step = task_manager.do_step(topdown_info=robot_environment.get_topdown_info(),
+                                                                                       robot_environment=robot_environment,
+                                                                                       robot_sensors=robot_sensors,
+                                                                                       robot_brain=robot_brain)
 
         if new_goal_chosen_this_step:
-            robot_brain.process_new_goal_states(goal_states=task_manager.get_task_goal_states(),
-                                                # these parameters are needed for displaying planned paths:
-                                                visualizer=visualizer,
-                                                rays=robot_sensors.get_rays(),
-                                                topdown_info=robot_environment.get_topdown_info(),
-                                                current_goal_position_angle=task_manager.get_current_goal_position_angle())
+            robot_brain.process_new_goal_states(goal_states=task_manager.get_task_goal_states())
 
         robot_sensors.read_input(nonzero_tiles=robot_environment.get_nonzero_tiles(),
                                  robot_theta=robot_environment.get_robot_theta())
@@ -164,12 +176,13 @@ def run_demo(demo_components):
         #   robot_sensors.rays updated from environment: STATE_T+1
         #   robot_model.last_motor_command: CMD_T
 
-        robot_brain.process_input(rays=robot_sensors.get_rays(),
-                                  last_motor_command=robot_model.get_last_motor_command(),
-                                  models_save_folder=sim_folder_manager.get_models_save_folder(),
-                                  debug_topdown_info=robot_environment.get_topdown_info())  # for storing robot position, angle for debugging planning
+        new_motor_out = robot_brain.process_input_get_motor(rays=robot_sensors.get_rays(),
+                                                            last_motor_command=robot_model.get_last_motor_command(),
+                                                            models_save_folder=sim_folder_manager.get_models_save_folder(),
+                                                            debug_topdown_info=robot_environment.get_topdown_info(),  # for storing robot position, angle for debugging planning
+                                                            goal_index=goal_index_reached_this_step)
 
-        robot_model.act_upon_processing(motor_command=robot_brain.get_motor_output())
+        robot_model.act_upon_processing(motor_command=new_motor_out)
 
         if use_keyboard_input:
             linear_speed, angular_speed = visualizer.get_linear_angular_speed()
@@ -181,21 +194,33 @@ def run_demo(demo_components):
 
         #   robot_model.last_motor_command updated to new random command CMD_T
         #   robot_environment state updated with motor cmd CMD_T: STATE_T -> STATE_T+1
-
+        t_process_0 = time.time()
         visualizer.visualize(rays=robot_sensors.get_rays(),
-                             robot_brain=robot_brain,  # get_autoenc_images, get_predictor_images, get_error_names_histories
                              topdown_info=robot_environment.get_topdown_info(),
                              plots_save_folder=sim_folder_manager.get_plots_save_folder(),
                              current_goal_position_angle=task_manager.get_current_goal_position_angle(),
-                             plan_position_angle_list=robot_brain.get_plan_position_angle_list(rays=robot_sensors.get_rays(),
-                                                                                               goal_states=task_manager.get_task_goal_states()))
+                             goal_regions=task_manager.get_goal_regions(),
+                             robot_brain=robot_brain)  # So it can call .get_table_ims() only sometimes
+        t_process += (time.time() - t_process_0)
 
-    print 'Finished Simulation.'
+        t_total += (time.time() - t_total_0)
+
+        if time.time() - last_disp_t > 30:
+            last_disp_t = time.time()
+            print('t_process / t_total: ', t_process / t_total)
+            t_process = 0
+            t_total = 0
+
+    robot_brain.save_model(models_save_folder=sim_folder_manager.get_models_save_folder())
+    print ('Finished Simulation.')
 
     robot_brain.save_states_history(plots_save_folder=sim_folder_manager.get_plots_save_folder(), state_indices_list=[0])
     robot_brain.save_debug_topdown_info_history(plots_save_folder=sim_folder_manager.get_plots_save_folder())
     task_manager.evaluate(plots_save_folder=sim_folder_manager.get_plots_save_folder())
-    print 'Finished Evaluation.'
+    print ('Finished Evaluation.')
+
+    while True:
+        cv2.waitKey(1)
 
 
 def demo():
