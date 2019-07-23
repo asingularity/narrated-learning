@@ -20,7 +20,8 @@ USERNAME = 'intec'
 NUM_INPUT_RAYS = 16
 INPUT_DIM = NUM_INPUT_RAYS * 3
 
-SIM_LOAD_NAME = None
+SIM_LOAD_NAME = '2019-07-21T21:18:20.175737'
+ENABLE_TASK_MODE = False
 
 
 def get_model_params():
@@ -55,11 +56,12 @@ def get_brain_params():
         'error_average_steps': 1000,
         'training_delay': 128,
         'input_dim': INPUT_DIM,
+        'enable_learning': not ENABLE_TASK_MODE,
 
         # ************ load from file ************
-        'predictor_ensemble_load_from_file': False,
-        'predictor_ensemble_filename': '/srv/projects/NL-sim/2019-07-06T22:14:59.538523/ensemble.pkl',
-        'predictor_ensemble_save_every_k_secs': 10 * 60,  # None: never save
+        'predictor_ensemble_load_from_file': ENABLE_TASK_MODE,
+        'predictor_ensemble_filename': '/srv/projects/NL-sim/' + SIM_LOAD_NAME + '/ensemble.pkl',
+        'predictor_ensemble_save_every_k_secs': None,  # None: never save
 
         # ************ I-O-C predictor ensemble ************
         'IO_entries_per_layer': [1000, 500, 400, 300],
@@ -109,22 +111,15 @@ def get_visualizer_params():
 
 def get_task_manager_params():
     params = {
-        'run_steps_if_task_mode_disabled': MAX_HISTORY_LENGTH,
-        'enabled': False,
-        'num_trials_per_set': 5000,
-        'sleep_every_trial': 0.5,  # to be able to see the next goal
-        'constrain_to_params': True,
-        'max_trial_steps': 2,
-        'min_delta_theta': -pi/6.0,
-        'max_delta_theta': pi/6.0,
-        'min_distance': 5,
-        'max_distance': 5,
+        'run_steps': MAX_HISTORY_LENGTH,
+        'enabled': ENABLE_TASK_MODE,
         'goal_regions': [  # c, r, w, h
             [0, 0, 2, 2],
             [0, 8, 2, 2],
             [8, 0, 2, 2],
             [8, 8, 2, 2]
-        ]
+        ],
+        'steps_per_task_goal': 100  # if enabled is True
     }
     return params
 
@@ -162,13 +157,10 @@ def run_demo(demo_components):
     while not task_manager.finished_sim():
         t_total_0 = time.time()
 
-        new_goal_chosen_this_step, goal_index_reached_this_step = task_manager.do_step(topdown_info=robot_environment.get_topdown_info(),
-                                                                                       robot_environment=robot_environment,
-                                                                                       robot_sensors=robot_sensors,
-                                                                                       robot_brain=robot_brain)
-
-        if new_goal_chosen_this_step:
-            robot_brain.process_new_goal_states(goal_states=task_manager.get_task_goal_states())
+        current_task_goal_index, goal_index_reached_this_step = task_manager.do_step(topdown_info=robot_environment.get_topdown_info(),
+                                                                                     robot_environment=robot_environment,
+                                                                                     robot_sensors=robot_sensors,
+                                                                                     robot_brain=robot_brain)
 
         robot_sensors.read_input(nonzero_tiles=robot_environment.get_nonzero_tiles(),
                                  robot_theta=robot_environment.get_robot_theta())
@@ -180,7 +172,8 @@ def run_demo(demo_components):
                                                             last_motor_command=robot_model.get_last_motor_command(),
                                                             models_save_folder=sim_folder_manager.get_models_save_folder(),
                                                             debug_topdown_info=robot_environment.get_topdown_info(),  # for storing robot position, angle for debugging planning
-                                                            goal_index=goal_index_reached_this_step)
+                                                            goal_index_reached=goal_index_reached_this_step,
+                                                            goal_index_task=current_task_goal_index)
 
         robot_model.act_upon_processing(motor_command=new_motor_out)
 
@@ -198,7 +191,6 @@ def run_demo(demo_components):
         visualizer.visualize(rays=robot_sensors.get_rays(),
                              topdown_info=robot_environment.get_topdown_info(),
                              plots_save_folder=sim_folder_manager.get_plots_save_folder(),
-                             current_goal_position_angle=task_manager.get_current_goal_position_angle(),
                              goal_regions=task_manager.get_goal_regions(),
                              robot_brain=robot_brain)  # So it can call .get_table_ims() only sometimes
         t_process += (time.time() - t_process_0)

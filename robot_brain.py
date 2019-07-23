@@ -27,6 +27,10 @@ class RobotBrain(object):
             self.predictor_ensemble.init_after_load()
             f.close()
             print( 'done loading predictor ensemble.')
+
+            if not params['enable_learning']:
+                self.predictor_ensemble.disable_learning()
+
         else:
 
             dim = params['input_dim']
@@ -62,6 +66,7 @@ class RobotBrain(object):
                 'IO_entries_per_layer': IO_entries_per_layer,
                 'C_entries_per_layer': C_entries_per_layer,
                 'predict_time_per_layer': params['predict_time_per_layer'],
+                'enable_learning': params['enable_learning'],
                 'layer_IO_learn_times': layer_IO_learn_times,
                 'layer_C_learn_times': layer_C_learn_times,
                 'pre_init_goal_contexts': self._get_goal_contexts_list(),  # this matches _get_context_for_goal_state
@@ -112,14 +117,17 @@ class RobotBrain(object):
         :param goal_index:
         :return:
         '''
-        goal_context = np.zeros(1, np.float32)
-        goal_context[0] = goal_index
+        if goal_index is None:
+            return None
+        else:
+            goal_context = np.zeros(1, np.float32)
+            goal_context[0] = goal_index
 
-        return goal_context
+            return goal_context
 
     # ************ process ************
 
-    def process_input_get_motor(self, rays, last_motor_command, models_save_folder, debug_topdown_info, goal_index):
+    def process_input_get_motor(self, rays, last_motor_command, models_save_folder, debug_topdown_info, goal_index_reached, goal_index_task):
         '''
 
         :param rays:
@@ -131,12 +139,19 @@ class RobotBrain(object):
 
         '''
 
-        goal_context_state = self._get_context_for_goal_state(goal_index=goal_index)
+        # TODO properly use goal_index_reached for learning only, goal_index_task for task mode only
+        # TODO if goal_index_task is None: assume not in task mode i.e. do default behavior for learning, what it is now, including table look-ups.
 
-        if goal_context_state[0] > 0:
+        goal_context_state_learning = self._get_context_for_goal_state(goal_index=goal_index_reached)
+        assert goal_context_state_learning is not None
+
+        goal_context_state_task = self._get_context_for_goal_state(goal_index=goal_index_task)
+        # context state for task might be None if not in task mode
+
+        if goal_context_state_learning[0] > 0:
             debug_print = False
             if debug_print:
-                print('goal_context_state:', goal_context_state)
+                print('goal_context_state:', goal_context_state_learning)
 
         current_visual_input = self._process_sensors(rays=rays)
         # previous_motor_command was initiated at T-1, applied [T-1, T],
@@ -153,14 +168,18 @@ class RobotBrain(object):
         self._process_debug_topdown_info_history(newest_topdown_info=debug_topdown_info,
                                                  debug_topdown_info_history=self.debug_topdown_info_history)
 
-        self.predictor_ensemble.step(input_state=newest_states_list[0],
-                                     input_x_y_theta=self.debug_topdown_info_history.get_td_info(delay=0),
-                                     goal_context_state=goal_context_state,
-                                     last_motor_command=last_motor_command)
+        motor_out = self.predictor_ensemble.step(input_state=newest_states_list[0],
+                                                 input_x_y_theta=self.debug_topdown_info_history.get_td_info(delay=0),
+                                                 goal_context_state_learning=goal_context_state_learning,
+                                                 goal_context_state_task=goal_context_state_task,
+                                                 last_motor_command=last_motor_command)
 
-        if self.goal_states is not None and self.predictor_ensemble is not None:
+        if goal_context_state_task is not None and self.predictor_ensemble is not None:
             # TODO this is where "task mode" is enabled
-            self.motor_out = None  # (linear_velocity, angular_velocity)
+
+            # (linear_velocity, angular_velocity)
+            # TODO don't hard-code to assume two motor steps! Average over all instead?
+            self.motor_out = (motor_out[0] + motor_out[2]) * 0.5, (motor_out[1] + motor_out[3]) * 0.5
         else:
             # this informs robot model to apply random movement
             self.motor_out = None
@@ -176,13 +195,6 @@ class RobotBrain(object):
 
         self.t += 1
         return self.motor_out
-
-    def process_new_goal_states(self, goal_states):
-        '''
-        do any planning if needed
-        :return:
-        '''
-        self.goal_states = goal_states
 
     def _process_sensors(self, rays):
         ray_radians = rays['ray_radians']

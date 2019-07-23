@@ -32,6 +32,8 @@ class MultiLayerEnsemble(object):
         self.tables = []
         self.last_i_c_dists = []
 
+        self.learning_enabled = params['enable_learning']
+
         IO_entries_per_layer = params['IO_entries_per_layer']
         C_entries_per_layer = params['C_entries_per_layer']
 
@@ -152,20 +154,21 @@ class MultiLayerEnsemble(object):
 
         self.predict_time_per_layer = np.array(params['predict_time_per_layer'])
 
-    def step(self, input_state, input_x_y_theta, goal_context_state, last_motor_command):
+    def disable_learning(self):
+        self.learning_enabled = False
+
+    def step(self, input_state, input_x_y_theta, goal_context_state_learning, goal_context_state_task, last_motor_command):
         '''
 
         :param input_state:
         :param input_x_y_theta:
         :param learn:
-        :param goal_context_state: None or a context state for a currently reached goal
+        :param goal_context_state_learning: None or a context state for a currently reached goal
+        :param goal_context_state_task: None or a context state for a current task goal
         :return:
         '''
 
-        # TODO actually in this function: goal_context_state should never be None
-        #   because: even a none-goal state has a context
-
-        assert goal_context_state is not None
+        assert goal_context_state_learning is not None  # non-goal state has a context
 
         scaled_i_c_dists = None
 
@@ -179,10 +182,6 @@ class MultiLayerEnsemble(object):
                 layer_input_x_y_theta = None
 
             if layer_index == self.n_layers - 1:
-
-                # TODO how to properly introduce goal state? passing correct "future" layer_context state here? or everything delayed?
-                # here we either need goal-context from the future, or we need to apply it with a separate function (not passed in step)
-
                 '''
                 what is context delay here?
 
@@ -209,30 +208,38 @@ class MultiLayerEnsemble(object):
 
                 '''
 
-                # TODO define goal_encountered, goal_context_state
-                # TODO make sure single_multi_context_layer can deal with both scenarios below
-                # TODO for task mode- we need to add a "task_context_state" which will be same for most layers
-
-                if goal_context_state is not None:
-                    layer_context_state = goal_context_state
-                    layer_context_delay = np.sum(self.predict_time_per_layer)
+                if goal_context_state_learning is not None:
+                    layer_context_state_learning = goal_context_state_learning
+                    layer_context_delay_learning = np.sum(self.predict_time_per_layer)
                 else:
-                    layer_context_state = None
-                    layer_context_delay = 0
+                    layer_context_state_learning = None
+                    layer_context_delay_learning = 0
+
+                if goal_context_state_task is not None:
+                    layer_context_state_task = goal_context_state_task
+                else:
+                    layer_context_state_task = None
             else:
-                layer_context_state = self.last_i_c_dists[layer_index + 1]
-                layer_context_delay = 0
+                layer_context_state_learning = self.last_i_c_dists[layer_index + 1]
+                # by setting this to None if goal is None- we can tell the layer whether it is in task mode or not
+                # the layer will check whether layer_context_state_task is None to determine if lookup should use context to get dists
+                if goal_context_state_task is None:
+                    layer_context_state_task = None
+                else:
+                    layer_context_state_task = self.last_i_c_dists[layer_index + 1]  # it is in task mode
+                layer_context_delay_learning = 0
 
             IO_learn_t_range = self.layer_IO_learn_time_ranges[layer_index]
             C_learn_t_range = self.layer_C_learn_time_ranges[layer_index]
 
-            learn_IO = max(self.predict_time_per_layer[layer_index], IO_learn_t_range[0]) <= self.t < IO_learn_t_range[1]
-            learn_C = C_learn_t_range[0] <= self.t < C_learn_t_range[1]
+            learn_IO = self.learning_enabled and (max(self.predict_time_per_layer[layer_index], IO_learn_t_range[0]) <= self.t < IO_learn_t_range[1])
+            learn_C = self.learning_enabled and (C_learn_t_range[0] <= self.t < C_learn_t_range[1])
 
             # if context
             scaled_i_c_dists, IO_replaced, C_replaced = self.tables[layer_index].step(input_state=layer_input_state,
-                                                                                      learning_context_state=layer_context_state,
-                                                                                      learning_context_delay=layer_context_delay,  # how much is this context delayed compared to I/O? normally zero, but for goal-context, it is delayed
+                                                                                      task_context_state=layer_context_state_task,
+                                                                                      learning_context_state=layer_context_state_learning,
+                                                                                      learning_context_delay=layer_context_delay_learning,  # how much is this context delayed compared to I/O? normally zero, but for goal-context, it is delayed
                                                                                       input_x_y_theta=layer_input_x_y_theta,
                                                                                       learn_IO=learn_IO,
                                                                                       learn_C=learn_C,

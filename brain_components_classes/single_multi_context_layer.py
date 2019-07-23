@@ -126,7 +126,7 @@ class SingleMultiContextLayer(object):
 
         return _scale_dists(dists=dists)
 
-    def step(self, input_state, learning_context_state, learning_context_delay, input_x_y_theta, learn_IO, learn_C, last_motor_command=None, debug_info=None):
+    def step(self, input_state, task_context_state, learning_context_state, learning_context_delay, input_x_y_theta, learn_IO, learn_C, last_motor_command=None, debug_info=None):
         '''
 
         step once in real-time
@@ -164,12 +164,19 @@ class SingleMultiContextLayer(object):
         #   if context defined, then based on I+C (TBD)
         #   so - same line- learning_context_state is None or valid here:
 
-        # TODO how to incorporate a valid learning_context_state here?? learning_context_delay???
-        dists = self.cuda_table_IO.query(query_input=input_state,
-                                         query_output=None,
-                                         query_context=None)  # TODO task mode: must incorporate context but from context table!
-
-        scaled_ic_dists = self._scale_dists(dists)
+        # keep in mind that task_context_state == learning_context_state for all but the last layer
+        '''
+        for learning, below, we disregard context. why? because when learning, context may not be well defined and we should learn without it
+        layer_context_state_task will be None for every layer if not in task mode, and not None for all layers if in task mode
+        '''
+        if task_context_state is None:  # learning mode
+            dists = self.cuda_table_IO.query(query_input=input_state,
+                                             query_output=None,
+                                             query_context=None)
+            scaled_ic_dists = self._scale_dists(dists)
+        else:
+            # TODO task mode: must incorporate context but using the separate context table!
+            pass
 
         self.input_history.store_new_states(newest_states_list=[input_state], extra_data_list=[input_x_y_theta])
         self.context_history.store_new_states(newest_states_list=[learning_context_state], extra_data_list=[input_x_y_theta])

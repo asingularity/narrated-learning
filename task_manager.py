@@ -10,7 +10,105 @@ import matplotlib.pyplot as plt
 
 class TaskManager(object):
     def __init__(self, params):
+        self.run_steps = params['run_steps']
+        self.task_mode_enabled = params['enabled']
+        self.goal_regions = params['goal_regions']
+        self.steps_per_task_goal = params['steps_per_task_goal']
+
+        self.step = 0
+
+        self.task_goal_step = 0
+        self.current_task_goal_index = None
+
+    def get_goal_regions(self):
+        return self.goal_regions
+
+    def do_step(self, topdown_info, robot_environment, robot_sensors, robot_brain):
+        if self.task_mode_enabled:
+            pass
+        else:
+            pass
+
+        robot_x = topdown_info['robot_x']
+        robot_y = topdown_info['robot_y']
+
+        # zero: means no goal reached / default state
+        goal_index_reached_this_step = 0
+
+        goal_index = 1
+        for goal_region in self.goal_regions:
+            gr_c, gr_r, gr_w, gr_h = goal_region
+
+            if gr_r <= robot_y <= gr_r + gr_h and gr_c <= robot_x <= gr_c + gr_w:
+                assert goal_index_reached_this_step == 0, 'cannot have overlapping goal regions!'
+
+                goal_index_reached_this_step = goal_index
+                if self.task_mode_enabled:
+                    if goal_index_reached_this_step == self.current_task_goal_index:
+                        print('Correct goal reached!')
+                    else:
+                        print('Incorrect goal reached!')
+
+            goal_index += 1
+
+        if self.task_mode_enabled:
+            if self.current_task_goal_index is None:
+                self.current_task_goal_index = random.randint(1, len(self.goal_regions))
+                self.task_goal_step = 0
+
+            elif self.task_goal_step > self.steps_per_task_goal:
+                new_task_goal_index = self.current_task_goal_index
+                while new_task_goal_index == self.current_task_goal_index:
+                    new_task_goal_index = random.randint(1, len(self.goal_regions))
+
+                self.current_task_goal_index = new_task_goal_index
+                self.task_goal_step = 0
+
+            self.task_goal_step += 1
+
+        self.step += 1
+        return self.current_task_goal_index, goal_index_reached_this_step
+
+    def evaluate(self, plots_save_folder):
+        pass
+
+    def finished_sim(self):
         '''
+        if task mode enabled, compute based on trials and trial sets. otherwise, max time.
+        :return:
+        '''
+
+        if self.step >= self.run_steps:
+            return True
+        else:
+            return False
+
+
+class TaskManagerOLD(object):
+    def __init__(self, params):
+        '''
+
+            def get_task_manager_params():
+                params = {
+                    'run_steps_if_task_mode_disabled': MAX_HISTORY_LENGTH,
+                    'enabled': False,
+                    'num_trials_per_set': 5000,
+                    'sleep_every_trial': 0.5,  # to be able to see the next goal
+                    'constrain_to_params': True,
+                    'max_trial_steps': 2,
+                    'min_delta_theta': -pi/6.0,
+                    'max_delta_theta': pi/6.0,
+                    'min_distance': 5,
+                    'max_distance': 5,
+                    'goal_regions': [  # c, r, w, h
+                        [0, 0, 2, 2],
+                        [0, 8, 2, 2],
+                        [8, 0, 2, 2],
+                        [8, 8, 2, 2]
+                    ]
+                }
+                return params
+
 
         trial_set_params_dict: {'learning_rate': [0.01, 0.02, 0.04, 0.01, 0.02, 0.04],
                                 'task_length': [10, 10, 10, 20, 20, 20]}
