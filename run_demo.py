@@ -61,7 +61,7 @@ def get_brain_params():
         # ************ load from file ************
         'predictor_ensemble_load_from_file': ENABLE_TASK_MODE,
         'predictor_ensemble_filename': '/srv/projects/NL-sim/' + SIM_LOAD_NAME + '/ensemble.pkl',
-        'predictor_ensemble_save_every_k_secs': None,  # None: never save
+        'predictor_ensemble_save_every_k_secs': 60 * 60,  # None: never save
 
         # ************ I-O-C predictor ensemble ************
         'IO_entries_per_layer': [5000, 5000, 4000, 3000],
