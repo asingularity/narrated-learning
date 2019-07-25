@@ -199,7 +199,7 @@ class Visualizer(object):
 
             # if new_im taller: add spacer to concat_im below it
             if new_im.shape[0] > concat_im.shape[0]:
-                concat_im = np.vstack((new_im, spacer * np.ones((new_im.shape[0] - concat_im.shape[0], concat_im.shape[1]))))
+                concat_im = np.vstack((concat_im, spacer * np.ones((new_im.shape[0] - concat_im.shape[0], concat_im.shape[1]))))
 
             concat_im = np.hstack((concat_im, spacer * np.ones((concat_im.shape[0], 20)), new_im))
 
@@ -249,7 +249,7 @@ class Visualizer(object):
             if W_im is not None:
                 concat_im = self._concat_with_spacer(concat_im=concat_im, new_im=W_im)
 
-        cv2.imshow('all_tables', concat_im)
+        cv2.imshow('C0, W0, I1, C1, W1, I2, ...', concat_im)
 
     def visualize(self, rays, topdown_info, plots_save_folder, goal_regions, robot_brain):
         self._display_fps()

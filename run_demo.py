@@ -15,7 +15,7 @@ import time
 from math import pi
 
 
-MAX_HISTORY_LENGTH = 1100000 + 1
+MAX_HISTORY_LENGTH = 1600000 + 1
 USERNAME = 'intec'
 NUM_INPUT_RAYS = 16
 INPUT_DIM = NUM_INPUT_RAYS * 3
@@ -64,10 +64,10 @@ def get_brain_params():
         'predictor_ensemble_save_every_k_secs': None,  # None: never save
 
         # ************ I-O-C predictor ensemble ************
-        'IO_entries_per_layer': [1000, 500, 400, 300],
+        'IO_entries_per_layer': [5000, 5000, 4000, 3000],
         'C_entries_factor': 4,  # C table entries = factor * IO table entries
-        'IO_learn_time_factor': 100,  # learn time = factor * IO table entries
-        'C_learn_time_factor': 100,  # learn time = factor * C table entries
+        'IO_learn_time_factor': 20,  # learn time = factor * IO table entries
+        'C_learn_time_factor': 20,  # learn time = factor * C table entries
         'predict_time_per_layer': [2, 4, 8, 8],
         'max_num_goal_states': 9
     }
