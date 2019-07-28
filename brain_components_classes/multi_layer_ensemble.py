@@ -172,6 +172,8 @@ class MultiLayerEnsemble(object):
 
         scaled_i_c_dists = None
 
+        motor_out = None
+
         for layer_index in range(self.n_layers):
 
             if layer_index == 0:
@@ -235,16 +237,18 @@ class MultiLayerEnsemble(object):
             learn_IO = self.learning_enabled and (max(self.predict_time_per_layer[layer_index], IO_learn_t_range[0]) <= self.t < IO_learn_t_range[1])
             learn_C = self.learning_enabled and (C_learn_t_range[0] <= self.t < C_learn_t_range[1])
 
-            # if context
-            scaled_i_c_dists, IO_replaced, C_replaced = self.tables[layer_index].step(input_state=layer_input_state,
-                                                                                      task_context_state=layer_context_state_task,
-                                                                                      learning_context_state=layer_context_state_learning,
-                                                                                      learning_context_delay=layer_context_delay_learning,  # how much is this context delayed compared to I/O? normally zero, but for goal-context, it is delayed
-                                                                                      input_x_y_theta=layer_input_x_y_theta,
-                                                                                      learn_IO=learn_IO,
-                                                                                      learn_C=learn_C,
-                                                                                      last_motor_command=last_motor_command,
-                                                                                      debug_info='layer_index=' + str(layer_index))
+            #if self.t > 9000:
+            # print('Step layer: ', layer_index)
+
+            scaled_i_c_dists, IO_replaced, C_replaced, motor_out_task = self.tables[layer_index].step(input_state=layer_input_state,
+                                                                                                      task_context_state=layer_context_state_task,
+                                                                                                      learning_context_state=layer_context_state_learning,
+                                                                                                      learning_context_delay=layer_context_delay_learning,  # how much is this context delayed compared to I/O? normally zero, but for goal-context, it is delayed
+                                                                                                      input_x_y_theta=layer_input_x_y_theta,
+                                                                                                      learn_IO=learn_IO,
+                                                                                                      learn_C=learn_C,
+                                                                                                      last_motor_command=last_motor_command,
+                                                                                                      debug_info='layer_index=' + str(layer_index))
 
             if IO_replaced:
                 self.stat_IO_row_replaces[layer_index] += 1
@@ -252,6 +256,9 @@ class MultiLayerEnsemble(object):
                 self.stat_C_row_replaces[layer_index] += 1
 
             self.last_i_c_dists[layer_index] = scaled_i_c_dists.copy()
+
+            if layer_index == 0:
+                motor_out = motor_out_task
 
         if time.time() - self.stat_disp_last_time > self.stat_disp_interval:
             print('Time:', self.t)
@@ -263,6 +270,11 @@ class MultiLayerEnsemble(object):
             self.stat_disp_last_time = time.time()
 
         self.t += 1
+
+        #if motor_out is not None:
+        #    print('motor_out', motor_out)
+
+        return motor_out
 
     def get_table_ims(self):
         IO_im_list = []

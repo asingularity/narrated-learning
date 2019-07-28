@@ -14,6 +14,7 @@ class TaskManager(object):
         self.task_mode_enabled = params['enabled']
         self.goal_regions = params['goal_regions']
         self.steps_per_task_goal = params['steps_per_task_goal']
+        self.enabled_after_t = params['enabled_after_t']
 
         self.step = 0
 
@@ -24,6 +25,10 @@ class TaskManager(object):
         return self.goal_regions
 
     def do_step(self, topdown_info, robot_environment, robot_sensors, robot_brain):
+        if self.enabled_after_t is not None:
+            if self.step > self.enabled_after_t and not self.task_mode_enabled:
+                self.task_mode_enabled = True
+
         if self.task_mode_enabled:
             pass
         else:
@@ -45,15 +50,20 @@ class TaskManager(object):
                 goal_index_reached_this_step = goal_index
                 if self.task_mode_enabled:
                     if goal_index_reached_this_step == self.current_task_goal_index:
-                        print('Correct goal reached!')
+                        print('Task Manager::Correct goal reached!')
                     else:
-                        print('Incorrect goal reached!')
+                        print('Task Manager::Incorrect goal reached!')
 
             goal_index += 1
 
         if self.task_mode_enabled:
             if self.current_task_goal_index is None:
                 self.current_task_goal_index = random.randint(1, len(self.goal_regions))
+                print()
+                print('***')
+                print('Task Manager:: set current goal index to: ', self.current_task_goal_index)
+                print('***')
+                print()
                 self.task_goal_step = 0
 
             elif self.task_goal_step > self.steps_per_task_goal:
@@ -62,6 +72,12 @@ class TaskManager(object):
                     new_task_goal_index = random.randint(1, len(self.goal_regions))
 
                 self.current_task_goal_index = new_task_goal_index
+                print()
+                print('***')
+                print('Task Manager:: set current goal index to: ', self.current_task_goal_index)
+                print('***')
+                print()
+
                 self.task_goal_step = 0
 
             self.task_goal_step += 1

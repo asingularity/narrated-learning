@@ -86,6 +86,7 @@ class SingleMultiContextLayer(object):
                                           table=table)
 
             self.IO_to_C_W = np.zeros((self.num_C_entries, self.num_IO_entries), np.int)
+            self.IO_to_C_W_tr = np.zeros((self.num_IO_entries, self.num_C_entries), np.int)
 
         if self.include_motor:
             self.store_motor_steps = self.predict_time
@@ -105,6 +106,8 @@ class SingleMultiContextLayer(object):
         # used for init
         self.init_IO_row_num = None
         self.init_C_row_num = None
+
+        self.t = 0
 
     def prepare_for_save(self):
         self.cuda_table_IO.prepare_for_save()
@@ -159,24 +162,57 @@ class SingleMultiContextLayer(object):
             if learn_C or learning_context_state is not None:
                 assert learning_context_state.shape[0] == self.context_dim, str((learning_context_state.shape, self.context_dim))
 
+        '''
         # compute dists
         #   if context not defined, then based on I alone
         #   if context defined, then based on I+C (TBD)
         #   so - same line- learning_context_state is None or valid here:
-
         # keep in mind that task_context_state == learning_context_state for all but the last layer
-        '''
         for learning, below, we disregard context. why? because when learning, context may not be well defined and we should learn without it
         layer_context_state_task will be None for every layer if not in task mode, and not None for all layers if in task mode
         '''
+
+        motor_out_task = None
+
+        if self.t % 10000 == 0:
+            print()
+            sum_C_connections_to_IO_rows = np.sum(self.IO_to_C_W_tr, axis=1).flatten()
+            print(self.t, 'sum_C_connections_to_IO_rows')
+            print(sum_C_connections_to_IO_rows.shape, np.amin(sum_C_connections_to_IO_rows),
+                  np.amax(sum_C_connections_to_IO_rows),
+                  np.count_nonzero(sum_C_connections_to_IO_rows == 0) * 1.0 / sum_C_connections_to_IO_rows.shape[0])
+            print()
+
         if task_context_state is None:  # learning mode
             dists = self.cuda_table_IO.query(query_input=input_state,
                                              query_output=None,
                                              query_context=None)
             scaled_ic_dists = self._scale_dists(dists)
         else:
-            # TODO task mode: must incorporate context but using the separate context table!
-            pass
+
+            dists_IO = self.cuda_table_IO.query(query_input=input_state,
+                                                query_output=None,
+                                                query_context=None)
+
+            dists_C = self.cuda_table_C.query(query_input=task_context_state,
+                                              query_output=None,
+                                              query_context=None)
+
+            # self.IO_to_C_W: C x IO
+            # self.IO_to_C_W_tr: IO x C
+            # both below are IO x C
+            tmp = np.multiply(self.IO_to_C_W_tr, np.tile(dists_C, [dists_IO.shape[0], 1]))
+            tmp[tmp==0] = np.amax(tmp) * 1.1  # arbitrarily larger than largest max
+            dists_C_per_IO = np.amin(tmp, 1)
+
+            # combining depends on distance metric, but for square root of sum of squares: just square both dists per row, then sum them, then take new square root
+            # note that query returns squared sum, but no square root! so we just add them after scaling by max
+
+            dists_combined = dists_IO * 1.0 / np.amax(dists_IO) + dists_C_per_IO * 1.0 / np.amax(dists_C_per_IO)
+            scaled_ic_dists = self._scale_dists(dists_combined)
+
+            if self.include_motor:
+                motor_out_task = self.motor_table[np.argmin(scaled_ic_dists), :]
 
         self.input_history.store_new_states(newest_states_list=[input_state], extra_data_list=[input_x_y_theta])
         self.context_history.store_new_states(newest_states_list=[learning_context_state], extra_data_list=[input_x_y_theta])
@@ -228,7 +264,9 @@ class SingleMultiContextLayer(object):
         else:
             C_row_replaced = False
 
-        return scaled_ic_dists, IO_row_replaced, C_row_replaced
+        self.t += 1
+
+        return scaled_ic_dists, IO_row_replaced, C_row_replaced, motor_out_task
 
     def _learn_IO(self, input_state, output_state, input_x_y_theta, output_x_y_theta, motor_command):
         row_replaced = False
@@ -379,6 +417,7 @@ class SingleMultiContextLayer(object):
 
                     # zero out its connections to IO
                     self.IO_to_C_W[r_r_ind, :] = 0
+                    self.IO_to_C_W_tr[:, r_r_ind] = 0
 
         # *****
         # (2) learn IO to Context association table: IO_to_C_W
@@ -397,6 +436,7 @@ class SingleMultiContextLayer(object):
         min_row_IO = sorted_dist_indices[0]
 
         self.IO_to_C_W[min_row_C, min_row_IO] = 1
+        self.IO_to_C_W_tr[min_row_IO, min_row_C] = 1
 
         return row_replaced
 

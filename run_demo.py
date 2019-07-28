@@ -64,8 +64,8 @@ def get_brain_params():
         'predictor_ensemble_save_every_k_secs': 60 * 60,  # None: never save
 
         # ************ I-O-C predictor ensemble ************
-        'IO_entries_per_layer': [5000, 5000, 4000, 3000],
-        'C_entries_factor': 4,  # C table entries = factor * IO table entries
+        'IO_entries_per_layer': [500, 500, 400, 300],  # [5000, 5000, 4000, 3000]
+        'C_entries_factor': 2,  # 4?  C table entries = factor * IO table entries
         'IO_learn_time_factor': 20,  # learn time = factor * IO table entries
         'C_learn_time_factor': 20,  # learn time = factor * C table entries
         'predict_time_per_layer': [2, 4, 8, 8],
@@ -97,7 +97,7 @@ def get_visualizer_params():
         'plot_brain_error_frames': None,
         'image_display_secs_fast': 5,  # 1  # 1000
         'waitKey_time_fast': 1,  # 1, 100, 5000
-        'image_display_secs_slow': 0,  # 0: every frame
+        'image_display_secs_slow': 0.1,  # 0: every frame
         'waitKey_time_slow': 1,  # 1, 100, 5000
         'scale_topdown_factor': 20,
         'scale_camera_factor': 20,
@@ -113,13 +113,14 @@ def get_task_manager_params():
     params = {
         'run_steps': MAX_HISTORY_LENGTH,
         'enabled': ENABLE_TASK_MODE,
+        'enabled_after_t': 90000,  # 9000 for 20x  # None or a time step, additional way to enable but with delay. overridden by 'enabled' flag.
         'goal_regions': [  # c, r, w, h
             [0, 0, 2, 2],
             [0, 8, 2, 2],
             [8, 0, 2, 2],
             [8, 8, 2, 2]
         ],
-        'steps_per_task_goal': 100  # if enabled is True
+        'steps_per_task_goal': 300  # if enabled is True
     }
     return params
 
