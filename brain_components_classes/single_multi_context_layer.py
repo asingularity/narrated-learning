@@ -10,7 +10,7 @@ from brain_components_classes.states_history import StatesLimitedHistory
 NL_SIM_DIR = '/srv/projects/NL-sim/'
 
 
-def _scale_dists(dists):
+def _scale_dists_rank(dists):
     '''
         such that linear for:
         min distance pair -> output confidence = 1.0
@@ -27,6 +27,70 @@ def _scale_dists(dists):
 
     dists_copy = (dists_copy * 1.0 / len(dists_copy)).astype(dists.dtype)
     return dists_copy
+
+
+def _scale_dists_max(dists):
+    '''
+        such that linear for:
+        min distance pair -> output confidence = 1.0
+        max distance pair -> output confidence = 0.0
+        hard nonlinearity otherwise (maxed out to 0 or 1)
+    '''
+
+    temp = np.argsort(dists)
+
+    dists_copy = np.zeros_like(dists)
+    val = 1.0
+
+    top_k = 30  # 10
+    for k in range(top_k):
+        dists_copy[temp[k]] = val
+        val *= 0.99
+
+    dists_copy = dists_copy.astype(dists.dtype)
+    return dists_copy
+
+
+def _scale_dists_simple(dists):
+    min_dist = np.amin(dists)
+    max_dist = np.amax(dists)
+    if max_dist == 0:
+        dists_copy = dists.copy()
+    elif max_dist - min_dist == 0:
+        dists_copy = dists * 1.0 / max_dist
+    else:
+        dists_copy = (dists - min_dist) * 1.0 / (max_dist - min_dist)
+
+    return dists_copy
+
+
+def _scale_dists_rank_2(dists):
+    '''
+        such that linear for:
+        min distance pair -> output confidence = 1.0
+        max distance pair -> output confidence = 0.0
+        hard nonlinearity otherwise (maxed out to 0 or 1)
+    '''
+
+    dists_copy = dists.copy()
+    temp = np.argsort(dists_copy)
+
+    ranks = np.empty_like(temp)
+    ranks[temp] = np.arange(len(dists_copy))[::-1]
+
+    dists_copy = ranks
+    dists_copy = (dists_copy * 1.0 / (len(dists_copy) - 1)).astype(dists.dtype)
+
+    # new part: exponential decay
+    # dists_copy * 1.0 / np.exp(1.0 - dists_copy)
+
+    return dists_copy
+
+
+def _scale_dists(dists):
+    # return _scale_dists_max(dists=dists)
+    return _scale_dists_rank_2(dists=dists)
+    # return _scale_dists_simple(dists=dists)
 
 
 class SingleMultiContextLayer(object):
@@ -174,7 +238,7 @@ class SingleMultiContextLayer(object):
 
         motor_out_task = None
 
-        if self.t % 10000 == 0:
+        if self.t % 2000 == 0:
             print()
             sum_C_connections_to_IO_rows = np.sum(self.IO_to_C_W_tr, axis=1).flatten()
             print(self.t, 'sum_C_connections_to_IO_rows')
@@ -201,6 +265,7 @@ class SingleMultiContextLayer(object):
             # self.IO_to_C_W: C x IO
             # self.IO_to_C_W_tr: IO x C
             # both below are IO x C
+
             tmp = np.multiply(self.IO_to_C_W_tr, np.tile(dists_C, [dists_IO.shape[0], 1]))
             tmp[tmp==0] = np.amax(tmp) * 1.1  # arbitrarily larger than largest max
             dists_C_per_IO = np.amin(tmp, 1)
@@ -212,7 +277,10 @@ class SingleMultiContextLayer(object):
             scaled_ic_dists = self._scale_dists(dists_combined)
 
             if self.include_motor:
-                motor_out_task = self.motor_table[np.argmin(scaled_ic_dists), :]
+                row_index = np.argmax(scaled_ic_dists)  # TODO document this well!
+                # TODO above was min, but now it is max because: max of dists is actually the "minimum distance" index- we reverse order with _scale_dists_rank_2!!!
+                motor_out_task = self.motor_table[row_index, :]
+                # print('motor_out_task:', motor_out_task, 'row_index:', row_index)
 
         self.input_history.store_new_states(newest_states_list=[input_state], extra_data_list=[input_x_y_theta])
         self.context_history.store_new_states(newest_states_list=[learning_context_state], extra_data_list=[input_x_y_theta])

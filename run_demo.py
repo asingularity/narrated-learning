@@ -15,7 +15,7 @@ import time
 from math import pi
 
 
-MAX_HISTORY_LENGTH = 1600000 + 1
+MAX_HISTORY_LENGTH = 10600000 + 1
 USERNAME = 'intec'
 NUM_INPUT_RAYS = 16
 INPUT_DIM = NUM_INPUT_RAYS * 3
@@ -61,13 +61,13 @@ def get_brain_params():
         # ************ load from file ************
         'predictor_ensemble_load_from_file': ENABLE_TASK_MODE,
         'predictor_ensemble_filename': '/srv/projects/NL-sim/' + SIM_LOAD_NAME + '/ensemble.pkl',
-        'predictor_ensemble_save_every_k_secs': 60 * 60,  # None: never save
+        'predictor_ensemble_save_every_k_secs': None,  # None: never save
 
         # ************ I-O-C predictor ensemble ************
-        'IO_entries_per_layer': [500, 500, 400, 300],  # [5000, 5000, 4000, 3000]
+        'IO_entries_per_layer': [500, 500, 400, 300],  # [500, 500, 400, 300],  # [5000, 5000, 4000, 3000]
         'C_entries_factor': 2,  # 4?  C table entries = factor * IO table entries
-        'IO_learn_time_factor': 20,  # learn time = factor * IO table entries
-        'C_learn_time_factor': 20,  # learn time = factor * C table entries
+        'IO_learn_time_factor': 4,  # 20: learn time = factor * IO table entries
+        'C_learn_time_factor': 4,  # 20: learn time = factor * C table entries
         'predict_time_per_layer': [2, 4, 8, 8],
         'max_num_goal_states': 9
     }
@@ -113,7 +113,7 @@ def get_task_manager_params():
     params = {
         'run_steps': MAX_HISTORY_LENGTH,
         'enabled': ENABLE_TASK_MODE,
-        'enabled_after_t': 90000,  # 9000 for 20x  # None or a time step, additional way to enable but with delay. overridden by 'enabled' flag.
+        'enabled_after_t': 18000, #900000,  # TODO set to later for larger network! 9000 for 20x  # None or a time step, additional way to enable but with delay. overridden by 'enabled' flag.
         'goal_regions': [  # c, r, w, h
             [0, 0, 2, 2],
             [0, 8, 2, 2],
@@ -135,6 +135,7 @@ def init_demo():
         'sim_folder_manager': SimFolderManager(get_sim_folder_manager_params()),
         'task_manager': TaskManager(get_task_manager_params())
     }
+
 
 def run_demo(demo_components):
     robot_environment = demo_components['robot_environment']
@@ -169,12 +170,14 @@ def run_demo(demo_components):
         #   robot_sensors.rays updated from environment: STATE_T+1
         #   robot_model.last_motor_command: CMD_T
 
+        t_process_0 = time.time()
         new_motor_out = robot_brain.process_input_get_motor(rays=robot_sensors.get_rays(),
                                                             last_motor_command=robot_model.get_last_motor_command(),
                                                             models_save_folder=sim_folder_manager.get_models_save_folder(),
                                                             debug_topdown_info=robot_environment.get_topdown_info(),  # for storing robot position, angle for debugging planning
                                                             goal_index_reached=goal_index_reached_this_step,
                                                             goal_index_task=current_task_goal_index)
+        t_process += (time.time() - t_process_0)
 
         robot_model.act_upon_processing(motor_command=new_motor_out)
 
@@ -188,13 +191,11 @@ def run_demo(demo_components):
 
         #   robot_model.last_motor_command updated to new random command CMD_T
         #   robot_environment state updated with motor cmd CMD_T: STATE_T -> STATE_T+1
-        t_process_0 = time.time()
         visualizer.visualize(rays=robot_sensors.get_rays(),
                              topdown_info=robot_environment.get_topdown_info(),
                              plots_save_folder=sim_folder_manager.get_plots_save_folder(),
                              goal_regions=task_manager.get_goal_regions(),
                              robot_brain=robot_brain)  # So it can call .get_table_ims() only sometimes
-        t_process += (time.time() - t_process_0)
 
         t_total += (time.time() - t_total_0)
 
