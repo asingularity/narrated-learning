@@ -4,7 +4,7 @@ import cv2
 import numpy as np
 np.set_printoptions(suppress=True)
 
-from brain_components import StatesHistory, MotorHistory, DebugTopdownInfoHistory, MultiLayerEnsemble
+from brain_components import StatesHistory, MotorHistory, DebugTopdownInfoHistory, MultiLayerEnsemble, SimpleMultiLayer
 
 
 class RobotBrain(object):
@@ -34,51 +34,28 @@ class RobotBrain(object):
         else:
 
             dim = params['input_dim']
-
-            IO_entries_per_layer = params['IO_entries_per_layer']
-            n_layers = len(IO_entries_per_layer)
-
-            C_entries_factor = params['C_entries_factor']
-            IO_learn_time_factor = params['IO_learn_time_factor']
-            C_learn_time_factor = params['C_learn_time_factor']
-
-            C_entries_per_layer = []
-            layer_IO_learn_times = []
-            layer_C_learn_times = []
-
             goal_states_dim = 1
+            table_entries = params['table_entries']
 
-            for k in range(n_layers):
-                IO_entries = IO_entries_per_layer[k]
-                layer_IO_learn_times.append(IO_entries * IO_learn_time_factor)
-
-                C_entries = IO_entries * C_entries_factor
-                layer_C_learn_times.append(C_entries * C_learn_time_factor)
-
-                if k < n_layers - 1:
-                    C_entries_per_layer.append(C_entries)
-                else:
-                    C_entries_per_layer.append(self.max_num_goal_states + 1)  # why + 1? It is the "non-goal" operating state.
-
-            self.predictor_ensemble = MultiLayerEnsemble(params={
+            self.predictor_ensemble = SimpleMultiLayer(params={
                 'input_dim': dim,
                 'goal_context_dim': goal_states_dim,
-                'IO_entries_per_layer': IO_entries_per_layer,
-                'C_entries_per_layer': C_entries_per_layer,
+                'entries': table_entries,
                 'predict_time_per_layer': params['predict_time_per_layer'],
                 'enable_learning': params['enable_learning'],
-                'layer_IO_learn_times': layer_IO_learn_times,
-                'layer_C_learn_times': layer_C_learn_times,
+                'table_learn_time': params['table_learn_time'],
+                'prediction_learn_time': params['prediction_learn_time'],
                 'pre_init_goal_contexts': self._get_goal_contexts_list(),  # this matches _get_context_for_goal_state
                 'max_history_length': params['max_history_length']  # so it can check that learn time ranges are within!
             })
+
+            # __________________________ HERE NOW __________________________
 
     def _init_globals(self, params):
         self.t = 0
         self.motor_out = None
         self.goal_states = None
         self.max_history_length = params['max_history_length']  # only needed for experimental exploration
-        self.training_delay = params['training_delay']  # new, not used yet
 
     def _init_states_history(self, params, states_dim_list):
         states_history_params = {}

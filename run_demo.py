@@ -54,7 +54,6 @@ def get_brain_params():
         # ************ general ************
         'max_history_length': MAX_HISTORY_LENGTH,
         'error_average_steps': 1000,
-        'training_delay': 128,
         'input_dim': INPUT_DIM,
         'enable_learning': not ENABLE_TASK_MODE,
 
@@ -64,10 +63,9 @@ def get_brain_params():
         'predictor_ensemble_save_every_k_secs': None,  # None: never save
 
         # ************ I-O-C predictor ensemble ************
-        'IO_entries_per_layer': [500, 500, 400, 300],  # [500, 500, 400, 300],  # [5000, 5000, 4000, 3000]
-        'C_entries_factor': 2,  # 4?  C table entries = factor * IO table entries
-        'IO_learn_time_factor': 4,  # 20: learn time = factor * IO table entries
-        'C_learn_time_factor': 4,  # 20: learn time = factor * C table entries
+        'table_entries': 500,
+        'table_learn_time': 500 * 4,
+        'prediction_learn_time': 500 * 8,
         'predict_time_per_layer': [2, 4, 8, 8],
         'max_num_goal_states': 9
     }

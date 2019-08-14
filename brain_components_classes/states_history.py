@@ -78,6 +78,7 @@ class StatesLimitedHistory(object):
 
     def get_state(self, state_index, delay):
         if self.active:
+            assert delay <= self.max_delay
             assert self.t_mod < self.max_delay
             # t_mod is where most recent data point is stored
 
@@ -91,6 +92,30 @@ class StatesLimitedHistory(object):
             return state, extra_data
         else:
             return None, None
+
+    def get_state_sequence(self, state_index, delay_long, delay_short):
+        # TODO this could be more efficient: just two lookups instead!
+
+        if self.active:
+            assert delay_long <= self.max_delay
+            assert delay_short <= self.max_delay
+            assert delay_short <= delay_long
+
+            state_seq = []
+            for delay in range(delay_long, delay_short - 1, -1):
+                assert self.t_mod < self.max_delay
+                # t_mod is where most recent data point is stored
+
+                time_index = self.t_mod - delay
+
+                if time_index < 0:
+                    time_index = self.max_delay + time_index
+
+                state = self.state_arrays_list[state_index][time_index, :]
+                state_seq.append(state)
+            return np.array(state_seq)
+        else:
+            return None
 
     def get_newest_states_list(self):
         if self.active:
