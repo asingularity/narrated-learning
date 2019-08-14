@@ -218,7 +218,8 @@ class Visualizer(object):
 
         concat_im = None
 
-        cv2.imshow('IO_0', IO_im_list[0])
+        if len(IO_im_list) > 0:
+            cv2.imshow('IO_0', IO_im_list[0])
 
         for k in range(len(IO_im_list)):
             IO_im = IO_im_list[k]
@@ -249,7 +250,8 @@ class Visualizer(object):
             if W_im is not None:
                 concat_im = self._concat_with_spacer(concat_im=concat_im, new_im=W_im)
 
-        cv2.imshow('C0, W0, I1, C1, W1, I2, ...', concat_im)
+        if concat_im is not None:
+            cv2.imshow('C0, W0, I1, C1, W1, I2, ...', concat_im)
 
     def visualize(self, rays, topdown_info, plots_save_folder, goal_regions, robot_brain):
         self._display_fps()
