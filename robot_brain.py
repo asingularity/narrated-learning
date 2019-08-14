@@ -145,7 +145,7 @@ class RobotBrain(object):
         self._process_debug_topdown_info_history(newest_topdown_info=debug_topdown_info,
                                                  debug_topdown_info_history=self.debug_topdown_info_history)
 
-        motor_out = self.predictor_ensemble.step(input_state=newest_states_list[0],
+        motor_out = self.predictor_ensemble.step(input_state=newest_states_list[0].astype(np.float32),
                                                  input_x_y_theta=self.debug_topdown_info_history.get_td_info(delay=0),
                                                  goal_context_state_learning=goal_context_state_learning,
                                                  goal_context_state_task=goal_context_state_task,
