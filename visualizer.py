@@ -253,6 +253,38 @@ class Visualizer(object):
         if concat_im is not None:
             cv2.imshow('C0, W0, I1, C1, W1, I2, ...', concat_im)
 
+    def _display_I_and_W_ims_tiled(self, I_im, W_im_list):
+        '''
+
+        | I | W | W | W | ...
+
+        :param I_im:
+        :param W_im_list:
+        :return:
+        '''
+
+        concat_im = None
+
+        cv2.imshow('I', I_im)
+
+        for k in range(len(W_im_list)):
+            W_im = W_im_list[k].copy()
+
+            if np.amax(W_im) == 255:
+                W_im = W_im * 1.0 / 255.0
+
+            if concat_im is None:
+                if W_im is not None:
+                    concat_im = W_im.copy()
+            else:
+                if W_im is not None:
+                    concat_im = self._concat_with_spacer(concat_im=concat_im, new_im=W_im)
+
+        print(len(W_im_list))
+        # TODO why see only one W??? And no spacer??
+
+        cv2.imshow('W', concat_im)
+
     def visualize(self, rays, topdown_info, plots_save_folder, goal_regions, robot_brain):
         self._display_fps()
 
@@ -267,10 +299,17 @@ class Visualizer(object):
                 if self.show_table_ims:
                     table_ims = robot_brain.get_table_ims()
 
-                    IO_im_list, C_im_list, W_im_list = table_ims
-                    self._display_table_ims_tiled(IO_im_list=IO_im_list,
-                                                  C_im_list=C_im_list,
-                                                  W_im_list=W_im_list)
+                    if len(table_ims) == 3:
+                        # visualizer for multi_layer_ensemble
+                        IO_im_list, C_im_list, W_im_list = table_ims
+                        self._display_table_ims_tiled(IO_im_list=IO_im_list,
+                                                      C_im_list=C_im_list,
+                                                      W_im_list=W_im_list)
+                    elif len(table_ims) == 2:
+                        # visualizer for simple_multi_layer:
+                        I_im, W_im_list = table_ims
+                        self._display_I_and_W_ims_tiled(I_im=I_im,
+                                                        W_im_list=W_im_list)
 
                 self.last_image_display_time = time.time()
 

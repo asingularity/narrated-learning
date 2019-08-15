@@ -335,11 +335,15 @@ class SimpleMultiLayer(object):
         # TODO in task mode: show planned trajectories, decisions per layer during settling process
         # TODO allow multiple planning steps per task step
 
-        IO_im_list = []
-        C_im_list = []
         W_im_list = []
+        for k in range(self.n_layers - 1):  # why -1? because goal context W counts as a separate "layer"
+            W_im_list.append(self._get_W_im(W=self.W_by_layer[k]))
 
-        return IO_im_list, C_im_list, W_im_list
+        W_im_list.append(self._get_W_im(W=self.W_goal))
+
+
+
+        return self._get_I_im(), W_im_list
 
     def save_to_pkl(self, file_path, file_name):
 
@@ -348,11 +352,60 @@ class SimpleMultiLayer(object):
     def init_after_load(self):
         self.cuda_table_I.init_after_load()
 
+    def _get_table_im(self, cuda_table, layer_index=0):
 
+        # layer 0: display as color images below
+        # layer 1...N-1: display as grayscale [0, 1] values?
 
+        input_dim = cuda_table.input_dim
 
+        table = np.transpose(cuda_table.get_table_from_gpu())
 
+        if layer_index == 0:
+            entries = 40 * 1 * 3
+        else:
+            entries = table.shape[0]
 
+        im_input = table[0:entries, 0:input_dim]
+
+        if layer_index == 0:
+            A = im_input
+            C = A
+
+            im = np.reshape(C, (C.shape[0], C.shape[1] / 3, 3))
+
+            im = cv2.resize(im, dsize=(0,0), fx=6, fy=6, interpolation=cv2.INTER_NEAREST)
+        else:
+            # A = im_input
+            # B = im_prediction
+            # C = im_context
+            # D = np.hstack((A, B, C))
+            D = table
+
+            max_dim = max(D.shape[0], D.shape[1])
+
+            imscale = 500. / max_dim  # 0.2: full table, 2.0
+            # imscale = 5.0
+            im = cv2.resize(D, dsize=(0,0), fx=imscale, fy=imscale, interpolation=cv2.INTER_NEAREST)
+
+        return im
+
+    def _get_I_im(self):
+        return self._get_table_im(cuda_table=self.cuda_table_I, layer_index=0)
+
+    def _get_W_im(self, W):
+        if W is None:
+            return None
+
+        D = W.astype(np.uint8) * 255
+
+        max_dim = max(D.shape[0], D.shape[1])
+
+        imscale = 500. / max_dim  # 0.2: full table, 2.0
+        # imscale = 5.0
+        im = cv2.resize(D, dsize=(0, 0), fx=imscale, fy=imscale, interpolation=cv2.INTER_NEAREST)
+
+        return im
 
 
 

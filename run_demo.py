@@ -64,8 +64,8 @@ def get_brain_params():
 
         # ************ I-O-C predictor ensemble ************
         'table_entries': 500,
-        'table_learn_time': 500 * 4,
-        'prediction_learn_time': 500 * 8,
+        'table_learn_time': 500 * 4 * 10,
+        'prediction_learn_time': 500 * 8 * 10,
         'predict_time_per_layer': [2, 4, 8, 8],
         'max_num_goal_states': 9
     }
@@ -111,7 +111,7 @@ def get_task_manager_params():
     params = {
         'run_steps': MAX_HISTORY_LENGTH,
         'enabled': ENABLE_TASK_MODE,
-        'enabled_after_t': 18000, #900000,  # TODO set to later for larger network! 9000 for 20x  # None or a time step, additional way to enable but with delay. overridden by 'enabled' flag.
+        'enabled_after_t': None,  # None or a time step, additional way to enable but with delay. overridden by 'enabled' flag.
         'goal_regions': [  # c, r, w, h
             [0, 0, 2, 2],
             [0, 8, 2, 2],

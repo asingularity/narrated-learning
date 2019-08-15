@@ -200,8 +200,8 @@ class RobotBrain(object):
         self.debug_topdown_info_history.save_history(plots_save_folder)
 
     def get_table_ims(self):
-        IO_im_list, C_im_list, W_im_list = self.predictor_ensemble.get_table_ims()
-        return IO_im_list, C_im_list, W_im_list
+        ims_lists = self.predictor_ensemble.get_table_ims()
+        return ims_lists
 
     def save_model(self, models_save_folder):
         self.predictor_ensemble.save_to_pkl(file_path=models_save_folder,
