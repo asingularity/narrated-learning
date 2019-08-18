@@ -57,7 +57,7 @@ class Visualizer(object):
             self.last_FPS_time = time.time()
         self.fps_frames += 1
 
-    def _get_topdown_map(self, rays, topdown_info, goal_regions, plan_I_seq, entries_x_y_theta_input):
+    def _get_topdown_map(self, rays, topdown_info, goal_regions, plan_I_seq, entries_x_y_theta_input, current_task_goal_index):
         im = topdown_info['env_map_copy']
         robot_x = topdown_info['robot_x']
         robot_y = topdown_info['robot_y']
@@ -74,33 +74,7 @@ class Visualizer(object):
         # rays should be drawn on resized image so always width 1
         resized_image = cv2.resize(src=im, dsize=(0, 0), fx=self.scale_topdown_factor, fy=self.scale_topdown_factor, interpolation=cv2.INTER_NEAREST)
 
-        for k in range(ray_colors.shape[0]):
-
-            pt2_x = robot_x + ray_lengths[k] * cos(ray_radians[k])
-            pt2_y = robot_y + ray_lengths[k] * sin(ray_radians[k])
-            ray_color = ray_colors[k, :]
-            if np.sum(ray_color) == 0:
-                ray_color = self.no_wall_ray_color
-
-            cv2.line(resized_image,
-                     pt1=(int(robot_x * self.scale_topdown_factor), int(robot_y * self.scale_topdown_factor)),
-                     pt2=(int(pt2_x * self.scale_topdown_factor), int(pt2_y * self.scale_topdown_factor)),
-                     color=(ray_color[0], ray_color[1], ray_color[2]),
-                     thickness=1)
-
-        # goal regions also drawn on resized image in case they are only size 1
-        for goal_region in goal_regions:
-            gr_c, gr_r, gr_w, gr_h = goal_region
-            gr_c = gr_c * self.scale_topdown_factor
-            gr_r = gr_r * self.scale_topdown_factor
-            gr_w = gr_w * self.scale_topdown_factor
-            gr_h = gr_h * self.scale_topdown_factor
-
-            resized_image[gr_r:gr_r + gr_h / 4, gr_c:gr_c+gr_w / 4] = 1.0
-            resized_image[gr_r + gr_h / 4:gr_r + gr_h / 2, gr_c + gr_w / 4:gr_c+gr_w / 2] = 1.0
-            resized_image[gr_r + gr_h / 2:gr_r + 3 * gr_h / 4, gr_c + gr_w / 2:gr_c+ 3 * gr_w / 4] = 1.0
-            resized_image[gr_r + 3 * gr_h / 4:gr_r + gr_h, gr_c + 3 * gr_w / 4:gr_c+gr_w] = 1.0
-
+        # display plan first, otherwise it overwhelms the screen
         # use plan_I_seq, entries_x_y_theta_input here
         if plan_I_seq is not None:
             # plan
@@ -117,10 +91,11 @@ class Visualizer(object):
                     r_y = td_info[1]
                     r_theta = td_info[2]
 
+                    # TODO make color instead of grascale to show plan with "br" factor
                     cv2.circle(img=resized_image,
                                center=(int(r_x * self.scale_topdown_factor), int(r_y * self.scale_topdown_factor)),
                                radius=5,
-                               color=(1.0 * br, 1.0 * br, 1.0 * br),
+                               color=(1.0 * br, 0.6 * br, 0.3 * br),
                                thickness=3)
                     g2_x = r_x + 0.5 * cos(r_theta)
                     g2_y = r_y + 0.5 * sin(r_theta)
@@ -130,14 +105,71 @@ class Visualizer(object):
                              color=(0.5 * br, 0.5 * br, 0),
                              thickness=2)
 
-                br *= 0.85
+                br *= 0.75
+
+        # display circle for robot
+        cv2.circle(img=resized_image,
+                   center=(int(robot_x * self.scale_topdown_factor), int(robot_y * self.scale_topdown_factor)),
+                   radius=5,
+                   color=(1.0, 1.0, 1.0),
+                   thickness=3)
+
+        # display rays
+        for k in range(ray_colors.shape[0]):
+
+            pt2_x = robot_x + ray_lengths[k] * cos(ray_radians[k])
+            pt2_y = robot_y + ray_lengths[k] * sin(ray_radians[k])
+            ray_color = ray_colors[k, :]
+            if np.sum(ray_color) == 0:
+                ray_color = self.no_wall_ray_color
+
+            cv2.line(resized_image,
+                     pt1=(int(robot_x * self.scale_topdown_factor), int(robot_y * self.scale_topdown_factor)),
+                     pt2=(int(pt2_x * self.scale_topdown_factor), int(pt2_y * self.scale_topdown_factor)),
+                     color=(ray_color[0], ray_color[1], ray_color[2]),
+                     thickness=1)
+
+        # goal regions also drawn on resized image in case they are only size 1
+        goal_region_index = 0
+        for goal_region in goal_regions:
+            gr_c, gr_r, gr_w, gr_h = goal_region
+            gr_c = gr_c * self.scale_topdown_factor
+            gr_r = gr_r * self.scale_topdown_factor
+            gr_w = gr_w * self.scale_topdown_factor
+            gr_h = gr_h * self.scale_topdown_factor
+
+            resized_image[gr_r:gr_r + gr_h / 4, gr_c:gr_c+gr_w / 4] = 1.0
+            resized_image[gr_r + gr_h / 4:gr_r + gr_h / 2, gr_c + gr_w / 4:gr_c+gr_w / 2] = 1.0
+            resized_image[gr_r + gr_h / 2:gr_r + 3 * gr_h / 4, gr_c + gr_w / 2:gr_c+ 3 * gr_w / 4] = 1.0
+            resized_image[gr_r + 3 * gr_h / 4:gr_r + gr_h, gr_c + 3 * gr_w / 4:gr_c+gr_w] = 1.0
+
+            goal_region_index += 1
+
+        # draw goal region of current goal - rectangle afterward, for clarity, on top of plans
+        goal_region_index = 0
+        for goal_region in goal_regions:
+            gr_c, gr_r, gr_w, gr_h = goal_region
+            gr_c = gr_c * self.scale_topdown_factor
+            gr_r = gr_r * self.scale_topdown_factor
+            gr_w = gr_w * self.scale_topdown_factor
+            gr_h = gr_h * self.scale_topdown_factor
+
+            # indicate goal region that is active with rectangle or something
+            if goal_region_index + 1 == current_task_goal_index:
+                cv2.rectangle(img=resized_image,
+                              pt1=(gr_c, gr_r),
+                              pt2=(gr_c + gr_w, gr_r + gr_h),
+                              color=(188, 188, 188),
+                              thickness=1)
+
+            goal_region_index += 1
 
         return resized_image
 
-    def _display_graphic_map(self, rays, topdown_info, goal_regions, plan_I_seq, entries_x_y_theta_input):
+    def _display_graphic_map(self, rays, topdown_info, goal_regions, plan_I_seq, entries_x_y_theta_input, current_task_goal_index):
 
         ray_colors = rays['ray_colors'].reshape((len(rays['ray_colors']) / 3, 3))
-        resized_image = self._get_topdown_map(rays, topdown_info, goal_regions, plan_I_seq, entries_x_y_theta_input)
+        resized_image = self._get_topdown_map(rays, topdown_info, goal_regions, plan_I_seq, entries_x_y_theta_input, current_task_goal_index)
 
         cv2.imshow('env_map', resized_image)
 
@@ -316,7 +348,7 @@ class Visualizer(object):
 
         cv2.imshow('W', concat_im)
 
-    def visualize(self, rays, topdown_info, plots_save_folder, goal_regions, robot_brain):
+    def visualize(self, rays, topdown_info, plots_save_folder, goal_regions, current_task_goal_index, robot_brain):
         self._display_fps()
 
         if self.image_display_secs is not None:
@@ -326,7 +358,7 @@ class Visualizer(object):
             if display_now:
                 # print('displaying now:', time.time() - self.last_image_display_time, self.image_display_secs)
                 plan_I_seq, entries_x_y_theta_input = robot_brain.get_current_plan()
-                self._display_graphic_map(rays, topdown_info, goal_regions, plan_I_seq, entries_x_y_theta_input)
+                self._display_graphic_map(rays, topdown_info, goal_regions, plan_I_seq, entries_x_y_theta_input, current_task_goal_index)
 
                 if self.show_table_ims:
                     table_ims = robot_brain.get_table_ims()

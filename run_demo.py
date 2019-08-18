@@ -23,7 +23,7 @@ INPUT_DIM = NUM_INPUT_RAYS * 3
 SIM_LOAD_NAME = '2019-07-21T21:18:20.175737'
 ENABLE_TASK_MODE = False
 
-TABLE_ENTRIES = 2000
+TABLE_ENTRIES = 8000
 TABLE_LEARN_TIME = TABLE_ENTRIES * 8 * 1
 PREDICTION_LEARN_TIME = TABLE_ENTRIES * 8 * 1
 
@@ -70,7 +70,7 @@ def get_brain_params():
         'table_entries': TABLE_ENTRIES,
         'table_learn_time': TABLE_LEARN_TIME,
         'prediction_learn_time': PREDICTION_LEARN_TIME,
-        'predict_time_per_layer': [2, 2, 4, 8],  # referenced to layer before it
+        'predict_time_per_layer': [2, 2, 4, 4],  # referenced to layer before it
         'max_num_goal_states': 9
     }
     return params
@@ -198,6 +198,7 @@ def run_demo(demo_components):
                              topdown_info=robot_environment.get_topdown_info(),
                              plots_save_folder=sim_folder_manager.get_plots_save_folder(),
                              goal_regions=task_manager.get_goal_regions(),
+                             current_task_goal_index=current_task_goal_index,
                              robot_brain=robot_brain)  # So it can call .get_table_ims() only sometimes
 
         t_total += (time.time() - t_total_0)
