@@ -15,6 +15,7 @@ class TaskManager(object):
         self.goal_regions = params['goal_regions']
         self.steps_per_task_goal = params['steps_per_task_goal']
         self.enabled_after_t = params['enabled_after_t']
+        self.debug_print = params['debug_print']
 
         self.step = 0
 
@@ -50,9 +51,11 @@ class TaskManager(object):
                 goal_index_reached_this_step = goal_index
                 if self.task_mode_enabled:
                     if goal_index_reached_this_step == self.current_task_goal_index:
-                        print('Task Manager::Correct goal reached!')
+                        if self.debug_print:
+                            print('Task Manager::Correct goal reached!')
                     else:
-                        print('Task Manager::Incorrect goal reached!')
+                        if self.debug_print:
+                            print('Task Manager::Incorrect goal reached!')
 
             goal_index += 1
 

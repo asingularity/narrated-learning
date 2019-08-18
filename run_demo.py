@@ -23,6 +23,10 @@ INPUT_DIM = NUM_INPUT_RAYS * 3
 SIM_LOAD_NAME = '2019-07-21T21:18:20.175737'
 ENABLE_TASK_MODE = False
 
+TABLE_ENTRIES = 2000
+TABLE_LEARN_TIME = TABLE_ENTRIES * 8 * 1
+PREDICTION_LEARN_TIME = TABLE_ENTRIES * 8 * 1
+
 
 def get_model_params():
     params = {
@@ -63,10 +67,10 @@ def get_brain_params():
         'predictor_ensemble_save_every_k_secs': None,  # None: never save
 
         # ************ I-O-C predictor ensemble ************
-        'table_entries': 500,
-        'table_learn_time': 500 * 4 * 10,
-        'prediction_learn_time': 500 * 8 * 10,
-        'predict_time_per_layer': [2, 4, 8, 8],
+        'table_entries': TABLE_ENTRIES,
+        'table_learn_time': TABLE_LEARN_TIME,
+        'prediction_learn_time': PREDICTION_LEARN_TIME,
+        'predict_time_per_layer': [2, 2, 4, 8],  # referenced to layer before it
         'max_num_goal_states': 9
     }
     return params
@@ -100,7 +104,7 @@ def get_visualizer_params():
         'scale_topdown_factor': 20,
         'scale_camera_factor': 20,
         'no_wall_ray_color': (0.3, 0.3, 0.3),
-        'auto_switch_to_slow_disp_time': None,
+        'auto_switch_to_slow_disp_time': TABLE_LEARN_TIME + PREDICTION_LEARN_TIME,
         'show_table_ims': True,
         'init_fast': True  # start with "fast" display
     }
@@ -111,14 +115,15 @@ def get_task_manager_params():
     params = {
         'run_steps': MAX_HISTORY_LENGTH,
         'enabled': ENABLE_TASK_MODE,
-        'enabled_after_t': None,  # None or a time step, additional way to enable but with delay. overridden by 'enabled' flag.
+        'enabled_after_t': TABLE_LEARN_TIME + PREDICTION_LEARN_TIME,  # None or a time step, additional way to enable but with delay. overridden by 'enabled' flag.
         'goal_regions': [  # c, r, w, h
             [0, 0, 2, 2],
             [0, 8, 2, 2],
             [8, 0, 2, 2],
             [8, 8, 2, 2]
         ],
-        'steps_per_task_goal': 300  # if enabled is True
+        'steps_per_task_goal': 1,  # if enabled is True
+        'debug_print': False  # prints correct / incorrect goal reached
     }
     return params
 

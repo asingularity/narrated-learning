@@ -57,7 +57,7 @@ class Visualizer(object):
             self.last_FPS_time = time.time()
         self.fps_frames += 1
 
-    def _get_topdown_map(self, rays, topdown_info, goal_regions):
+    def _get_topdown_map(self, rays, topdown_info, goal_regions, plan_I_seq, entries_x_y_theta_input):
         im = topdown_info['env_map_copy']
         robot_x = topdown_info['robot_x']
         robot_y = topdown_info['robot_y']
@@ -101,12 +101,43 @@ class Visualizer(object):
             resized_image[gr_r + gr_h / 2:gr_r + 3 * gr_h / 4, gr_c + gr_w / 2:gr_c+ 3 * gr_w / 4] = 1.0
             resized_image[gr_r + 3 * gr_h / 4:gr_r + gr_h, gr_c + 3 * gr_w / 4:gr_c+gr_w] = 1.0
 
+        # use plan_I_seq, entries_x_y_theta_input here
+        if plan_I_seq is not None:
+            # plan
+
+            br = 1.0
+            #for td_info in plan_position_angle_list:
+            for k in range(len(plan_I_seq)):
+                I_in = plan_I_seq[k]
+                nnz_rows = list(np.nonzero(I_in)[0])  # list of nonzero rows
+
+                for row in nnz_rows:
+                    td_info = entries_x_y_theta_input[row]
+                    r_x = td_info[0]
+                    r_y = td_info[1]
+                    r_theta = td_info[2]
+
+                    cv2.circle(img=resized_image,
+                               center=(int(r_x * self.scale_topdown_factor), int(r_y * self.scale_topdown_factor)),
+                               radius=5,
+                               color=(1.0 * br, 1.0 * br, 1.0 * br),
+                               thickness=3)
+                    g2_x = r_x + 0.5 * cos(r_theta)
+                    g2_y = r_y + 0.5 * sin(r_theta)
+                    cv2.line(resized_image,
+                             pt1=(int(r_x * self.scale_topdown_factor), int(r_y * self.scale_topdown_factor)),
+                             pt2=(int(g2_x * self.scale_topdown_factor), int(g2_y * self.scale_topdown_factor)),
+                             color=(0.5 * br, 0.5 * br, 0),
+                             thickness=2)
+
+                br *= 0.85
+
         return resized_image
 
-    def _display_graphic_map(self, rays, topdown_info, goal_regions):
+    def _display_graphic_map(self, rays, topdown_info, goal_regions, plan_I_seq, entries_x_y_theta_input):
 
         ray_colors = rays['ray_colors'].reshape((len(rays['ray_colors']) / 3, 3))
-        resized_image = self._get_topdown_map(rays, topdown_info, goal_regions)
+        resized_image = self._get_topdown_map(rays, topdown_info, goal_regions, plan_I_seq, entries_x_y_theta_input)
 
         cv2.imshow('env_map', resized_image)
 
@@ -294,7 +325,8 @@ class Visualizer(object):
 
             if display_now:
                 # print('displaying now:', time.time() - self.last_image_display_time, self.image_display_secs)
-                self._display_graphic_map(rays, topdown_info, goal_regions)
+                plan_I_seq, entries_x_y_theta_input = robot_brain.get_current_plan()
+                self._display_graphic_map(rays, topdown_info, goal_regions, plan_I_seq, entries_x_y_theta_input)
 
                 if self.show_table_ims:
                     table_ims = robot_brain.get_table_ims()

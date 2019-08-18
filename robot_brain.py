@@ -155,8 +155,9 @@ class RobotBrain(object):
             # TODO this is where "task mode" is enabled
 
             # (linear_velocity, angular_velocity)
-            # TODO don't hard-code to assume two motor steps! Average over all instead?
-            self.motor_out = (motor_out[0] + motor_out[2]) * 0.5, (motor_out[1] + motor_out[3]) * 0.5
+            self.motor_out = motor_out
+            # don't hard-code to assume two motor steps! Average over all instead?
+            # self.motor_out = (motor_out[0] + motor_out[2]) * 0.5, (motor_out[1] + motor_out[3]) * 0.5
         else:
             # this informs robot model to apply random movement
             self.motor_out = None
@@ -198,6 +199,10 @@ class RobotBrain(object):
     def save_debug_topdown_info_history(self, plots_save_folder):
         print( 'saving debug topdown info history...')
         self.debug_topdown_info_history.save_history(plots_save_folder)
+
+    def get_current_plan(self):
+        plan_I_seq, entries_x_y_theta_input = self.predictor_ensemble.get_current_plan()
+        return plan_I_seq, entries_x_y_theta_input
 
     def get_table_ims(self):
         ims_lists = self.predictor_ensemble.get_table_ims()

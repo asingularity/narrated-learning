@@ -74,7 +74,7 @@ class SimpleMultiLayer(object):
             # TODO these need to be better represented in a sparse way, on cuda
             self.W_by_layer[k] = np.zeros((self.entries, self.entries), np.int)
 
-        self.W_goal = np.zeros((self.entries, int(np.amax(pre_init_goal_contexts))), np.int)
+        self.W_goal = np.zeros((int(np.amax(pre_init_goal_contexts)), self.entries), np.int)
         self.goal_context_values = pre_init_goal_contexts
 
         # print(goal_context_dim, self.goal_context_values)
@@ -101,6 +101,8 @@ class SimpleMultiLayer(object):
         self.t = 0
 
         self.predict_time_per_layer = np.array(params['predict_time_per_layer'])
+
+        self.plan_I_seq = None
 
     def _init_histories(self):
         # TODO must determine max delay here
@@ -243,7 +245,7 @@ class SimpleMultiLayer(object):
             in_entries = np.nonzero(train_I_now)
             out_entries = np.nonzero(train_I_future)
 
-            self.W_by_layer[k][in_entries, out_entries] = 1
+            self.W_by_layer[k][out_entries, in_entries] = 1
 
             if k == 0:
                 # motor learning
@@ -273,17 +275,104 @@ class SimpleMultiLayer(object):
         assert goal_context_future.shape[0] == 1
 
         # TODO init W_goal to be appropriate: max goal value
-        self.W_goal[in_entries, goal_context_future[0]] = 1
+        self.W_goal[goal_context_future[0], in_entries] = 1
 
     def _get_motor_for_task(self, goal_context_state_task):
         '''
+
+        n_layers = 4
+        list(range(n_layers - 1))
+            [0, 1, 2]
+        list(range(n_layers - 2, -1, -1))
+            [2, 1, 0]
 
         :param goal_context_state_task:
         :return:
         '''
 
+        # print('goal_context_state_task:', goal_context_state_task)  # i.e. [3]
+        # do planning here, and display plan as it is being iteratively planned
+
+        # pause viewing of last plan, with correct info displayed
+        # TODO remove this later
+        time.sleep(1)
+
+        # (1) do forward pass from current I, and show "matched rows" number per layer
+
+        I_seq = []  # store sequence of I
+        x_y_theta_seq = []  # store sequence of x_y_theta
+
+        (I, x_y_theta) = self.I_history.get_state(state_index=0, delay=0)
+
+        I_in = I.copy()
+        I_seq.append(I)  # I_seq[0]
+
+        for k in range(self.n_layers - 1):  # why -1? because goal context W counts as a separate "layer"
+            W_layer = self.W_by_layer[k]  # W[future, past]
+
+            # get predicted I (with more than one nonzero) from W_layer, and I
+            I_next = np.dot(W_layer, I_in)
+            I_next[I_next > 1.0] = 1.0  # there may be multiple ways to predict a particular row
+
+            # print(k, np.count_nonzero(I_next), len(I_next), np.amax(I_next))
+
+            # then, set I to prediction for next layer
+            I_in = I_next.copy()
+            I_seq.append(I_in)  # I_seq[k + 1]
+
+        I_next = np.dot(self.W_goal, I_in)  # goal
+        I_next[I_next > 1.0] = 1.0  # there may be multiple ways to predict a particular row
+        I_seq.append(I_next)  # I_seq[n_layers]
+
+        # print('INFO', len(I_seq), self.n_layers)  # INFO 5 4 -
+        # why 5 > 4? sequence includes input, and then output of each predictive layer
+
+        print()
+        print('PLAN')
+        print('fwd predictions:')
+        plan_str = ''
+        for k in range(len(I_seq)):
+            plan_str += '[' + str(np.count_nonzero(I_seq[k])) + '] '
+        print(plan_str)
+
+        # (2) do backward pass from goal state and compute AND, and show new filtered "matched rows" number per layer
+        goal_I = np.zeros_like(I_next)
+        goal_I[goal_context_state_task[0]] = 1.0
+        I_seq[self.n_layers] = np.logical_and(goal_I, I_seq[self.n_layers])
+        goal_I = I_seq[self.n_layers]
+
+        I_in = np.dot(goal_I, self.W_goal)  # is this right? what I_in's predict goal_I
+        # TODO check here and each next I_in to make sure at least some nonzero. otherwise no plan found.
+
+        for k in range(self.n_layers - 2, -1, -1):
+            # compute AND of I_in, corresponding I_seq that's already stored
+            I_seq[k+1] = np.logical_and(I_seq[k+1], I_in)
+            I_in = I_seq[k+1]
+
+            W_layer = self.W_by_layer[k]  # W[future, past]
+            I_in = np.dot(I_in, W_layer)
+
+        # don't really need this- this is current input? we care about next prediction onward only
+        I_seq[0] = np.logical_and(I_seq[0], I_in)
+
+        # (3) show plan on map (position and angle sequence)
+        print('after planning:')
+        plan_str = ''
+        for k in range(len(I_seq)):
+            plan_str += '[' + str(np.count_nonzero(I_seq[k])) + '] '
+        print(plan_str)
+        print()
+
+        if np.count_nonzero(I_seq[1]) == 0:
+            self.plan_I_seq = None  # no plan found!
+        else:
+            self.plan_I_seq = I_seq
+
         motor_out = None
         return motor_out
+
+    def get_current_plan(self):
+        return self.plan_I_seq, self.entries_x_y_theta_input
 
     def step(self, input_state, input_x_y_theta, goal_context_state_learning, goal_context_state_task, last_motor_command):
         '''
@@ -340,8 +429,6 @@ class SimpleMultiLayer(object):
             W_im_list.append(self._get_W_im(W=self.W_by_layer[k]))
 
         W_im_list.append(self._get_W_im(W=self.W_goal))
-
-
 
         return self._get_I_im(), W_im_list
 
