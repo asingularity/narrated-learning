@@ -16,6 +16,7 @@ class TaskManager(object):
         self.steps_per_task_goal = params['steps_per_task_goal']
         self.enabled_after_t = params['enabled_after_t']
         self.debug_print = params['debug_print']
+        self.task_randomize_robot_position = params['task_randomize_robot_position']
 
         self.step = 0
 
@@ -85,8 +86,10 @@ class TaskManager(object):
 
             self.task_goal_step += 1
 
+        robot_rand_pos = self.task_randomize_robot_position and self.task_mode_enabled
+
         self.step += 1
-        return self.current_task_goal_index, goal_index_reached_this_step
+        return self.current_task_goal_index, goal_index_reached_this_step, robot_rand_pos
 
     def evaluate(self, plots_save_folder):
         pass

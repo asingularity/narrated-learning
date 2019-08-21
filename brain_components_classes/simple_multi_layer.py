@@ -57,6 +57,11 @@ class SimpleMultiLayer(object):
         self.start_prediction_learn_t = self.stop_table_learn_t + 100
         self.stop_prediction_learn_t = self.start_prediction_learn_t + prediction_learn_time
 
+        print()
+        print('table learn [start, stop]:', '[' + str(self.start_table_learn_t) + ', ' + str(self.stop_table_learn_t) + ']')
+        print('prediction learn [start, stop]:', '[' + str(self.start_prediction_learn_t) + ', ' + str(self.stop_prediction_learn_t) + ']')
+        print()
+
         assert self.stop_prediction_learn_t < max_history_length, 'max_history_length too short!, learn stop time. '\
                                                                   + str((max_history_length,
                                                                          self.stop_prediction_learn_t))
@@ -262,8 +267,15 @@ class SimpleMultiLayer(object):
                 motor_seq = self.motor_history.get_state_sequence(state_index=0,
                                                                   delay_long=predict_time - 1,
                                                                   delay_short=0)
-
-                self.motor_table[in_entries, out_entries, :, :] = motor_seq
+                try:
+                    self.motor_table[in_entries, out_entries, :, :] = motor_seq
+                except:
+                    print()
+                    print('ERROR!')
+                    print()
+                    print('motor_seq', motor_seq.shape, 'motor_table', self.motor_table.shape)
+                    print()
+                    raise
 
         goal_predict_time = self.predict_time_per_layer[self.n_layers - 1]
 
@@ -292,10 +304,6 @@ class SimpleMultiLayer(object):
 
         # print('goal_context_state_task:', goal_context_state_task)  # i.e. [3]
         # do planning here, and display plan as it is being iteratively planned
-
-        # pause viewing of last plan, with correct info displayed
-        # TODO remove this later
-        time.sleep(1)
 
         # (1) do forward pass from current I, and show "matched rows" number per layer
 

@@ -17,15 +17,15 @@ from math import pi
 
 MAX_HISTORY_LENGTH = 10600000 + 1
 USERNAME = 'intec'
-NUM_INPUT_RAYS = 16
+NUM_INPUT_RAYS = 32
 INPUT_DIM = NUM_INPUT_RAYS * 3
 
 SIM_LOAD_NAME = '2019-07-21T21:18:20.175737'
 ENABLE_TASK_MODE = False
 
-TABLE_ENTRIES = 8000
+TABLE_ENTRIES = 4000
 TABLE_LEARN_TIME = TABLE_ENTRIES * 8 * 1
-PREDICTION_LEARN_TIME = TABLE_ENTRIES * 8 * 1
+PREDICTION_LEARN_TIME = TABLE_ENTRIES * 16 * 1
 
 
 def get_model_params():
@@ -70,7 +70,7 @@ def get_brain_params():
         'table_entries': TABLE_ENTRIES,
         'table_learn_time': TABLE_LEARN_TIME,
         'prediction_learn_time': PREDICTION_LEARN_TIME,
-        'predict_time_per_layer': [2, 2, 4, 4],  # referenced to layer before it
+        'predict_time_per_layer': [2, 2, 2, 2, 2, 2, 2, 2],  # referenced to layer before it
         'max_num_goal_states': 9
     }
     return params
@@ -80,9 +80,9 @@ def get_environment_params():
     params = {
         'width': 10,
         'height': 10,
-        'add_random_color_boundary_walls': False,
-        'min_num_walls': 4,
-        'max_num_walls': 4,
+        'add_random_color_boundary_walls': True,
+        'min_num_walls': 0,
+        'max_num_walls': 0,
         'wall_min_length': 2,
         'wall_max_length': 3,
         'min_space_between_walls': 3,
@@ -100,7 +100,7 @@ def get_visualizer_params():
         'image_display_secs_fast': 5,  # 1  # 1000
         'waitKey_time_fast': 1,  # 1, 100, 5000
         'image_display_secs_slow': 0.1,  # 0: every frame
-        'waitKey_time_slow': 1,  # 1, 100, 5000
+        'waitKey_time_slow': 1000,  # 1, 100, 5000
         'scale_topdown_factor': 20,
         'scale_camera_factor': 20,
         'no_wall_ray_color': (0.3, 0.3, 0.3),
@@ -123,6 +123,7 @@ def get_task_manager_params():
             [8, 8, 2, 2]
         ],
         'steps_per_task_goal': 1,  # if enabled is True
+        'task_randomize_robot_position': True,  # for debugging, random robot position each step in task mode
         'debug_print': False  # prints correct / incorrect goal reached
     }
     return params
@@ -162,10 +163,10 @@ def run_demo(demo_components):
     while not task_manager.finished_sim():
         t_total_0 = time.time()
 
-        current_task_goal_index, goal_index_reached_this_step = task_manager.do_step(topdown_info=robot_environment.get_topdown_info(),
-                                                                                     robot_environment=robot_environment,
-                                                                                     robot_sensors=robot_sensors,
-                                                                                     robot_brain=robot_brain)
+        current_task_goal_index, goal_index_reached_this_step, randomize_robot_position = task_manager.do_step(topdown_info=robot_environment.get_topdown_info(),
+                                                                                                               robot_environment=robot_environment,
+                                                                                                               robot_sensors=robot_sensors,
+                                                                                                               robot_brain=robot_brain)
 
         robot_sensors.read_input(nonzero_tiles=robot_environment.get_nonzero_tiles(),
                                  robot_theta=robot_environment.get_robot_theta())
@@ -189,9 +190,6 @@ def run_demo(demo_components):
         else:
             linear_speed, angular_speed = robot_model.get_delta_configuration()
 
-        robot_environment.step_environment(linear_speed=linear_speed,
-                                           angular_speed=angular_speed)
-
         #   robot_model.last_motor_command updated to new random command CMD_T
         #   robot_environment state updated with motor cmd CMD_T: STATE_T -> STATE_T+1
         visualizer.visualize(rays=robot_sensors.get_rays(),
@@ -200,6 +198,10 @@ def run_demo(demo_components):
                              goal_regions=task_manager.get_goal_regions(),
                              current_task_goal_index=current_task_goal_index,
                              robot_brain=robot_brain)  # So it can call .get_table_ims() only sometimes
+
+        robot_environment.step_environment(linear_speed=linear_speed,
+                                           angular_speed=angular_speed,
+                                           randomize_robot_position=randomize_robot_position)
 
         t_total += (time.time() - t_total_0)
 

@@ -32,37 +32,12 @@ class RobotEnvironment(object):
         env_map = np.zeros((self.H, self.W, 3))
         overlap_map = np.zeros((self.H, self.W, 3))
 
-        if self.add_random_color_boundary_walls:
-            wall_x_starts = [0 + 1,      0 + 1,          0,          self.W - 1]
-            wall_y_starts = [0,      self.H - 1, 1 + 1,          1 + 1]
-            wall_orients =  [0,      0,          1,          1]
-            wall_lengths =  [self.W - 2, self.W - 2,     self.H - 4, self.H - 4]
-
-            for k in range(4):
-                wall_length = wall_lengths[k]
-                wall_color = np.array([random.random(), random.random(), random.random()])
-                wall_orient = wall_orients[k]
-                wall_x_start = wall_x_starts[k]
-                wall_y_start = wall_y_starts[k]
-
-                wall_placed, env_map, overlap_map = self._attempt_place_wall(wall_color,
-                                                                             wall_orient,
-                                                                             wall_length,
-                                                                             wall_x_start,
-                                                                             wall_y_start,
-                                                                             overlap_map,
-                                                                             env_map,
-                                                                             self.W,
-                                                                             self.H,
-                                                                             0)
-                assert wall_placed, 'wall not placed!: ' + str(k)
-
         for w in range(num_walls):
             wall_placed = False
             while not wall_placed:
                 wall_length = random.randint(wall_min_length, wall_max_length)
                 wall_color = np.array([random.random(), random.random(), random.random()])
-                if self.add_random_color_boundary_walls:
+                if False:  # self.add_random_color_boundary_walls:
                     wall_x_start = random.randint(2, self.W - 3)
                     wall_y_start = random.randint(2, self.H - 3)
                 else:
@@ -80,6 +55,9 @@ class RobotEnvironment(object):
                                                        self.W,
                                                        self.H,
                                                        min_space_between_walls)
+
+        if self.add_random_color_boundary_walls:
+            env_map = self._add_random_boundaries(env_map)
 
         debug_view = False
         if debug_view:
@@ -101,6 +79,20 @@ class RobotEnvironment(object):
 
         self.nonzero_tiles = self._get_nonzero_tiles()
 
+    def _add_random_boundaries(self, env_map):
+
+        for r in range(self.H):
+            for c in [0, self.W - 1]:
+                pixel_color = np.array([random.random(), random.random(), random.random()])
+                env_map[r, c, :] = pixel_color[:]
+
+        for c in range(self.W):
+            for r in [0, self.H - 1]:
+                pixel_color = np.array([random.random(), random.random(), random.random()])
+                env_map[r, c, :] = pixel_color[:]
+
+        return env_map
+
     def _attempt_place_wall(self, wall_color, wall_orient, wall_length, wall_x_start, wall_y_start, overlap_map, env_map, W, H, min_space_between_walls):
         if wall_orient == 0:
 
@@ -119,7 +111,7 @@ class RobotEnvironment(object):
                             return False, env_map, overlap_map
                         new_overlap_map[y, x, :] = wall_color[:]
             for x in range(wall_x_start, wall_x_end + 1):
-                new_env_map[x, wall_y_start, :] = wall_color[:]
+                new_env_map[x, wall_y_start, :] = wall_color[:]  # bug? is x, y reversed here?
 
         elif wall_orient == 1:
             wall_y_end = wall_y_start + wall_length - 1
@@ -163,7 +155,7 @@ class RobotEnvironment(object):
         else:
             return self._get_nonzero_tiles(robot_x=robot_position_angle[0], robot_y=robot_position_angle[1])
 
-    def step_environment(self, linear_speed, angular_speed):
+    def step_environment(self, linear_speed, angular_speed, randomize_robot_position=False):
         # TODO new logic:
         #   do collision detection on current x, y, and also velocity x, y
 
@@ -178,6 +170,13 @@ class RobotEnvironment(object):
         self.last_r_y = self.r_y
         self.r_x += linear_speed * cos(self.r_theta)
         self.r_y += linear_speed * sin(self.r_theta)
+
+        if randomize_robot_position:  # TODO this causes it to be off by one!
+            self.r_x = 1 + random.random() * (self.W - 2)
+            self.r_y = 1 + random.random() * (self.H - 2)
+            self.last_r_x = self.r_x
+            self.last_r_y = self.r_y
+            self.r_theta = random.random() * 2 * pi
 
         self.round_x = int(self.r_x)
         self.round_y = int(self.r_y)
