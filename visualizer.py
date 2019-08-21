@@ -343,9 +343,6 @@ class Visualizer(object):
                 if W_im is not None:
                     concat_im = self._concat_with_spacer(concat_im=concat_im, new_im=W_im)
 
-        print(len(W_im_list))
-        # TODO why see only one W??? And no spacer??
-
         cv2.imshow('W', concat_im)
 
     def visualize(self, rays, topdown_info, plots_save_folder, goal_regions, current_task_goal_index, robot_brain):
