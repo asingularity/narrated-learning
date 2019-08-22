@@ -92,7 +92,7 @@ class SimpleMultiLayer(object):
 
         # why * 2? store linear velocity, angular velocity - so two values per step
         self.store_motor_steps = predict_time_per_layer[0]
-        self.motor_table = np.zeros((self.entries, self.entries, self.store_motor_steps, self.store_motor_steps), np.float)
+        self.motor_table = np.zeros((self.entries, self.entries, self.store_motor_steps, 2), np.float)
 
         # stats
         self.stat_IO_row_replaces = np.zeros(self.n_layers, np.int)
@@ -270,6 +270,18 @@ class SimpleMultiLayer(object):
                 try:
                     self.motor_table[in_entries, out_entries, :, :] = motor_seq
                 except:
+                    '''
+                        self.store_motor_steps = predict_time_per_layer[0]
+                        self.motor_table = np.zeros((self.entries, self.entries, self.store_motor_steps, self.store_motor_steps), np.float)
+
+                        ERROR!
+
+                        motor_seq (1, 2) motor_table (400, 400, 1, 1)
+
+                        fix:
+                        self.motor_table = np.zeros((self.entries, self.entries, self.store_motor_steps, 2), np.float)
+
+                    '''
                     print()
                     print('ERROR!')
                     print()

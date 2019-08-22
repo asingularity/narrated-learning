@@ -30,7 +30,7 @@ PREDICTION_LEARN_TIME = TABLE_ENTRIES * 16 * 1
 
 def get_model_params():
     params = {
-        'max_angular_velocity': 0.35,
+        'max_angular_velocity': 0.35 * 1.5,
         'max_linear_velocity': 0.4
     }
     return params
@@ -70,7 +70,7 @@ def get_brain_params():
         'table_entries': TABLE_ENTRIES,
         'table_learn_time': TABLE_LEARN_TIME,
         'prediction_learn_time': PREDICTION_LEARN_TIME,
-        'predict_time_per_layer': [2, 2, 2, 2, 2, 2, 2, 2],  # referenced to layer before it
+        'predict_time_per_layer': [1, 2, 4, 8, 16],  # referenced to layer before it
         'max_num_goal_states': 9
     }
     return params
