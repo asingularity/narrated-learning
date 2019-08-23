@@ -1,6 +1,7 @@
 import time
 import cv2
 import numpy as np
+import random
 import pickle
 from tabulate import tabulate
 
@@ -314,6 +315,8 @@ class SimpleMultiLayer(object):
         :return:
         '''
 
+        debug_print = False
+
         # print('goal_context_state_task:', goal_context_state_task)  # i.e. [3]
         # do planning here, and display plan as it is being iteratively planned
 
@@ -347,13 +350,14 @@ class SimpleMultiLayer(object):
         # print('INFO', len(I_seq), self.n_layers)  # INFO 5 4 -
         # why 5 > 4? sequence includes input, and then output of each predictive layer
 
-        print()
-        print('PLAN')
-        print('fwd predictions:')
-        plan_str = ''
-        for k in range(len(I_seq)):
-            plan_str += '[' + str(np.count_nonzero(I_seq[k])) + '] '
-        print(plan_str)
+        if debug_print:
+            print()
+            print('PLAN')
+            print('fwd predictions:')
+            plan_str = ''
+            for k in range(len(I_seq)):
+                plan_str += '[' + str(np.count_nonzero(I_seq[k])) + '] '
+            print(plan_str)
 
         # (2) do backward pass from goal state and compute AND, and show new filtered "matched rows" number per layer
         goal_I = np.zeros_like(I_next)
@@ -362,7 +366,6 @@ class SimpleMultiLayer(object):
         goal_I = I_seq[self.n_layers]
 
         I_in = np.dot(goal_I, self.W_goal)  # is this right? what I_in's predict goal_I
-        # TODO check here and each next I_in to make sure at least some nonzero. otherwise no plan found.
 
         for k in range(self.n_layers - 2, -1, -1):
             # compute AND of I_in, corresponding I_seq that's already stored
@@ -376,19 +379,42 @@ class SimpleMultiLayer(object):
         I_seq[0] = np.logical_and(I_seq[0], I_in)
 
         # (3) show plan on map (position and angle sequence)
-        print('after planning:')
-        plan_str = ''
-        for k in range(len(I_seq)):
-            plan_str += '[' + str(np.count_nonzero(I_seq[k])) + '] '
-        print(plan_str)
-        print()
+        if debug_print:
+            print('after planning:')
+            plan_str = ''
+            for k in range(len(I_seq)):
+                plan_str += '[' + str(np.count_nonzero(I_seq[k])) + '] '
+            print(plan_str)
+            print()
 
         if np.count_nonzero(I_seq[1]) == 0:
             self.plan_I_seq = None  # no plan found!
+            in_entries = None  # just for display
+            out_entries = None  # just for display
+            # TODO if no plan found: should it return previous motor command? This means random motor.
+            motor_out = None
         else:
             self.plan_I_seq = I_seq
 
-        motor_out = None
+            in_entries = np.nonzero(I_seq[0])[0]
+            # i0 = 0
+            i0 = random.randint(0, len(in_entries) - 1)
+            in_entries = in_entries[i0]
+
+            out_entries = np.nonzero(I_seq[1])[0]
+            # i1 = 0
+            i1 = random.randint(0, len(out_entries) - 1)
+            out_entries = out_entries[i1]
+
+            motor_seq = self.motor_table[in_entries, out_entries, :, :].flatten()
+            # print(motor_seq.shape, motor_seq)
+            motor_out = motor_seq
+
+        print()
+        print('in_entries:', in_entries, 'out_entries:', out_entries)
+        print('motor_out:', motor_out)
+        print()
+
         return motor_out
 
     def get_current_plan(self):

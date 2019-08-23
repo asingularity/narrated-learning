@@ -23,9 +23,11 @@ INPUT_DIM = NUM_INPUT_RAYS * 3
 SIM_LOAD_NAME = '2019-07-21T21:18:20.175737'
 ENABLE_TASK_MODE = False
 
-TABLE_ENTRIES = 4000
+TABLE_ENTRIES = 800 * 5  # 4000
 TABLE_LEARN_TIME = TABLE_ENTRIES * 8 * 1
 PREDICTION_LEARN_TIME = TABLE_ENTRIES * 16 * 1
+
+SHOW_PLAN_ONLY = False
 
 
 def get_model_params():
@@ -70,7 +72,7 @@ def get_brain_params():
         'table_entries': TABLE_ENTRIES,
         'table_learn_time': TABLE_LEARN_TIME,
         'prediction_learn_time': PREDICTION_LEARN_TIME,
-        'predict_time_per_layer': [1, 2, 4, 8, 16],  # referenced to layer before it
+        'predict_time_per_layer': [1, 2, 4, 8],  # referenced to layer before it
         'max_num_goal_states': 9
     }
     return params
@@ -99,8 +101,8 @@ def get_visualizer_params():
         'plot_brain_error_frames': None,
         'image_display_secs_fast': 5,  # 1  # 1000
         'waitKey_time_fast': 1,  # 1, 100, 5000
-        'image_display_secs_slow': 0.1,  # 0: every frame
-        'waitKey_time_slow': 1000,  # 1, 100, 5000
+        'image_display_secs_slow': 0,  # 0: every frame
+        'waitKey_time_slow': 1,  # 1, 100, 5000  # TODO use SHOW_PLAN_ONLY (1000)
         'scale_topdown_factor': 20,
         'scale_camera_factor': 20,
         'no_wall_ray_color': (0.3, 0.3, 0.3),
@@ -122,8 +124,8 @@ def get_task_manager_params():
             [8, 0, 2, 2],
             [8, 8, 2, 2]
         ],
-        'steps_per_task_goal': 1,  # if enabled is True
-        'task_randomize_robot_position': True,  # for debugging, random robot position each step in task mode
+        'steps_per_task_goal': 200,  # if enabled is True  # TODO use SHOW_PLAN_ONLY (1)
+        'task_randomize_robot_position': SHOW_PLAN_ONLY,  # for debugging, random robot position each step in task mode
         'debug_print': False  # prints correct / incorrect goal reached
     }
     return params
