@@ -159,17 +159,24 @@ class RobotEnvironment(object):
         # TODO new logic:
         #   do collision detection on current x, y, and also velocity x, y
 
+        #print('(1) Stepping r_theta: ', self.r_theta, angular_speed)
         self.r_theta += angular_speed
+        #print('(2) Stepping r_theta, after add: ', self.r_theta)
 
         while self.r_theta > 2 * pi:
             self.r_theta -= 2 * pi
         while self.r_theta < 0:
             self.r_theta += 2 * pi
+        #print('(3) Stepping r_theta, after adjust: ', self.r_theta)
+
+        #print('(4) Current r_x, r_y', self.r_x, self.r_y)
 
         self.last_r_x = self.r_x
         self.last_r_y = self.r_y
         self.r_x += linear_speed * cos(self.r_theta)
         self.r_y += linear_speed * sin(self.r_theta)
+
+        #print('(5) After speed apply, r_x, r_y', self.r_x, self.r_y)
 
         if randomize_robot_position:  # TODO this causes it to be off by one!
             self.r_x = 1 + random.random() * (self.W - 2)
@@ -181,55 +188,68 @@ class RobotEnvironment(object):
         self.round_x = int(self.r_x)
         self.round_y = int(self.r_y)
 
-        if self.round_x > self.W - 1:
+        flip_around_dist = 2  # 1
+
+        if self.round_x > self.W - 1 - flip_around_dist:
             #print 'self.round_x > self.W - 1'
-            self.round_x = self.W - 1
+            self.round_x = self.W - 1 - flip_around_dist
             self.r_x = self.round_x
             self.r_theta = pi
-        if self.round_x < 0:
+        if self.round_x < 0 + flip_around_dist:
             #print 'self.round_x < 0'
-            self.round_x = 0
+            self.round_x = 0 + flip_around_dist
             self.r_x = self.round_x
             self.r_theta = 0
-        if self.round_y > self.H - 1:
+        if self.round_y > self.H - 1 - flip_around_dist:
             #print 'self.round_y > self.H - 1'
-            self.round_y = self.H - 1
+            self.round_y = self.H - 1 - flip_around_dist
             self.r_y = self.round_y
             self.r_theta = 3.0 * pi / 2.0
-        if self.round_y < 0:
+        if self.round_y < 0 + flip_around_dist:
             #print 'self.round_y < 0'
-            self.round_y = 0
+            self.round_y = 0 + flip_around_dist
             self.r_y = self.round_y
             self.r_theta = pi / 2.0
 
         self.nonzero_tiles = self._get_nonzero_tiles()
 
-        nz_dist = self.nonzero_tiles['nonzero_dist']
-        close_nnz_tile_indices = np.nonzero((nz_dist <= 1 + 1e-9))[0]
-        if not (self.r_x == self.last_r_x and self.r_y == self.last_r_y):
-            if close_nnz_tile_indices.shape[0] > 0:
-                m_x_neighbors = self.nonzero_map_x[close_nnz_tile_indices]
-                m_y_neighbors = self.nonzero_map_y[close_nnz_tile_indices]
+        if False:
+            nz_dist = self.nonzero_tiles['nonzero_dist']
+            close_nnz_tile_indices = np.nonzero((nz_dist <= 1 + 1e-9))[0]
+            if not (self.r_x == self.last_r_x and self.r_y == self.last_r_y):
+                if close_nnz_tile_indices.shape[0] > 0:
+                    m_x_neighbors = self.nonzero_map_x[close_nnz_tile_indices]
+                    m_y_neighbors = self.nonzero_map_y[close_nnz_tile_indices]
 
-                for m_x, m_y in zip(m_x_neighbors.tolist(), m_y_neighbors.tolist()):
-                    if not self.round_x == m_x:
+                    for m_x, m_y in zip(m_x_neighbors.tolist(), m_y_neighbors.tolist()):
+                        #if not self.round_x == m_x:
                         if self.round_x > m_x:
                             if self.r_x < self.last_r_x:
-                                self.r_x = int(self.r_x) + 0.5
+                                self.r_x = self.last_r_x  #int(self.r_x) + 0.5
+                                #print('--A')
                         if self.round_x < m_x:
                             if self.r_x > self.last_r_x:
-                                self.r_x = int(self.r_x) + 0.5
+                                self.r_x = self.last_r_x  #int(self.r_x) + 0.5
+                                #print('--B')
                         self.round_x = int(self.r_x)
-                    if not self.round_y == m_y:
+                        #else:
+                        #    print('**? 1')
+                        #if not self.round_y == m_y:
                         if self.round_y > m_y:
                             if self.r_y < self.last_r_y:
-                                self.r_y = int(self.r_y) + 0.5
+                                self.r_y = self.last_r_y  #int(self.r_y) + 0.5
+                                #print('--C')
                         if self.round_y < m_y:
                             if self.r_y > self.last_r_y:
-                                self.r_y = int(self.r_y) + 0.5
+                                self.r_y = self.last_r_y  #int(self.r_y) + 0.5
+                                #print('--D')
                         self.round_y = int(self.r_y)
-            else:
-                pass
+                        #else:
+                        #    print('**? 2')
+                else:
+                    pass
+
+        #print('(6) After other stuff, r_x, r_y', self.r_x, self.r_y)
 
     def _load_or_precompute_angles_dist(self, rows, cols):
         # TODO: save/load from file

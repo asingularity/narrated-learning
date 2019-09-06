@@ -76,11 +76,13 @@ class SimpleMultiLayer(object):
         self.init_I_row_num = None
 
         self.W_by_layer = {}
+        self.W_layer_to_goal = {}
         for k in range(self.n_layers - 1):  # why -1? because goal context W counts as a separate "layer"
             # TODO these need to be better represented in a sparse way, on cuda
             self.W_by_layer[k] = np.zeros((self.entries, self.entries), np.int)
+            self.W_layer_to_goal[k] = np.zeros((int(np.amax(pre_init_goal_contexts)), self.entries), np.int)
 
-        self.W_goal = np.zeros((int(np.amax(pre_init_goal_contexts)), self.entries), np.int)
+        self.W_goal = np.zeros((int(np.amax(pre_init_goal_contexts)), self.entries), np.int)  # last layer to goal
         self.goal_context_values = pre_init_goal_contexts
 
         # print(goal_context_dim, self.goal_context_values)
@@ -242,6 +244,10 @@ class SimpleMultiLayer(object):
         :return:
         '''
 
+        goal_context_future, _ = self.goal_context_history.get_state(state_index=0, delay=0)
+        assert len(goal_context_future) == 1
+        assert goal_context_future.shape[0] == 1
+
         for k in range(self.n_layers - 1):  # why -1? because goal context W counts as a separate "layer"
             predict_time = self.predict_time_per_layer[k]
 
@@ -251,7 +257,13 @@ class SimpleMultiLayer(object):
             in_entries = np.nonzero(train_I_now)
             out_entries = np.nonzero(train_I_future)
 
+            # TODO shouldn't here, we be considering cumulative sum of prediction times for in_entries?
+            #   depending how we are using this context layer?
+            #   it is not cumulative above because prediction time is always in relation to previous layer
+            #   works the same way for goal, always relative to the layer
+
             self.W_by_layer[k][out_entries, in_entries] = 1
+            self.W_layer_to_goal[k][goal_context_future[0], in_entries] = 1
 
             if k == 0:
                 # motor learning
@@ -291,13 +303,9 @@ class SimpleMultiLayer(object):
                     raise
 
         goal_predict_time = self.predict_time_per_layer[self.n_layers - 1]
-
         train_I_now, _ = self.I_history.get_state(state_index=0, delay=goal_predict_time)
-        goal_context_future, _ = self.goal_context_history.get_state(state_index=0, delay=0)
 
         in_entries = np.nonzero(train_I_now)
-        assert len(goal_context_future) == 1
-        assert goal_context_future.shape[0] == 1
 
         # TODO init W_goal to be appropriate: max goal value
         self.W_goal[goal_context_future[0], in_entries] = 1
@@ -366,11 +374,25 @@ class SimpleMultiLayer(object):
         goal_I = I_seq[self.n_layers]
 
         I_in = np.dot(goal_I, self.W_goal)  # is this right? what I_in's predict goal_I
+        I_in_to_goal = I_in
 
         for k in range(self.n_layers - 2, -1, -1):
             # compute AND of I_in, corresponding I_seq that's already stored
-            I_seq[k+1] = np.logical_and(I_seq[k+1], I_in)
+            I_seq_next_layer = np.logical_and(I_seq[k+1], I_in)
+            I_seq_from_goal = np.logical_and(I_seq[k+1], I_in_to_goal)
+
+            # layer by layer goal logic might no be right
+
+            if np.sum(I_seq_from_goal) > 0:
+                I_seq[k + 1] = I_seq_from_goal
+            else:
+                I_seq[k + 1] = I_seq_next_layer
+
             I_in = I_seq[k+1]
+
+            # TODO first, try self.W_layer_to_goal
+            W_layer_to_goal = self.W_layer_to_goal[k]
+            I_in_to_goal = np.dot(goal_I, W_layer_to_goal)
 
             W_layer = self.W_by_layer[k]  # W[future, past]
             I_in = np.dot(I_in, W_layer)
@@ -391,29 +413,40 @@ class SimpleMultiLayer(object):
             self.plan_I_seq = None  # no plan found!
             in_entries = None  # just for display
             out_entries = None  # just for display
-            # TODO if no plan found: should it return previous motor command? This means random motor.
+            # TODO if no plan found: should it return previous motor command? This means last applied motor.
             motor_out = None
         else:
             self.plan_I_seq = I_seq
 
-            in_entries = np.nonzero(I_seq[0])[0]
-            # i0 = 0
-            i0 = random.randint(0, len(in_entries) - 1)
-            in_entries = in_entries[i0]
+            in_entries = np.nonzero(I_seq[0])[0]  # this is length 1 always, already
+            i0 = 0  # so we just choose first (only) nonzero entry
+            in_entries = in_entries[i0]  # this is the entry index
 
-            out_entries = np.nonzero(I_seq[1])[0]
-            # i1 = 0
-            i1 = random.randint(0, len(out_entries) - 1)
+            out_entries = np.nonzero(I_seq[1])[0]  # this can be multiple possible predictions
+            i1 = 0  # choose first one
+            # i1 = random.randint(0, len(out_entries) - 1)  # choose a random one
             out_entries = out_entries[i1]
+
+            # ********** HACK: ADD TO VISUALIZER!!! **********
+            ray_colors, _, _ = self.cuda_table_I.get_matrix_row(row_index=out_entries)
+            ray_colors = ray_colors.reshape((len(ray_colors) / 3, 3))
+            camera_image = np.zeros((1, ray_colors.shape[0], 3))
+            camera_image[0, :, 0] = ray_colors[:, 0]
+            camera_image[0, :, 1] = ray_colors[:, 1]
+            camera_image[0, :, 2] = ray_colors[:, 2]
+            resized_camera = cv2.resize(src=camera_image, dsize=(0, 0), fx=20,
+                                        fy=20, interpolation=cv2.INTER_NEAREST)
+            cv2.imshow('camera_predicted', resized_camera)
+            # ********** HACK: ADD TO VISUALIZER!!! **********
 
             motor_seq = self.motor_table[in_entries, out_entries, :, :].flatten()
             # print(motor_seq.shape, motor_seq)
             motor_out = motor_seq
 
-        print()
-        print('in_entries:', in_entries, 'out_entries:', out_entries)
-        print('motor_out:', motor_out)
-        print()
+        #print()
+        #print('in_entries:', in_entries, 'out_entries:', out_entries)
+        #print('motor_out:', motor_out)
+        #print()
 
         return motor_out
 
@@ -473,6 +506,7 @@ class SimpleMultiLayer(object):
         W_im_list = []
         for k in range(self.n_layers - 1):  # why -1? because goal context W counts as a separate "layer"
             W_im_list.append(self._get_W_im(W=self.W_by_layer[k]))
+            W_im_list.append(self._get_W_im(W=self.W_layer_to_goal[k]))
 
         W_im_list.append(self._get_W_im(W=self.W_goal))
 

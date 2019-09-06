@@ -69,7 +69,8 @@ class Visualizer(object):
         ray_colors = rays['ray_colors'].reshape((len(rays['ray_colors']) / 3, 3))
         ray_lengths = rays['ray_lengths']
 
-        im[round_y, round_x] = 1.0
+        # display white rectangle for agent:
+        # im[round_y, round_x] = 1.0
 
         # rays should be drawn on resized image so always width 1
         resized_image = cv2.resize(src=im, dsize=(0, 0), fx=self.scale_topdown_factor, fy=self.scale_topdown_factor, interpolation=cv2.INTER_NEAREST)
@@ -130,20 +131,22 @@ class Visualizer(object):
                      thickness=1)
 
         # goal regions also drawn on resized image in case they are only size 1
-        goal_region_index = 0
-        for goal_region in goal_regions:
-            gr_c, gr_r, gr_w, gr_h = goal_region
-            gr_c = gr_c * self.scale_topdown_factor
-            gr_r = gr_r * self.scale_topdown_factor
-            gr_w = gr_w * self.scale_topdown_factor
-            gr_h = gr_h * self.scale_topdown_factor
+        draw_diagonals_for_all_goal_regions = False
+        if draw_diagonals_for_all_goal_regions:
+            goal_region_index = 0
+            for goal_region in goal_regions:
+                gr_c, gr_r, gr_w, gr_h = goal_region
+                gr_c = gr_c * self.scale_topdown_factor
+                gr_r = gr_r * self.scale_topdown_factor
+                gr_w = gr_w * self.scale_topdown_factor
+                gr_h = gr_h * self.scale_topdown_factor
 
-            resized_image[gr_r:gr_r + gr_h / 4, gr_c:gr_c+gr_w / 4] = 1.0
-            resized_image[gr_r + gr_h / 4:gr_r + gr_h / 2, gr_c + gr_w / 4:gr_c+gr_w / 2] = 1.0
-            resized_image[gr_r + gr_h / 2:gr_r + 3 * gr_h / 4, gr_c + gr_w / 2:gr_c+ 3 * gr_w / 4] = 1.0
-            resized_image[gr_r + 3 * gr_h / 4:gr_r + gr_h, gr_c + 3 * gr_w / 4:gr_c+gr_w] = 1.0
+                resized_image[gr_r:gr_r + gr_h / 4, gr_c:gr_c+gr_w / 4] = 1.0
+                resized_image[gr_r + gr_h / 4:gr_r + gr_h / 2, gr_c + gr_w / 4:gr_c+gr_w / 2] = 1.0
+                resized_image[gr_r + gr_h / 2:gr_r + 3 * gr_h / 4, gr_c + gr_w / 2:gr_c+ 3 * gr_w / 4] = 1.0
+                resized_image[gr_r + 3 * gr_h / 4:gr_r + gr_h, gr_c + 3 * gr_w / 4:gr_c+gr_w] = 1.0
 
-            goal_region_index += 1
+                goal_region_index += 1
 
         # draw goal region of current goal - rectangle afterward, for clarity, on top of plans
         goal_region_index = 0
@@ -167,6 +170,12 @@ class Visualizer(object):
         return resized_image
 
     def _display_graphic_map(self, rays, topdown_info, goal_regions, plan_I_seq, entries_x_y_theta_input, current_task_goal_index):
+        '''
+
+        for reference:
+            ray_colors = rays['ray_colors']
+            current_visual_input = ray_colors.copy()
+        '''
 
         ray_colors = rays['ray_colors'].reshape((len(rays['ray_colors']) / 3, 3))
         resized_image = self._get_topdown_map(rays, topdown_info, goal_regions, plan_I_seq, entries_x_y_theta_input, current_task_goal_index)

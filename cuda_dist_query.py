@@ -344,7 +344,7 @@ class CudaTable(object):
             row_input = full_row[0:self.input_dim]
             row_output = full_row[self.input_dim:self.input_dim + self.output_dim]
             row_context = full_row[self.input_dim+self.output_dim:self.input_dim+self.output_dim+self.context_dim]
-        else:
+        elif self.include_io:
             pass  # TODO what to return here if IOC not in table? for context? None? zeros?
             col = row_index
             rows = self.input_dim + self.output_dim
@@ -355,6 +355,15 @@ class CudaTable(object):
             row_output = row_io[self.input_dim:self.input_dim + self.output_dim]
 
             row_context = np.zeros(self.context_dim, np.float32)
+        else:  # assume I only
+            col = row_index
+            rows = self.input_dim
+            cols = self.num_entries
+
+            row_i = misc.get_by_index(src_gpu=self.table_i_gpu, ind=col + cols * np.arange(rows)).get()
+            row_input = row_i[0:self.input_dim]
+            row_output = None
+            row_context = None
 
         return row_input, row_output, row_context
 

@@ -23,9 +23,9 @@ INPUT_DIM = NUM_INPUT_RAYS * 3
 SIM_LOAD_NAME = '2019-07-21T21:18:20.175737'
 ENABLE_TASK_MODE = False
 
-TABLE_ENTRIES = 800 * 5  # 4000
-TABLE_LEARN_TIME = TABLE_ENTRIES * 8 * 1
-PREDICTION_LEARN_TIME = TABLE_ENTRIES * 16 * 1
+TABLE_ENTRIES = 200 * 10  # 2000 with 16; 4000 with 8
+TABLE_LEARN_TIME = TABLE_ENTRIES * 16 * 1
+PREDICTION_LEARN_TIME = TABLE_ENTRIES * 16 * 2
 
 SHOW_PLAN_ONLY = False
 
@@ -99,7 +99,7 @@ def get_visualizer_params():
     params = {
         'fps_display_interval': 3,
         'plot_brain_error_frames': None,
-        'image_display_secs_fast': 5,  # 1  # 1000
+        'image_display_secs_fast': 5,
         'waitKey_time_fast': 1,  # 1, 100, 5000
         'image_display_secs_slow': 0,  # 0: every frame
         'waitKey_time_slow': 1,  # 1, 100, 5000  # TODO use SHOW_PLAN_ONLY (1000)
@@ -119,12 +119,12 @@ def get_task_manager_params():
         'enabled': ENABLE_TASK_MODE,
         'enabled_after_t': TABLE_LEARN_TIME + PREDICTION_LEARN_TIME,  # None or a time step, additional way to enable but with delay. overridden by 'enabled' flag.
         'goal_regions': [  # c, r, w, h
-            [0, 0, 2, 2],
-            [0, 8, 2, 2],
-            [8, 0, 2, 2],
-            [8, 8, 2, 2]
+            [0, 0, 3, 3],
+            [0, 7, 3, 3],
+            [7, 0, 3, 3],
+            [7, 7, 3, 3]
         ],
-        'steps_per_task_goal': 200,  # if enabled is True  # TODO use SHOW_PLAN_ONLY (1)
+        'steps_per_task_goal': 100,  # if enabled is True  # TODO use SHOW_PLAN_ONLY (1)
         'task_randomize_robot_position': SHOW_PLAN_ONLY,  # for debugging, random robot position each step in task mode
         'debug_print': False  # prints correct / incorrect goal reached
     }

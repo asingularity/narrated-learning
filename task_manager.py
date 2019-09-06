@@ -50,6 +50,7 @@ class TaskManager(object):
                 assert goal_index_reached_this_step == 0, 'cannot have overlapping goal regions!'
 
                 goal_index_reached_this_step = goal_index
+                # print('ASDASDASDASD', goal_index_reached_this_step)
                 if self.task_mode_enabled:
                     if goal_index_reached_this_step == self.current_task_goal_index:
                         if self.debug_print:
