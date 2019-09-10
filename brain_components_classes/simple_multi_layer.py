@@ -376,6 +376,8 @@ class SimpleMultiLayer(object):
         I_in = np.dot(goal_I, self.W_goal)  # is this right? what I_in's predict goal_I
         I_in_to_goal = I_in
 
+        enable_goal_override = False
+
         for k in range(self.n_layers - 2, -1, -1):
             # compute AND of I_in, corresponding I_seq that's already stored
             I_seq_next_layer = np.logical_and(I_seq[k+1], I_in)
@@ -383,7 +385,7 @@ class SimpleMultiLayer(object):
 
             # layer by layer goal logic might no be right
 
-            if np.sum(I_seq_from_goal) > 0:
+            if enable_goal_override and np.sum(I_seq_from_goal) > 0:
                 I_seq[k + 1] = I_seq_from_goal
             else:
                 I_seq[k + 1] = I_seq_next_layer
@@ -419,7 +421,7 @@ class SimpleMultiLayer(object):
             self.plan_I_seq = I_seq
 
             in_entries = np.nonzero(I_seq[0])[0]  # this is length 1 always, already
-            i0 = 0  # so we just choose first (only) nonzero entry
+            i0 = 0  # so we just choose first (only) nonzero entry  # TODO why important?
             in_entries = in_entries[i0]  # this is the entry index
 
             out_entries = np.nonzero(I_seq[1])[0]  # this can be multiple possible predictions

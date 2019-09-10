@@ -188,7 +188,7 @@ class RobotEnvironment(object):
         self.round_x = int(self.r_x)
         self.round_y = int(self.r_y)
 
-        flip_around_dist = 2  # 1
+        flip_around_dist = 1  # 1 or 2
 
         if self.round_x > self.W - 1 - flip_around_dist:
             #print 'self.round_x > self.W - 1'
@@ -213,7 +213,9 @@ class RobotEnvironment(object):
 
         self.nonzero_tiles = self._get_nonzero_tiles()
 
-        if False:
+        enable_wall_collision_detect = True  # flip_around_dist must be 1 or 0 for True
+
+        if enable_wall_collision_detect:  # True: enables collision detect with walls
             nz_dist = self.nonzero_tiles['nonzero_dist']
             close_nnz_tile_indices = np.nonzero((nz_dist <= 1 + 1e-9))[0]
             if not (self.r_x == self.last_r_x and self.r_y == self.last_r_y):
