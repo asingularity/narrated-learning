@@ -432,7 +432,9 @@ class SimpleMultiLayer(object):
             in_entries = in_entries[i0]  # this is the entry index
 
             out_entries = np.nonzero(I_seq[1])[0]  # this can be multiple possible predictions
-            print('current index:', in_entries, ', choosing first of', len(out_entries), 'predictions, index: ', out_entries[0])
+
+            if debug_print:
+                print('current index:', in_entries, ', choosing first of', len(out_entries), 'predictions, index: ', out_entries[0])
             i1 = 0  # choose first one
             # i1 = random.randint(0, len(out_entries) - 1)  # choose a random one
             out_entries = out_entries[i1]
