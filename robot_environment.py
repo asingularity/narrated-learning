@@ -79,6 +79,9 @@ class RobotEnvironment(object):
 
         self.nonzero_tiles = self._get_nonzero_tiles()
 
+        self.temp_val = 0
+        self.temp_steps = 0
+
     def _add_random_boundaries(self, env_map):
 
         for r in range(self.H):
@@ -158,15 +161,26 @@ class RobotEnvironment(object):
     def step_environment(self, linear_speed, angular_speed, randomize_robot_position=False):
         # TODO new logic:
         #   do collision detection on current x, y, and also velocity x, y
+        self.temp_steps += 1
+        if self.temp_steps > 100:
+            # print('------------ resetting steps ------------')
+            self.temp_steps = 0
+            self.temp_val = 0
+        self.temp_val = self.temp_val + angular_speed
+        # print("RobotEnv:: || self.temp_val", self.temp_val)
 
+        # print("RobotEnv:: (0): self.r_theta", self.r_theta)
         #print('(1) Stepping r_theta: ', self.r_theta, angular_speed)
         self.r_theta += angular_speed
         #print('(2) Stepping r_theta, after add: ', self.r_theta)
+        # print("RobotEnv:: (1): self.r_theta", self.r_theta)
 
         while self.r_theta > 2 * pi:
             self.r_theta -= 2 * pi
         while self.r_theta < 0:
             self.r_theta += 2 * pi
+
+        # print("RobotEnv:: (2): self.r_theta", self.r_theta)
         #print('(3) Stepping r_theta, after adjust: ', self.r_theta)
 
         #print('(4) Current r_x, r_y', self.r_x, self.r_y)
@@ -188,25 +202,27 @@ class RobotEnvironment(object):
         self.round_x = int(self.r_x)
         self.round_y = int(self.r_y)
 
+        # print("RobotEnv:: Before Correct: self.r_x", self.r_x, "self.r_y", self.r_y, "self.round_x", self.round_x, "self.round_y", self.round_y)
+
         flip_around_dist = 1  # 1 or 2
 
         if self.round_x > self.W - 1 - flip_around_dist:
-            #print 'self.round_x > self.W - 1'
+            print ('!!! self.round_x > self.W - 1')
             self.round_x = self.W - 1 - flip_around_dist
             self.r_x = self.round_x
             self.r_theta = pi
         if self.round_x < 0 + flip_around_dist:
-            #print 'self.round_x < 0'
+            print ('!!! self.round_x < 0')
             self.round_x = 0 + flip_around_dist
             self.r_x = self.round_x
             self.r_theta = 0
         if self.round_y > self.H - 1 - flip_around_dist:
-            #print 'self.round_y > self.H - 1'
+            print ('!!! self.round_y > self.H - 1')
             self.round_y = self.H - 1 - flip_around_dist
             self.r_y = self.round_y
             self.r_theta = 3.0 * pi / 2.0
         if self.round_y < 0 + flip_around_dist:
-            #print 'self.round_y < 0'
+            print ('!!! self.round_y < 0')
             self.round_y = 0 + flip_around_dist
             self.r_y = self.round_y
             self.r_theta = pi / 2.0
@@ -251,7 +267,10 @@ class RobotEnvironment(object):
                 else:
                     pass
 
-        #print('(6) After other stuff, r_x, r_y', self.r_x, self.r_y)
+        # print("RobotEnv:: After Correct: self.r_x", self.r_x, "self.r_y", self.r_y, "self.round_x", self.round_x, "self.round_y", self.round_y)
+
+        # print()
+                    #print('(6) After other stuff, r_x, r_y', self.r_x, self.r_y)
 
     def _load_or_precompute_angles_dist(self, rows, cols):
         # TODO: save/load from file

@@ -37,6 +37,9 @@ class RobotModel(object):
 
         self.last_motor_command[0] = lin_val
         self.last_motor_command[1] = ang_val
+
+        # print("RobotModel:: lin_val", lin_val, "ang_val", ang_val)
+
         return lin_val, ang_val
 
     def get_last_motor_command(self):

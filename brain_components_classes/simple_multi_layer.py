@@ -349,6 +349,10 @@ class SimpleMultiLayer(object):
 
             # then, set I to prediction for next layer
             I_in = I_next.copy()
+
+            # if k == 0:
+            #     print(I_in)
+
             I_seq.append(I_in)  # I_seq[k + 1]
 
         I_next = np.dot(self.W_goal, I_in)  # goal
@@ -367,40 +371,43 @@ class SimpleMultiLayer(object):
                 plan_str += '[' + str(np.count_nonzero(I_seq[k])) + '] '
             print(plan_str)
 
-        # (2) do backward pass from goal state and compute AND, and show new filtered "matched rows" number per layer
-        goal_I = np.zeros_like(I_next)
-        goal_I[goal_context_state_task[0]] = 1.0
-        I_seq[self.n_layers] = np.logical_and(goal_I, I_seq[self.n_layers])
-        goal_I = I_seq[self.n_layers]
+        do_backwards_pass = False
 
-        I_in = np.dot(goal_I, self.W_goal)  # is this right? what I_in's predict goal_I
-        I_in_to_goal = I_in
+        if do_backwards_pass:
+            # (2) do backward pass from goal state and compute AND, and show new filtered "matched rows" number per layer
+            goal_I = np.zeros_like(I_next)
+            goal_I[goal_context_state_task[0]] = 1.0
+            I_seq[self.n_layers] = np.logical_and(goal_I, I_seq[self.n_layers])
+            goal_I = I_seq[self.n_layers]
 
-        enable_goal_override = False
+            I_in = np.dot(goal_I, self.W_goal)  # is this right? what I_in's predict goal_I
+            I_in_to_goal = I_in
 
-        for k in range(self.n_layers - 2, -1, -1):
-            # compute AND of I_in, corresponding I_seq that's already stored
-            I_seq_next_layer = np.logical_and(I_seq[k+1], I_in)
-            I_seq_from_goal = np.logical_and(I_seq[k+1], I_in_to_goal)
+            enable_goal_override = False
 
-            # layer by layer goal logic might no be right
+            for k in range(self.n_layers - 2, -1, -1):
+                # compute AND of I_in, corresponding I_seq that's already stored
+                I_seq_next_layer = np.logical_and(I_seq[k+1], I_in)
+                I_seq_from_goal = np.logical_and(I_seq[k+1], I_in_to_goal)
 
-            if enable_goal_override and np.sum(I_seq_from_goal) > 0:
-                I_seq[k + 1] = I_seq_from_goal
-            else:
-                I_seq[k + 1] = I_seq_next_layer
+                # layer by layer goal logic might no be right
 
-            I_in = I_seq[k+1]
+                if enable_goal_override and np.sum(I_seq_from_goal) > 0:
+                    I_seq[k + 1] = I_seq_from_goal
+                else:
+                    I_seq[k + 1] = I_seq_next_layer
 
-            # TODO first, try self.W_layer_to_goal
-            W_layer_to_goal = self.W_layer_to_goal[k]
-            I_in_to_goal = np.dot(goal_I, W_layer_to_goal)
+                I_in = I_seq[k+1]
 
-            W_layer = self.W_by_layer[k]  # W[future, past]
-            I_in = np.dot(I_in, W_layer)
+                # TODO first, try self.W_layer_to_goal
+                W_layer_to_goal = self.W_layer_to_goal[k]
+                I_in_to_goal = np.dot(goal_I, W_layer_to_goal)
 
-        # don't really need this- this is current input? we care about next prediction onward only
-        I_seq[0] = np.logical_and(I_seq[0], I_in)
+                W_layer = self.W_by_layer[k]  # W[future, past]
+                I_in = np.dot(I_in, W_layer)
+
+            # don't really need this- this is current input? we care about next prediction onward only
+            I_seq[0] = np.logical_and(I_seq[0], I_in)
 
         # (3) show plan on map (position and angle sequence)
         if debug_print:
@@ -425,21 +432,34 @@ class SimpleMultiLayer(object):
             in_entries = in_entries[i0]  # this is the entry index
 
             out_entries = np.nonzero(I_seq[1])[0]  # this can be multiple possible predictions
+            print('current index:', in_entries, ', choosing first of', len(out_entries), 'predictions, index: ', out_entries[0])
             i1 = 0  # choose first one
             # i1 = random.randint(0, len(out_entries) - 1)  # choose a random one
             out_entries = out_entries[i1]
 
-            # ********** HACK: ADD TO VISUALIZER!!! **********
-            ray_colors, _, _ = self.cuda_table_I.get_matrix_row(row_index=out_entries)
-            ray_colors = ray_colors.reshape((len(ray_colors) / 3, 3))
-            camera_image = np.zeros((1, ray_colors.shape[0], 3))
-            camera_image[0, :, 0] = ray_colors[:, 0]
-            camera_image[0, :, 1] = ray_colors[:, 1]
-            camera_image[0, :, 2] = ray_colors[:, 2]
-            resized_camera = cv2.resize(src=camera_image, dsize=(0, 0), fx=20,
-                                        fy=20, interpolation=cv2.INTER_NEAREST)
-            cv2.imshow('camera_predicted', resized_camera)
-            # ********** HACK: ADD TO VISUALIZER!!! **********
+            extra_visualize = False  # TODO add to visualizer as option instead
+            if extra_visualize:
+                # ********** HACK: ADD TO VISUALIZER!!! **********
+                ray_colors, _, _ = self.cuda_table_I.get_matrix_row(row_index=in_entries)
+                ray_colors = ray_colors.reshape((len(ray_colors) / 3, 3))
+                camera_image = np.zeros((1, ray_colors.shape[0], 3))
+                camera_image[0, :, 0] = ray_colors[:, 0]
+                camera_image[0, :, 1] = ray_colors[:, 1]
+                camera_image[0, :, 2] = ray_colors[:, 2]
+                resized_camera = cv2.resize(src=camera_image, dsize=(0, 0), fx=20,
+                                            fy=20, interpolation=cv2.INTER_NEAREST)
+                cv2.imshow('camera_current', resized_camera)
+
+                ray_colors, _, _ = self.cuda_table_I.get_matrix_row(row_index=out_entries)
+                ray_colors = ray_colors.reshape((len(ray_colors) / 3, 3))
+                camera_image = np.zeros((1, ray_colors.shape[0], 3))
+                camera_image[0, :, 0] = ray_colors[:, 0]
+                camera_image[0, :, 1] = ray_colors[:, 1]
+                camera_image[0, :, 2] = ray_colors[:, 2]
+                resized_camera = cv2.resize(src=camera_image, dsize=(0, 0), fx=20,
+                                            fy=20, interpolation=cv2.INTER_NEAREST)
+                cv2.imshow('camera_predicted', resized_camera)
+                # ********** HACK: ADD TO VISUALIZER!!! **********
 
             motor_seq = self.motor_table[in_entries, out_entries, :, :].flatten()
             # print(motor_seq.shape, motor_seq)
