@@ -102,7 +102,7 @@ def get_visualizer_params():
         'image_display_secs_fast': 5,
         'waitKey_time_fast': 1,  # 1, 100, 5000
         'image_display_secs_slow': 0,  # 0: every frame
-        'waitKey_time_slow': 200,  # 1, 100, 5000  # TODO use SHOW_PLAN_ONLY (1000)
+        'waitKey_time_slow': 1,  # 1, 100, 5000  # TODO use SHOW_PLAN_ONLY (1000)
         'scale_topdown_factor': 20,
         'scale_camera_factor': 20,
         'no_wall_ray_color': (0.3, 0.3, 0.3),
