@@ -3,6 +3,7 @@ import cv2
 import numpy as np
 import random
 import pickle
+import pprint
 from tabulate import tabulate
 
 from math import sin, cos
@@ -325,13 +326,59 @@ class SimpleMultiLayer(object):
 
         debug_print = False
 
-        # print('goal_context_state_task:', goal_context_state_task)  # i.e. [3]
-        # do planning here, and display plan as it is being iteratively planned
+        I_seq = self._get_forward_pass()
 
+        if debug_print:
+            print()
+            print('PLAN')
+            print('fwd predictions:')
+            plan_str = ''
+            for k in range(len(I_seq)):
+                plan_str += '[' + str(np.count_nonzero(I_seq[k])) + '] '
+            print(plan_str)
+
+        I_seq_pruned = self._get_backwards_pass(I_seq=I_seq, goal_context_state_task=goal_context_state_task)
+
+        # (3) show plan on map (position and angle sequence)
+        if debug_print:
+            print('after planning:')
+            plan_str = ''
+            for k in range(len(I_seq_pruned)):
+                plan_str += '[' + str(np.count_nonzero(I_seq_pruned[k])) + '] '
+            print(plan_str)
+            print()
+
+        if np.count_nonzero(I_seq_pruned[1]) == 0:
+            self.plan_I_seq = None  # no plan found!
+            # if no plan found: should it return previous motor command? This means last applied motor.
+            motor_out = None
+        else:
+            self.plan_I_seq = I_seq_pruned
+
+            in_entries = np.nonzero(I_seq_pruned[0])[0]  # this is length 1 always, already
+            i0 = 0  # so we just choose first (only) nonzero entry
+            in_entries = in_entries[i0]  # this is the entry index
+
+            out_entries = np.nonzero(I_seq_pruned[1])[0]  # this can be multiple possible predictions
+
+            i1 = 0  # choose first one
+            # i1 = random.randint(0, len(out_entries) - 1)  # choose a random one
+            out_entries = out_entries[i1]
+
+            self._extra_visualize(enable=False, in_entries=in_entries, out_entries=out_entries)
+
+            motor_seq = self.motor_table[in_entries, out_entries, :, :].flatten()
+            motor_out = motor_seq
+
+        return motor_out
+
+    def _get_forward_pass(self):
+
+        # goal_context_state_task: # i.e. [3]
+        # do planning here, and display plan as it is being iteratively planned
         # (1) do forward pass from current I, and show "matched rows" number per layer
 
         I_seq = []  # store sequence of I
-        x_y_theta_seq = []  # store sequence of x_y_theta
 
         (I, x_y_theta) = self.I_history.get_state(state_index=0, delay=0)
 
@@ -345,134 +392,121 @@ class SimpleMultiLayer(object):
             I_next = np.dot(W_layer, I_in)
             I_next[I_next > 1.0] = 1.0  # there may be multiple ways to predict a particular row
 
-            # print(k, np.count_nonzero(I_next), len(I_next), np.amax(I_next))
-
             # then, set I to prediction for next layer
             I_in = I_next.copy()
 
-            # if k == 0:
-            #     print(I_in)
-
             I_seq.append(I_in)  # I_seq[k + 1]
 
+        # self.W_goal = np.zeros((int(np.amax(pre_init_goal_contexts)), self.entries), np.int)  # last layer to goal
+        # this is the last layer, where I_next is in the space of goal states
         I_next = np.dot(self.W_goal, I_in)  # goal
         I_next[I_next > 1.0] = 1.0  # there may be multiple ways to predict a particular row
         I_seq.append(I_next)  # I_seq[n_layers]
 
-        # print('INFO', len(I_seq), self.n_layers)  # INFO 5 4 -
-        # why 5 > 4? sequence includes input, and then output of each predictive layer
+        # len(I_seq): 5, self.n_layers: 4. why 5 > 4? sequence includes input, and then output of each predictive layer
 
-        if debug_print:
-            print()
-            print('PLAN')
-            print('fwd predictions:')
-            plan_str = ''
-            for k in range(len(I_seq)):
-                plan_str += '[' + str(np.count_nonzero(I_seq[k])) + '] '
-            print(plan_str)
+        return I_seq
 
-        do_backwards_pass = False
+    def _get_backwards_pass(self, I_seq, goal_context_state_task):
 
-        if do_backwards_pass:
-            # (2) do backward pass from goal state and compute AND, and show new filtered "matched rows" number per layer
-            goal_I = np.zeros_like(I_next)
-            goal_I[goal_context_state_task[0]] = 1.0
-            I_seq[self.n_layers] = np.logical_and(goal_I, I_seq[self.n_layers])
-            goal_I = I_seq[self.n_layers]
+        pp = pprint.PrettyPrinter(indent=2)
 
-            I_in = np.dot(goal_I, self.W_goal)  # is this right? what I_in's predict goal_I
-            I_in_to_goal = I_in
+        I_seq_pruned = [[]] * (self.n_layers + 1)
 
-            enable_goal_override = False
+        # (2) do backward pass from goal state and compute AND, and show new filtered "matched rows" number per layer
 
-            for k in range(self.n_layers - 2, -1, -1):
-                # compute AND of I_in, corresponding I_seq that's already stored
-                I_seq_next_layer = np.logical_and(I_seq[k+1], I_in)
-                I_seq_from_goal = np.logical_and(I_seq[k+1], I_in_to_goal)
+        goal_I_tmp = np.zeros(int(np.amax(self.goal_context_values)), np.float)  # np.zeros_like(I_next)
+        goal_I_tmp[goal_context_state_task[0]] = 1.0
 
-                # layer by layer goal logic might no be right
+        # this could result in a null set (goal unreachable from this state)
+        goal_I = np.logical_and(goal_I_tmp, I_seq[self.n_layers]).astype(np.float)
 
-                if enable_goal_override and np.sum(I_seq_from_goal) > 0:
-                    I_seq[k + 1] = I_seq_from_goal
-                else:
-                    I_seq[k + 1] = I_seq_next_layer
+        I_seq_pruned[self.n_layers] = goal_I
 
-                I_in = I_seq[k+1]
+        # Reference: Note from 2019-10-12 12:04:31.905 pprint I_seq, goal_I, goal_I_tmp, I_seq, I_seq_pruned
 
-                # TODO first, try self.W_layer_to_goal
+        enable_goal_override = False  # TODO make this an argument
+
+        for k in range(self.n_layers - 1, -1, -1):
+            if k == self.n_layers - 1:
+                W_layer_to_goal = self.W_goal
+                W_layer = self.W_goal
+            else:
                 W_layer_to_goal = self.W_layer_to_goal[k]
-                I_in_to_goal = np.dot(goal_I, W_layer_to_goal)
+                W_layer = self.W_by_layer[k]
 
-                W_layer = self.W_by_layer[k]  # W[future, past]
-                I_in = np.dot(I_in, W_layer)
+            I_seq_fwd = I_seq[k]  # current predictions for this timescale, unpruned from forward
 
-            # don't really need this- this is current input? we care about next prediction onward only
-            I_seq[0] = np.logical_and(I_seq[0], I_in)
+            # overlap of fwd for this timescale, and back-predict from pruned of longer timescale
+            I_seq_pruned_to_layer = np.logical_and(I_seq_fwd, np.dot(I_seq_pruned[k + 1], W_layer)).astype(np.float)
 
-        # (3) show plan on map (position and angle sequence)
-        if debug_print:
-            print('after planning:')
-            plan_str = ''
-            for k in range(len(I_seq)):
-                plan_str += '[' + str(np.count_nonzero(I_seq[k])) + '] '
-            print(plan_str)
-            print()
+            # overlap of fwd for this timescale, and back-predict from goal at longer timescale
+            I_seq_pruned_to_goal = np.logical_and(I_seq_fwd, np.dot(goal_I, W_layer_to_goal)).astype(np.float)
 
-        if np.count_nonzero(I_seq[1]) == 0:
-            self.plan_I_seq = None  # no plan found!
-            in_entries = None  # just for display
-            out_entries = None  # just for display
-            # TODO if no plan found: should it return previous motor command? This means last applied motor.
-            motor_out = None
-        else:
-            self.plan_I_seq = I_seq
+            if enable_goal_override and np.sum(I_seq_pruned_to_goal) > 0:
+                I_seq_pruned[k] = I_seq_pruned_to_goal
+            else:
+                I_seq_pruned[k] = I_seq_pruned_to_layer
 
-            in_entries = np.nonzero(I_seq[0])[0]  # this is length 1 always, already
-            i0 = 0  # so we just choose first (only) nonzero entry  # TODO why important?
-            in_entries = in_entries[i0]  # this is the entry index
+        return I_seq_pruned
 
-            out_entries = np.nonzero(I_seq[1])[0]  # this can be multiple possible predictions
+        # **** OLD **** OLD **** OLD **** OLD **** OLD **** OLD **** OLD **** OLD
 
-            if debug_print:
-                print('current index:', in_entries, ', choosing first of', len(out_entries), 'predictions, index: ', out_entries[0])
-            i1 = 0  # choose first one
-            # i1 = random.randint(0, len(out_entries) - 1)  # choose a random one
-            out_entries = out_entries[i1]
+        I_in = np.dot(goal_I, self.W_goal)  # is this right? what I_in's predict goal_I
+        I_in_to_goal = I_in
 
-            extra_visualize = False  # TODO add to visualizer as option instead
-            if extra_visualize:
-                # ********** HACK: ADD TO VISUALIZER!!! **********
-                ray_colors, _, _ = self.cuda_table_I.get_matrix_row(row_index=in_entries)
-                ray_colors = ray_colors.reshape((len(ray_colors) / 3, 3))
-                camera_image = np.zeros((1, ray_colors.shape[0], 3))
-                camera_image[0, :, 0] = ray_colors[:, 0]
-                camera_image[0, :, 1] = ray_colors[:, 1]
-                camera_image[0, :, 2] = ray_colors[:, 2]
-                resized_camera = cv2.resize(src=camera_image, dsize=(0, 0), fx=20,
-                                            fy=20, interpolation=cv2.INTER_NEAREST)
-                cv2.imshow('camera_current', resized_camera)
+        enable_goal_override = False  # TODO make this an argument
 
-                ray_colors, _, _ = self.cuda_table_I.get_matrix_row(row_index=out_entries)
-                ray_colors = ray_colors.reshape((len(ray_colors) / 3, 3))
-                camera_image = np.zeros((1, ray_colors.shape[0], 3))
-                camera_image[0, :, 0] = ray_colors[:, 0]
-                camera_image[0, :, 1] = ray_colors[:, 1]
-                camera_image[0, :, 2] = ray_colors[:, 2]
-                resized_camera = cv2.resize(src=camera_image, dsize=(0, 0), fx=20,
-                                            fy=20, interpolation=cv2.INTER_NEAREST)
-                cv2.imshow('camera_predicted', resized_camera)
-                # ********** HACK: ADD TO VISUALIZER!!! **********
+        for k in range(self.n_layers - 2, -1, -1):
+            # compute AND of I_in, corresponding I_seq that's already stored
+            I_seq_next_layer = np.logical_and(I_seq[k + 1], I_in)
+            I_seq_from_goal = np.logical_and(I_seq[k + 1], I_in_to_goal)
 
-            motor_seq = self.motor_table[in_entries, out_entries, :, :].flatten()
-            # print(motor_seq.shape, motor_seq)
-            motor_out = motor_seq
+            # layer by layer goal logic might no be right
 
-        #print()
-        #print('in_entries:', in_entries, 'out_entries:', out_entries)
-        #print('motor_out:', motor_out)
-        #print()
+            if enable_goal_override and np.sum(I_seq_from_goal) > 0:
+                I_seq_pruned[k + 1] = I_seq_from_goal  # TODO set I_seq_pruned instead
+            else:
+                I_seq_pruned[k + 1] = I_seq_next_layer
 
-        return motor_out
+            I_in = I_seq_pruned[k + 1]
+
+            # try self.W_layer_to_goal
+            W_layer_to_goal = self.W_layer_to_goal[k]
+            I_in_to_goal = np.dot(goal_I, W_layer_to_goal)
+
+            W_layer = self.W_by_layer[k]  # W[future, past]
+            I_in = np.dot(I_in, W_layer)
+
+        # don't really need this- this is current input? we care about next prediction onward only
+        I_seq_pruned[0] = np.logical_and(I_seq[0], I_in)
+
+        return I_seq_pruned
+
+    def _extra_visualize(self, enable, in_entries, out_entries):
+        extra_visualize = enable  # TODO add to visualizer as option instead
+        if extra_visualize:
+            # ********** HACK: ADD TO VISUALIZER!!! **********
+            ray_colors, _, _ = self.cuda_table_I.get_matrix_row(row_index=in_entries)
+            ray_colors = ray_colors.reshape((len(ray_colors) / 3, 3))
+            camera_image = np.zeros((1, ray_colors.shape[0], 3))
+            camera_image[0, :, 0] = ray_colors[:, 0]
+            camera_image[0, :, 1] = ray_colors[:, 1]
+            camera_image[0, :, 2] = ray_colors[:, 2]
+            resized_camera = cv2.resize(src=camera_image, dsize=(0, 0), fx=20,
+                                        fy=20, interpolation=cv2.INTER_NEAREST)
+            cv2.imshow('camera_current', resized_camera)
+
+            ray_colors, _, _ = self.cuda_table_I.get_matrix_row(row_index=out_entries)
+            ray_colors = ray_colors.reshape((len(ray_colors) / 3, 3))
+            camera_image = np.zeros((1, ray_colors.shape[0], 3))
+            camera_image[0, :, 0] = ray_colors[:, 0]
+            camera_image[0, :, 1] = ray_colors[:, 1]
+            camera_image[0, :, 2] = ray_colors[:, 2]
+            resized_camera = cv2.resize(src=camera_image, dsize=(0, 0), fx=20,
+                                        fy=20, interpolation=cv2.INTER_NEAREST)
+            cv2.imshow('camera_predicted', resized_camera)
+            # ********** HACK: ADD TO VISUALIZER!!! **********
 
     def get_current_plan(self):
         return self.plan_I_seq, self.entries_x_y_theta_input
