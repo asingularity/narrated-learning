@@ -4,7 +4,7 @@ import cv2
 import numpy as np
 np.set_printoptions(suppress=True)
 
-from brain_components import StatesHistory, MotorHistory, DebugTopdownInfoHistory, MultiLayerEnsemble, SimpleMultiLayer
+from brain_components import StatesHistory, MotorHistory, DebugTopdownInfoHistory, MultiLayerEnsemble, SimpleMultiLayer, SingleLayerTrace
 
 
 class RobotBrain(object):
@@ -37,7 +37,8 @@ class RobotBrain(object):
             goal_states_dim = 1
             table_entries = params['table_entries']
 
-            self.predictor_ensemble = SimpleMultiLayer(params={
+            #self.predictor_ensemble = SimpleMultiLayer(params={
+            self.predictor_ensemble = SingleLayerTrace(params={
                 'input_dim': dim,
                 'goal_context_dim': goal_states_dim,
                 'entries': table_entries,
