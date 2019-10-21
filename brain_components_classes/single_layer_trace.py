@@ -271,6 +271,11 @@ class SingleLayerTrace(object):
         I_next = np.nonzero(self.W[:, current_I_index] == 1)[0]
         # print('I_next', I_next)
 
+        if len(I_next) == 0:
+            print('no path found!')
+            motor_out = None
+            return motor_out
+
         # (2) look up all states corresponding to current goal context -> array I_goal
 
         I_goal = np.nonzero(self.goal_table[:, goal_index] == 1)[0]
