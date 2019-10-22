@@ -4,8 +4,7 @@ import cv2
 import numpy as np
 np.set_printoptions(suppress=True)
 
-from brain_components import StatesHistory, MotorHistory, DebugTopdownInfoHistory, MultiLayerEnsemble, SimpleMultiLayer, SingleLayerTrace
-
+from brain_components import StatesHistory, MotorHistory, DebugTopdownInfoHistory, SingleLayerTrace  # SimpleMultiLayer
 
 class RobotBrain(object):
     def __init__(self, params):

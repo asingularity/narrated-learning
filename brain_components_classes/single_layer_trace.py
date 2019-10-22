@@ -3,8 +3,6 @@ import cv2
 import numpy as np
 import random
 import pickle
-import pprint
-from tabulate import tabulate
 
 from math import sin, cos
 from cuda_dist_query import CudaTable
