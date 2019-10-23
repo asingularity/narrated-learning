@@ -24,8 +24,8 @@ SIM_LOAD_NAME = '2019-07-21T21:18:20.175737'
 ENABLE_TASK_MODE = False
 
 TABLE_ENTRIES = 8000  # * 10  # 2000 with 16; 4000 with 8
-TABLE_LEARN_TIME = TABLE_ENTRIES * 8 * 2
-PREDICTION_LEARN_TIME = TABLE_ENTRIES * 8 * 2
+TABLE_LEARN_TIME = TABLE_ENTRIES * 16
+PREDICTION_LEARN_TIME = TABLE_ENTRIES * 16
 
 SHOW_PLAN_ONLY = False
 
@@ -124,7 +124,7 @@ def get_task_manager_params():
             [7, 0, 3, 3],
             [7, 7, 3, 3]
         ],
-        'steps_per_task_goal': 200,  # if enabled is True  # TODO use SHOW_PLAN_ONLY (1)
+        'steps_per_task_goal': 200 / 4,  # if enabled is True  # TODO use SHOW_PLAN_ONLY (1)
         'task_randomize_robot_position': SHOW_PLAN_ONLY,  # for debugging, random robot position each step in task mode
         'debug_print': False  # prints correct / incorrect goal reached
     }
