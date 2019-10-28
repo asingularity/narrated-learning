@@ -99,7 +99,7 @@ class RobotSensors(object):
         :return:
         '''
 
-        return None
+        #return None
 
         # TODO optimization: if already defined for this timestep (not invalidated), don't redefine; store/retrieve instead
 
