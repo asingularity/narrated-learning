@@ -354,7 +354,14 @@ class Visualizer(object):
 
         cv2.imshow('W', concat_im)
 
-    def visualize(self, rays, topdown_info, plots_save_folder, goal_regions, current_task_goal_index, robot_brain):
+    def _display_raycast_image(self, raycast_image):
+        cv2.imshow('raycast', raycast_image)
+
+        # without this, was not always displaying most up to date image
+        for k in range(100):
+            cv2.waitKey(1)
+
+    def visualize(self, rays, raycast_image, topdown_info, plots_save_folder, goal_regions, current_task_goal_index, robot_brain):
         self._display_fps()
 
         if self.image_display_secs is not None:
@@ -380,6 +387,9 @@ class Visualizer(object):
                         I_im, W_im_list = table_ims
                         self._display_I_and_W_ims_tiled(I_im=I_im,
                                                         W_im_list=W_im_list)
+
+                if raycast_image is not None:
+                    self._display_raycast_image(raycast_image=raycast_image)
 
                 self.last_image_display_time = time.time()
 

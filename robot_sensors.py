@@ -71,6 +71,13 @@ class RobotSensors(object):
             })
 
     def get_rays(self, nonzero_tiles=None, robot_position_angle=None):
+        '''
+
+        :param nonzero_tiles: generally None in real-time operation except for debugging
+        :param robot_position_angle: generally None in real-time operation except for debugging
+        :return:
+        '''
+
         if nonzero_tiles is None or robot_position_angle is None:
             return {
                 'ray_radians': self.relative_ray_radians,
@@ -86,6 +93,45 @@ class RobotSensors(object):
                 'ray_colors': ray_colors,
                 'ray_lengths': ray_lengths
             }
+
+    def get_raycast_image(self):
+        '''
+        :return:
+        '''
+
+        return None
+
+        # TODO optimization: if already defined for this timestep (not invalidated), don't redefine; store/retrieve instead
+
+        ray_colors = self.ray_colors.reshape((len(self.ray_colors) / 3, 3))
+
+        num_rays = self.ray_lengths.shape[0]
+        actual_height = 60.0
+        dist_to_plane = 2.0
+
+        projected_height = (actual_height * 1.0 / self.ray_lengths) * dist_to_plane
+
+        im = np.zeros((num_rays, num_rays, 3), np.float)
+
+        # TODO this needs trivial parallelization speedup
+
+        for ray_i in range(num_rays):
+            ray_color = ray_colors[ray_i]
+            h = projected_height[ray_i]
+            r0 = max(0, int(num_rays / 2 - h / 2.0))
+            r1 = min(num_rays - 1, int(num_rays / 2 + h / 2.0))
+
+            im[r0:r1, ray_i, :] = ray_color[:]
+
+        # TODO make this a parameter; has to match network expected 2D image size! or, network should resize?
+        #resized_im = cv2.resize(src=im, dsize=(0, 0), fx=20, fy=20,
+        #                        interpolation=cv2.INTER_NEAREST)
+        resized_im = im.copy()
+
+        #cv2.imshow('DEBUG_cam', resized_camera_DEBUG)
+        #cv2.imshow('DEBUG_im', resized_im)
+
+        return resized_im
 
     def read_input(self, nonzero_tiles, robot_theta):
         self.ray_colors, self.ray_lengths, self.relative_ray_radians = \
