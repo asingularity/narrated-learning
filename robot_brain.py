@@ -104,7 +104,7 @@ class RobotBrain(object):
 
     # ************ process ************
 
-    def process_input_get_motor(self, rays, last_motor_command, models_save_folder, debug_topdown_info, goal_index_reached, goal_index_task):
+    def process_input_get_motor(self, rays, raycast_image, last_motor_command, models_save_folder, debug_topdown_info, goal_index_reached, goal_index_task):
         '''
 
         :param rays:

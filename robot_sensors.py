@@ -58,6 +58,8 @@ class RobotSensors(object):
         self.ray_colors = np.zeros(self.num_rays * 3)
         self.ray_lengths = np.zeros(self.num_rays)
 
+        self.raycast_image = None
+
         self.pool = mp.Pool(processes=num_processes)
         self.ray_params = []
         for k in range(self.num_rays):
@@ -99,9 +101,12 @@ class RobotSensors(object):
         :return:
         '''
 
-        #return None
+        return self.raycast_image
 
-        # TODO optimization: if already defined for this timestep (not invalidated), don't redefine; store/retrieve instead
+    def read_input(self, nonzero_tiles, robot_theta):
+        self.ray_colors, self.ray_lengths, self.relative_ray_radians = \
+            self._compute_rays_for_env_and_theta(nonzero_tiles=nonzero_tiles,
+                                                 robot_theta=robot_theta)
 
         ray_colors = self.ray_colors.reshape((len(self.ray_colors) / 3, 3))
 
@@ -123,20 +128,13 @@ class RobotSensors(object):
 
             im[r0:r1, ray_i, :] = ray_color[:]
 
-        # TODO make this a parameter; has to match network expected 2D image size! or, network should resize?
-        #resized_im = cv2.resize(src=im, dsize=(0, 0), fx=20, fy=20,
-        #                        interpolation=cv2.INTER_NEAREST)
-        resized_im = im.copy()
+        # make this a parameter; has to match network expected 2D image size! or, network should resize?
+        # answer: network should resize
 
-        #cv2.imshow('DEBUG_cam', resized_camera_DEBUG)
-        #cv2.imshow('DEBUG_im', resized_im)
+        # resized_im = cv2.resize(src=im, dsize=(0, 0), fx=20, fy=20,
+        #                         interpolation=cv2.INTER_NEAREST)
 
-        return resized_im
-
-    def read_input(self, nonzero_tiles, robot_theta):
-        self.ray_colors, self.ray_lengths, self.relative_ray_radians = \
-            self._compute_rays_for_env_and_theta(nonzero_tiles=nonzero_tiles,
-                                                 robot_theta=robot_theta)
+        self.raycast_image = im.copy()
 
     def _compute_rays_for_env_and_theta(self, nonzero_tiles, robot_theta):
 

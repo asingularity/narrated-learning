@@ -177,7 +177,8 @@ def run_demo(demo_components):
         #   robot_model.last_motor_command: CMD_T
 
         t_process_0 = time.time()
-        new_motor_out = robot_brain.process_input_get_motor(rays=robot_sensors.get_rays(),  # TODO instead: raycast_image=robot_sensors.get_raycast_image()
+        new_motor_out = robot_brain.process_input_get_motor(rays=robot_sensors.get_rays(),
+                                                            raycast_image=robot_sensors.get_raycast_image(),
                                                             last_motor_command=robot_model.get_last_motor_command(),
                                                             models_save_folder=sim_folder_manager.get_models_save_folder(),
                                                             debug_topdown_info=robot_environment.get_topdown_info(),  # for storing robot position, angle for debugging planning
