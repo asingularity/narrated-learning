@@ -40,6 +40,7 @@ def get_model_params():
 
 def get_sensors_params():
     params = {
+        'enable_raycast_image': False,
         'num_rays': NUM_INPUT_RAYS,
         'fov_degrees': 100
     }
@@ -142,7 +143,7 @@ def init_demo():
         'task_manager': TaskManager(get_task_manager_params())
     }
 
-
+@profile
 def run_demo(demo_components):
     robot_environment = demo_components['robot_environment']
     robot_brain = demo_components['robot_brain']

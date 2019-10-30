@@ -48,6 +48,7 @@ def compute_a_ray(params):
 class RobotSensors(object):
     def __init__(self, params):
         self.num_rays = params['num_rays']
+        self.enable_raycast_image = params['enable_raycast_image']
         fov_degrees = params['fov_degrees']
         num_processes = 6
 
@@ -108,33 +109,34 @@ class RobotSensors(object):
             self._compute_rays_for_env_and_theta(nonzero_tiles=nonzero_tiles,
                                                  robot_theta=robot_theta)
 
-        ray_colors = self.ray_colors.reshape((len(self.ray_colors) / 3, 3))
+        if self.enable_raycast_image:
+            ray_colors = self.ray_colors.reshape((len(self.ray_colors) / 3, 3))
 
-        num_rays = self.ray_lengths.shape[0]
-        actual_height = 60.0
-        dist_to_plane = 2.0
+            num_rays = self.ray_lengths.shape[0]
+            actual_height = 60.0
+            dist_to_plane = 2.0
 
-        projected_height = (actual_height * 1.0 / self.ray_lengths) * dist_to_plane
+            projected_height = (actual_height * 1.0 / self.ray_lengths) * dist_to_plane
 
-        im = np.zeros((num_rays, num_rays, 3), np.float)
+            im = np.zeros((num_rays, num_rays, 3), np.float)
 
-        # TODO this needs trivial parallelization speedup
+            # TODO this needs trivial parallelization speedup
 
-        for ray_i in range(num_rays):
-            ray_color = ray_colors[ray_i]
-            h = projected_height[ray_i]
-            r0 = max(0, int(num_rays / 2 - h / 2.0))
-            r1 = min(num_rays - 1, int(num_rays / 2 + h / 2.0))
+            for ray_i in range(num_rays):
+                ray_color = ray_colors[ray_i]
+                h = projected_height[ray_i]
+                r0 = max(0, int(num_rays / 2 - h / 2.0))
+                r1 = min(num_rays - 1, int(num_rays / 2 + h / 2.0))
 
-            im[r0:r1, ray_i, :] = ray_color[:]
+                im[r0:r1, ray_i, :] = ray_color[:]
 
-        # make this a parameter; has to match network expected 2D image size! or, network should resize?
-        # answer: network should resize
+            # make this a parameter; has to match network expected 2D image size! or, network should resize?
+            # answer: network should resize
 
-        # resized_im = cv2.resize(src=im, dsize=(0, 0), fx=20, fy=20,
-        #                         interpolation=cv2.INTER_NEAREST)
+            # resized_im = cv2.resize(src=im, dsize=(0, 0), fx=20, fy=20,
+            #                         interpolation=cv2.INTER_NEAREST)
 
-        self.raycast_image = im.copy()
+            self.raycast_image = im.copy()
 
     def _compute_rays_for_env_and_theta(self, nonzero_tiles, robot_theta):
 
