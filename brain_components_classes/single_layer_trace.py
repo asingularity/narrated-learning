@@ -296,6 +296,23 @@ class SingleLayerTrace(object):
         motor_seq = self.motor_table[current_I_index, I_next_max, :, :].flatten()
         motor_out = motor_seq
 
+        if I_goal_max == 0 and I_next_max == 0 and W_next_to_goal[I_goal_max, I_next_max] == 0.0:
+            print()
+            print('******* Bad State ******')
+            print('    no path found?')
+            print()
+            print('len(I_goal)', len(I_goal), 'len(I_next)', len(I_next))
+            print()
+            print('np.count_nonzero(W_next_to_goal)', np.count_nonzero(W_next_to_goal))
+            print()
+            print('motor_out', motor_out)
+            print()
+            print('    setting motor_out to None')
+            print('********************')
+            print()
+
+            motor_out = None
+
         return motor_out
 
     def step(self, input_state, input_x_y_theta, goal_context_state_learning, goal_context_state_task, last_motor_command):
