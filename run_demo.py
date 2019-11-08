@@ -106,6 +106,7 @@ def get_visualizer_params():
         'waitKey_time_slow': 1,  # 1, 100, 5000  # TODO use SHOW_PLAN_ONLY (1000)
         'scale_topdown_factor': 20,
         'scale_camera_factor': 20,
+        'scale_raycast_im_factor': 20,
         'no_wall_ray_color': (0.3, 0.3, 0.3),
         'auto_switch_to_slow_disp_time': TABLE_LEARN_TIME + PREDICTION_LEARN_TIME,
         'show_table_ims': True,

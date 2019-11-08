@@ -47,10 +47,7 @@ class SingleLayerTrace(object):
                                                                          self.stop_prediction_learn_t))
 
         self.cuda_table_I = CudaTable(num_entries=self.entries,
-                                      input_dim=self.input_dim,
-                                      output_dim=0,
-                                      context_dim=0,
-                                      include_layers=['i_only'])
+                                      input_dim=self.input_dim)
 
         self.init_I_row_num = None
 
@@ -125,9 +122,7 @@ class SingleLayerTrace(object):
         :return: I (sparse vector, one-hot)
         '''
 
-        dists = self.cuda_table_I.query(query_input=input_state,
-                                        query_output=None,
-                                        query_context=None)
+        dists = self.cuda_table_I.query(query_input=input_state)
 
         I_index = np.argmin(dists)
         if learn_table:
@@ -164,8 +159,6 @@ class SingleLayerTrace(object):
             try:
                 self.cuda_table_I.set_matrix_row(row_index=self.init_I_row_num,
                                                  row_input=input_state,
-                                                 row_output=None,
-                                                 row_context=None,
                                                  row_to_table_dists=dists,
                                                  fast_init=True)
             except AssertionError:
@@ -196,8 +189,6 @@ class SingleLayerTrace(object):
                 # replace the current min dist row, with the new row
                 self.cuda_table_I.set_matrix_row(row_index=r_r_ind,
                                                  row_input=input_state,
-                                                 row_output=None,
-                                                 row_context=None,
                                                  row_to_table_dists=dists)
 
                 if input_x_y_theta is not None:

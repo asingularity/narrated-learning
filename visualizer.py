@@ -18,6 +18,7 @@ class Visualizer(object):
         self.fps_display_interval = params['fps_display_interval']
         self.scale_topdown_factor = params['scale_topdown_factor']
         self.scale_camera_factor = params['scale_camera_factor']
+        self.scale_raycast_im_factor = params['scale_raycast_im_factor']
 
         self.plot_brain_error_frames =params['plot_brain_error_frames']
         self.no_wall_ray_color = params['no_wall_ray_color']
@@ -355,7 +356,9 @@ class Visualizer(object):
         cv2.imshow('W', concat_im)
 
     def _display_raycast_image(self, raycast_image):
-        cv2.imshow('raycast', raycast_image)
+        resized_im = cv2.resize(src=raycast_image, dsize=(0, 0), fx=self.scale_camera_factor,
+                                fy=self.scale_camera_factor, interpolation=cv2.INTER_NEAREST)
+        cv2.imshow('raycast', resized_im)
 
         # without this, was not always displaying most up to date image
         for k in range(100):

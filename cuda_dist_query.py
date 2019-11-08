@@ -17,7 +17,7 @@ class CudaTable(object):
         cuda_table_test.py
     '''
 
-    def __init__(self, num_entries, input_dim, output_dim, context_dim, include_layers, table=None, use_dumb_dist=False, disable_row_row_dist=False):
+    def __init__(self, num_entries, input_dim, table=None, use_dumb_dist=False, disable_row_row_dist=False):
         '''
 
         need to init twice: input + context, input + output + context
@@ -38,12 +38,8 @@ class CudaTable(object):
         self.post_init_done = False
         self.compute_d = True
 
-        self.include_layers = include_layers
-
         self.num_entries = num_entries
         self.input_dim = input_dim
-        self.output_dim = output_dim
-        self.context_dim = context_dim
 
         self.disable_row_row_dist = disable_row_row_dist
 
@@ -62,69 +58,20 @@ class CudaTable(object):
         # set back to zero init
         # table = np.random.random((num_entries, input_dim + context_dim + output_dim)).astype(np.float32)
 
-        self.include_ioc = ('ioc' in self.include_layers)
-        self.include_ic = ('ic_only' in self.include_layers)
-        self.include_io = ('io_only' in self.include_layers)
-        self.include_i = ('i_only' in self.include_layers)
+        # i_only
 
-        if self.include_ioc:
-            self.include_ioc = True
-            if table is None:
-                table = np.zeros((num_entries, input_dim + output_dim + context_dim), np.float32)
+        if table is None:
+            # TODO finish this- also incorporate into set_matrix_row
+            table_i_only = np.zeros((num_entries, input_dim), np.float32)
+        else:
+            i_indices = np.arange(input_dim)
+            table_i_only = table[:, i_indices]
 
-            self.size_gb += (table.size * 4.0) / (1e9)
+        self.size_gb += (table_i_only.size * 4.0) / (1e9)
 
-            self.table_gpu = gpuarray.to_gpu(np.ascontiguousarray(np.transpose(table)))
-            self.X = np.zeros((1, table.shape[1])).astype(np.float32)
-            self.term_2 = np.sum(table ** 2, axis=1)
-
-        if self.include_ic:
-            # i_c_only
-
-            if table is None:
-                table_i_c_only = np.zeros((num_entries, input_dim + context_dim), np.float32)
-            else:
-                i_indices = np.arange(input_dim)
-                c_indices = np.arange(input_dim + output_dim, input_dim + output_dim + context_dim)
-                table_i_c_only = table[:, np.concatenate((i_indices, c_indices))]
-
-            self.size_gb += (table_i_c_only.size * 4.0) / (1e9)
-
-            self.table_ic_gpu = gpuarray.to_gpu(np.ascontiguousarray(np.transpose(table_i_c_only)))
-            self.X_ic = np.zeros((1, table_i_c_only.shape[1])).astype(np.float32)
-            self.term_2_ic = np.sum(table_i_c_only ** 2, axis=1)
-
-        if self.include_io:
-            # i_o_only
-
-            if table is None:
-                table_i_o_only = np.zeros((num_entries, input_dim + output_dim), np.float32)
-            else:
-                i_indices = np.arange(input_dim)
-                o_indices = np.arange(input_dim, input_dim + output_dim)
-                table_i_o_only = table[:, np.concatenate((i_indices, o_indices))]
-
-            self.size_gb += (table_i_o_only.size * 4.0) / (1e9)
-
-            self.table_io_gpu = gpuarray.to_gpu(np.ascontiguousarray(np.transpose(table_i_o_only)))
-            self.X_io = np.zeros((1, table_i_o_only.shape[1])).astype(np.float32)
-            self.term_2_io = np.sum(table_i_o_only ** 2, axis=1)
-
-        if self.include_i:
-            # i_only
-
-            if table is None:
-                # TODO finish this- also incorporate into set_matrix_row
-                table_i_only = np.zeros((num_entries, input_dim), np.float32)
-            else:
-                i_indices = np.arange(input_dim)
-                table_i_only = table[:, i_indices]
-
-            self.size_gb += (table_i_only.size * 4.0) / (1e9)
-
-            self.table_i_gpu = gpuarray.to_gpu(np.ascontiguousarray(np.transpose(table_i_only)))
-            self.X_i = np.zeros((1, table_i_only.shape[1])).astype(np.float32)
-            self.term_2_i = np.sum(table_i_only ** 2, axis=1)
+        self.table_i_gpu = gpuarray.to_gpu(np.ascontiguousarray(np.transpose(table_i_only)))
+        self.X_i = np.zeros((1, table_i_only.shape[1])).astype(np.float32)
+        self.term_2_i = np.sum(table_i_only ** 2, axis=1)
 
         self.pickle_save_temp = {}
 
@@ -133,33 +80,13 @@ class CudaTable(object):
 
         self.pickle_save_temp = {}
 
-        if self.include_ioc:
-            self.pickle_save_temp['ioc'] = self.table_gpu.get()
-
-        if self.include_ic:
-            self.pickle_save_temp['ic'] = self.table_ic_gpu.get()
-
-        if self.include_io:
-            self.pickle_save_temp['io'] = self.table_io_gpu.get()
-
-        if self.include_i:
-            self.pickle_save_temp['i'] = self.table_i_gpu.get()
+        self.pickle_save_temp['i'] = self.table_i_gpu.get()
 
     def init_after_load(self):
         # load tables onto GPU!
         linalg.init()
 
-        if self.include_ioc:
-            self.table_gpu = gpuarray.to_gpu(self.pickle_save_temp['ioc'])
-
-        if self.include_ic:
-            self.table_ic_gpu = gpuarray.to_gpu(self.pickle_save_temp['ic'])
-
-        if self.include_io:
-            self.table_io_gpu = gpuarray.to_gpu(self.pickle_save_temp['io'])
-
-        if self.include_i:
-            self.table_i_gpu = gpuarray.to_gpu(self.pickle_save_temp['i'])
+        self.table_i_gpu = gpuarray.to_gpu(self.pickle_save_temp['i'])
 
     def get_num_rows(self):
         return self.num_entries
@@ -172,7 +99,28 @@ class CudaTable(object):
         if not self.disable_row_row_dist:
             self.d.post_init()
 
-    def query(self, query_input, query_output, query_context):
+    def query_multiple_rows(self, query_inputs):
+        '''
+        assumes that only query_input is being used
+
+        :param query_input:
+        :return: list of [dists] per each query input
+        '''
+
+        query_arr = np.array(query_inputs, np.float32)
+        X = query_arr
+
+        i_d_t_gpu = self.table_i_gpu
+        X_gpu = gpuarray.to_gpu(X)
+        term_1 = linalg.dot(X_gpu, i_d_t_gpu).get()
+        term_1 = -2 * term_1
+        term_2 = self.term_2_i
+        term_3 = np.sum(X ** 2, axis=1)[:, np.newaxis]
+        dists = term_1 + term_2 + term_3
+
+        return dists
+
+    def query(self, query_input):
         '''
         at least one of arguments has to be not None
 
@@ -199,60 +147,66 @@ class CudaTable(object):
 
         assert query_input is not None
 
-        if query_context is None and query_output is None:
-            # query_input only
-            query_data = query_input
-            X = self.X_i
-            X[0, :] = query_data[:]
-            i_d_t_gpu = self.table_i_gpu
-            X_gpu = gpuarray.to_gpu(X)
-            term_1 = linalg.dot(X_gpu, i_d_t_gpu).get()
-            term_1 = -2 * term_1
-            term_2 = self.term_2_i
-            term_3 = np.sum(X ** 2, axis=1)[:, np.newaxis]
-            dists = term_1 + term_2 + term_3
-        elif query_output is None and query_context is not None:
-            # query_input and query_context only
-            query_data = np.concatenate((query_input, query_context))
-            X = self.X_ic
-            X[0, :] = query_data[:]
-            i_d_t_gpu = self.table_ic_gpu
-            X_gpu = gpuarray.to_gpu(X)
-            term_1 = linalg.dot(X_gpu, i_d_t_gpu).get()
-            term_1 = -2 * term_1
-            term_2 = self.term_2_ic
-            term_3 = np.sum(X ** 2, axis=1)[:, np.newaxis]
-            dists = term_1 + term_2 + term_3
-        elif query_output is not None and query_context is None:
-            query_data = np.concatenate((query_input, query_output))
-            X = self.X_io
-            X[0, :] = query_data[:]
-            i_d_t_gpu = self.table_io_gpu
-            X_gpu = gpuarray.to_gpu(X)
-            term_1 = linalg.dot(X_gpu, i_d_t_gpu).get()
-            term_1 = -2 * term_1
-            term_2 = self.term_2_io
-            term_3 = np.sum(X ** 2, axis=1)[:, np.newaxis]
-            dists = term_1 + term_2 + term_3
-        elif query_output is not None and query_context is not None:
-            # all three
-            query_data = np.concatenate((query_input, query_output, query_context))
-            X = self.X
-            X[0, :] = query_data[:]
-            i_d_t_gpu = self.table_gpu
-            X_gpu = gpuarray.to_gpu(X)
-            term_1 = linalg.dot(X_gpu, i_d_t_gpu).get()
-            term_1 = -2 * term_1
-            term_2 = self.term_2
-            term_3 = np.sum(X ** 2, axis=1)[:, np.newaxis]
-            dists = term_1 + term_2 + term_3
-        else:
-            assert False, str(('Error! invalid query configuration (I, O, C) for include_layers: ', type(query_input), type(query_output), type(query_context), self.include_layers))
-            dists = None
+        # query_input only
+        query_data = query_input
+        X = self.X_i
+        X[0, :] = query_data[:]
+        i_d_t_gpu = self.table_i_gpu
+        X_gpu = gpuarray.to_gpu(X)
+        term_1 = linalg.dot(X_gpu, i_d_t_gpu).get()
+        term_1 = -2 * term_1
+        term_2 = self.term_2_i
+        term_3 = np.sum(X ** 2, axis=1)[:, np.newaxis]
+        dists = term_1 + term_2 + term_3
 
         return dists[0]
 
-    def set_matrix_row(self, row_index, row_input, row_output, row_context, row_to_table_dists, fast_init=False):
+    def set_multiple_rows(self, row_indices, row_inputs, rows_to_table_dists, fast_init=False):
+        '''
+
+        set multiple rows at once
+
+        :param row_indices: array
+        :param row_inputs: list of arrays
+        :param row_to_table_dists: list of arrays
+        :param fast_init: bool
+        :return:
+        '''
+
+        # necessary for CudaMultiTable
+
+        # transposed
+        n_rows = self.input_dim
+        n_cols = self.num_entries
+        cols = row_indices
+
+        arr_input = np.zeros(self.input_dim * row_indices.shape[0], np.float32)
+
+        k = 0
+        for row_index in list(row_indices):
+            row_data_i = row_inputs[k]
+            row_index_int = int(row_index)
+            self.term_2_i[row_index_int] = np.sum(row_data_i ** 2)
+            arr_input[k * row_inputs[0].shape[0]:(k + 1) * row_inputs[0].shape[0]] = row_data_i[:]
+            k += 1
+
+        arr_gpu_i = gpuarray.to_gpu(arr_input)
+
+        ind_1 = np.repeat(cols, n_rows)
+        ind_2 = np.tile(n_cols * np.arange(n_rows), cols.shape[0])
+
+        misc.set_by_index(dest_gpu=self.table_i_gpu, ind=ind_1 + ind_2, src_gpu=arr_gpu_i, ind_which='dest')
+
+        # TODO enable dists below
+
+        if not self.disable_row_row_dist:
+            # print(self.num_entries, row_to_table_dists.shape, row_to_table_dists.dtype)
+            # THIS IS A BOTTLENECK SLOW STEP:
+
+            # TODO internally, this could process multiple rows in one for loop! parallelize it!
+            self.d.set_row_dists(row_index=row_index, new_dists=row_to_table_dists, fast_init=fast_init)
+
+    def set_matrix_row(self, row_index, row_input, row_to_table_dists, fast_init=False):
         '''
         all arguments have to be not None
 
@@ -266,46 +220,20 @@ class CudaTable(object):
 
         col = row_index
         # transposed
-        rows = self.input_dim + self.output_dim + self.context_dim
         rows_i = self.input_dim
-        rows_ic = self.input_dim + self.context_dim
-        rows_io = self.input_dim + self.output_dim
         cols = self.num_entries
 
         if row_input is None:
             row_input = np.zeros(self.input_dim, np.float32)
-        if row_output is None:
-            row_output = np.zeros(self.output_dim, np.float32)
-        if row_context is None:
-            row_context = np.zeros(self.context_dim, np.float32)
 
-        assert row_input.shape[0] + row_output.shape[0] + row_context.shape[0] == rows
-        assert row_input.shape[0] + row_context.shape[0] == rows_ic, str((row_input.shape[0], row_context.shape[0], rows_ic))
         assert row_input.shape[0] == rows_i
 
-        if self.include_ioc:
-            row_data_all = np.concatenate((row_input, row_output, row_context))
-            arr_gpu = gpuarray.to_gpu(row_data_all)
-            misc.set_by_index(dest_gpu=self.table_gpu, ind=col + cols * np.arange(rows), src_gpu=arr_gpu, ind_which='dest')
-            self.term_2[row_index] = np.sum(row_data_all ** 2)
+        row_data_i = row_input
+        arr_gpu_i = gpuarray.to_gpu(row_data_i)
+        misc.set_by_index(dest_gpu=self.table_i_gpu, ind=col + cols * np.arange(rows_i), src_gpu=arr_gpu_i, ind_which='dest')
+        self.term_2_i[row_index] = np.sum(row_data_i ** 2)
 
-        if self.include_ic:
-            row_data_ic = np.concatenate((row_input, row_context))
-            arr_gpu_ic = gpuarray.to_gpu(row_data_ic)
-            misc.set_by_index(dest_gpu=self.table_ic_gpu, ind=col + cols * np.arange(rows_ic), src_gpu=arr_gpu_ic, ind_which='dest')
-            self.term_2_ic[row_index] = np.sum(row_data_ic ** 2)
-
-        if self.include_io:
-            row_data_io = np.concatenate((row_input, row_output))
-            arr_gpu_io = gpuarray.to_gpu(row_data_io)
-            misc.set_by_index(dest_gpu=self.table_io_gpu, ind=col + cols * np.arange(rows_io), src_gpu=arr_gpu_io, ind_which='dest')
-            self.term_2_io[row_index] = np.sum(row_data_io ** 2)
-
-        if self.include_i:
-            row_data_i = row_input
-            arr_gpu_i = gpuarray.to_gpu(row_data_i)
-            misc.set_by_index(dest_gpu=self.table_i_gpu, ind=col + cols * np.arange(rows_i), src_gpu=arr_gpu_i, ind_which='dest')
-            self.term_2_i[row_index] = np.sum(row_data_i ** 2)
+        ## TODO enable dists below
 
         if not self.disable_row_row_dist:
             # print(self.num_entries, row_to_table_dists.shape, row_to_table_dists.dtype)
@@ -335,37 +263,17 @@ class CudaTable(object):
             return None
 
     def get_matrix_row(self, row_index):
-        if self.include_ioc:
-            col = row_index
-            rows = self.input_dim + self.output_dim + self.context_dim
-            cols = self.num_entries
 
-            full_row = misc.get_by_index(src_gpu=self.table_gpu, ind=col + cols * np.arange(rows)).get()
-            row_input = full_row[0:self.input_dim]
-            row_output = full_row[self.input_dim:self.input_dim + self.output_dim]
-            row_context = full_row[self.input_dim+self.output_dim:self.input_dim+self.output_dim+self.context_dim]
-        elif self.include_io:
-            pass  # TODO what to return here if IOC not in table? for context? None? zeros?
-            col = row_index
-            rows = self.input_dim + self.output_dim
-            cols = self.num_entries
+        col = row_index
+        rows = self.input_dim
+        cols = self.num_entries
 
-            row_io = misc.get_by_index(src_gpu=self.table_io_gpu, ind=col + cols * np.arange(rows)).get()
-            row_input = row_io[0:self.input_dim]
-            row_output = row_io[self.input_dim:self.input_dim + self.output_dim]
+        row_i = misc.get_by_index(src_gpu=self.table_i_gpu, ind=col + cols * np.arange(rows)).get()
+        row_input = row_i[0:self.input_dim]
+        row_output = None
+        row_context = None
 
-            row_context = np.zeros(self.context_dim, np.float32)
-        else:  # assume I only
-            col = row_index
-            rows = self.input_dim
-            cols = self.num_entries
-
-            row_i = misc.get_by_index(src_gpu=self.table_i_gpu, ind=col + cols * np.arange(rows)).get()
-            row_input = row_i[0:self.input_dim]
-            row_output = None
-            row_context = None
-
-        return row_input, row_output, row_context
+        return row_input, row_output, row_context  # TODO deprecate this
 
     def get_table_from_gpu(self):
         '''
