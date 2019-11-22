@@ -4,13 +4,12 @@ import cv2
 import numpy as np
 np.set_printoptions(suppress=True)
 
-from brain_components import StatesHistory, MotorHistory, DebugTopdownInfoHistory, SingleLayerTrace  # SimpleMultiLayer
+from brain_components import StatesHistory, MotorHistory, DebugTopdownInfoHistory, SingleLayerTrace, MultiLayerSharedTiles
 
 class RobotBrain(object):
     def __init__(self, params):
         self._init_globals(params)
 
-        self.states_history = self._init_states_history(params, states_dim_list=[params['input_dim']])
         self.debug_topdown_info_history = self._init_debug_topdown_info_history(params)
         self.motor_history = self._init_motor_history(params)
 
@@ -34,20 +33,36 @@ class RobotBrain(object):
 
             dim = params['input_dim']
             goal_states_dim = 1
-            table_entries = params['table_entries']
 
-            #self.predictor_ensemble = SimpleMultiLayer(params={
-            self.predictor_ensemble = SingleLayerTrace(params={
-                'input_dim': dim,
-                'goal_context_dim': goal_states_dim,
-                'entries': table_entries,
-                'predict_time_per_layer': params['predict_time_per_layer'],
-                'enable_learning': params['enable_learning'],
-                'table_learn_time': params['table_learn_time'],
-                'prediction_learn_time': params['prediction_learn_time'],
-                'pre_init_goal_contexts': self._get_goal_contexts_list(),  # this matches _get_context_for_goal_state
-                'max_history_length': params['max_history_length']  # so it can check that learn time ranges are within!
-            })
+            # todo argument
+            use_multi_layer = params['use_multi_layer']
+            self.use_multi_layer = use_multi_layer
+
+            if use_multi_layer:
+                self.predictor_ensemble = MultiLayerSharedTiles(params={
+                    'input_dim': dim,
+                    'goal_context_dim': goal_states_dim,
+                    'enable_learning': params['enable_learning'],
+                    'tile_entries_per_layer': params['tile_entries_per_layer'],
+                    'table_learn_time_per_layer': params['table_learn_time_per_layer'],
+                    'prediction_learn_time_per_layer': params['prediction_learn_time_per_layer'],
+                    'tiles_per_layer_NxN': params['tiles_per_layer_NxN'],
+                    'pre_init_goal_contexts': self._get_goal_contexts_list(),  # this matches _get_context_for_goal_state
+                    'max_history_length': params['max_history_length']  # so it can check that learn time ranges are within!
+                })
+            else:
+                #self.predictor_ensemble = SimpleMultiLayer(params={
+                self.predictor_ensemble = SingleLayerTrace(params={
+                    'input_dim': dim,
+                    'goal_context_dim': goal_states_dim,
+                    'entries': params['table_entries'],
+                    'predict_time_per_layer': params['predict_time_per_layer'],
+                    'enable_learning': params['enable_learning'],
+                    'table_learn_time': params['table_learn_time'],
+                    'prediction_learn_time': params['prediction_learn_time'],
+                    'pre_init_goal_contexts': self._get_goal_contexts_list(),  # this matches _get_context_for_goal_state
+                    'max_history_length': params['max_history_length']  # so it can check that learn time ranges are within!
+                })
 
             # __________________________ HERE NOW __________________________
 
@@ -130,14 +145,13 @@ class RobotBrain(object):
             if debug_print:
                 print('goal_context_state:', goal_context_state_learning)
 
-        current_visual_input = self._process_sensors(rays=rays)
+        if self.use_multi_layer:
+            current_visual_input = raycast_image
+        else:
+            current_visual_input = self._process_sensors(rays=rays)
+
         # previous_motor_command was initiated at T-1, applied [T-1, T],
         # current_visual_input is at time T
-
-        newest_states_list = [current_visual_input.copy()]
-
-        self._process_states_history(newest_states_list=newest_states_list,
-                                     states_history=self.states_history)
 
         self._process_motor_history(newest_motor_command=last_motor_command,
                                     motor_history=self.motor_history)
@@ -145,11 +159,20 @@ class RobotBrain(object):
         self._process_debug_topdown_info_history(newest_topdown_info=debug_topdown_info,
                                                  debug_topdown_info_history=self.debug_topdown_info_history)
 
-        motor_out = self.predictor_ensemble.step(input_state=newest_states_list[0].astype(np.float32),
-                                                 input_x_y_theta=self.debug_topdown_info_history.get_td_info(delay=0),
-                                                 goal_context_state_learning=goal_context_state_learning,
-                                                 goal_context_state_task=goal_context_state_task,
-                                                 last_motor_command=last_motor_command)
+        if self.use_multi_layer:
+            motor_out = self.predictor_ensemble.step(raycast_image=raycast_image,
+                                                     input_state=current_visual_input.astype(np.float32),
+                                                     input_x_y_theta=self.debug_topdown_info_history.get_td_info(delay=0),
+                                                     goal_context_state_learning=goal_context_state_learning,
+                                                     goal_context_state_task=goal_context_state_task,
+                                                     last_motor_command=last_motor_command)
+        else:
+            motor_out = self.predictor_ensemble.step(raycast_image=None,
+                                                     input_state=current_visual_input.copy().astype(np.float32),
+                                                     input_x_y_theta=self.debug_topdown_info_history.get_td_info(delay=0),
+                                                     goal_context_state_learning=goal_context_state_learning,
+                                                     goal_context_state_task=goal_context_state_task,
+                                                     last_motor_command=last_motor_command)
 
         if goal_context_state_task is not None and self.predictor_ensemble is not None:
             # TODO this is where "task mode" is enabled
@@ -183,9 +206,6 @@ class RobotBrain(object):
 
         return current_visual_input
 
-    def _process_states_history(self, newest_states_list, states_history):
-        states_history.process_new_states(newest_states_list)
-
     def _process_motor_history(self, newest_motor_command, motor_history):
         motor_history.process_new_motor_command(newest_motor_command)
 
@@ -193,8 +213,7 @@ class RobotBrain(object):
         debug_topdown_info_history.process_new_topdown_info(newest_topdown_info)
 
     def save_states_history(self, plots_save_folder, state_indices_list):
-        print( 'saving states history...')
-        self.states_history.save_states(plots_save_folder, state_indices_list)
+        print( 'deprecated! not saving states history...')
 
     def save_debug_topdown_info_history(self, plots_save_folder):
         print( 'saving debug topdown info history...')

@@ -107,8 +107,8 @@ class CudaTable(object):
         :return: list of [dists] per each query input
         '''
 
-        query_arr = np.array(query_inputs, np.float32)
-        X = query_arr
+        #query_arr = np.array(query_inputs, np.float32)
+        X = query_inputs
 
         i_d_t_gpu = self.table_i_gpu
         X_gpu = gpuarray.to_gpu(X)
@@ -180,30 +180,33 @@ class CudaTable(object):
         n_cols = self.num_entries
         cols = row_indices
 
-        arr_input = np.zeros(self.input_dim * row_indices.shape[0], np.float32)
+        if row_inputs is not None:
+            arr_input = np.zeros(self.input_dim * row_indices.shape[0], np.float32)
 
-        k = 0
-        for row_index in list(row_indices):
-            row_data_i = row_inputs[k]
-            row_index_int = int(row_index)
-            self.term_2_i[row_index_int] = np.sum(row_data_i ** 2)
-            arr_input[k * row_inputs[0].shape[0]:(k + 1) * row_inputs[0].shape[0]] = row_data_i[:]
-            k += 1
+            k = 0
+            for row_index in list(row_indices):
+                row_data_i = row_inputs[k]
+                row_index_int = int(row_index)
+                self.term_2_i[row_index_int] = np.sum(row_data_i ** 2)
+                arr_input[k * row_inputs[0].shape[0]:(k + 1) * row_inputs[0].shape[0]] = row_data_i[:]
+                k += 1
 
-        arr_gpu_i = gpuarray.to_gpu(arr_input)
+            arr_gpu_i = gpuarray.to_gpu(arr_input)
 
-        ind_1 = np.repeat(cols, n_rows)
-        ind_2 = np.tile(n_cols * np.arange(n_rows), cols.shape[0])
+            ind_1 = np.repeat(cols, n_rows)
+            ind_2 = np.tile(n_cols * np.arange(n_rows), cols.shape[0])
 
-        misc.set_by_index(dest_gpu=self.table_i_gpu, ind=ind_1 + ind_2, src_gpu=arr_gpu_i, ind_which='dest')
+            misc.set_by_index(dest_gpu=self.table_i_gpu, ind=ind_1 + ind_2, src_gpu=arr_gpu_i, ind_which='dest')
 
         # TODO enable dists below
 
-        if not self.disable_row_row_dist:
+        if rows_to_table_dists is not None:
             # print(self.num_entries, row_to_table_dists.shape, row_to_table_dists.dtype)
             # THIS IS A BOTTLENECK SLOW STEP:
 
             # TODO internally, this could process multiple rows in one for loop! parallelize it!
+
+            # TODO for now make a loop!
             self.d.set_row_dists(row_index=row_index, new_dists=row_to_table_dists, fast_init=fast_init)
 
     def set_matrix_row(self, row_index, row_input, row_to_table_dists, fast_init=False):

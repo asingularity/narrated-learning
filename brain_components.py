@@ -4,3 +4,4 @@ from brain_components_classes.debug_topdown_info_history import DebugTopdownInfo
 #from brain_components_classes.multi_layer_ensemble import MultiLayerEnsemble
 #from brain_components_classes.simple_multi_layer import SimpleMultiLayer
 from brain_components_classes.single_layer_trace import SingleLayerTrace
+from brain_components_classes.multi_layer_shared_tiles import MultiLayerSharedTiles

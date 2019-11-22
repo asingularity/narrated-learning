@@ -390,6 +390,9 @@ class Visualizer(object):
                         I_im, W_im_list = table_ims
                         self._display_I_and_W_ims_tiled(I_im=I_im,
                                                         W_im_list=W_im_list)
+                    elif len(table_ims) == 1:
+                        if table_ims[0] is not None:
+                            cv2.imshow('tile', table_ims[0])
 
                 if raycast_image is not None:
                     self._display_raycast_image(raycast_image=raycast_image)

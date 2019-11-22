@@ -17,13 +17,14 @@ from math import pi
 
 MAX_HISTORY_LENGTH = 10600000 + 1
 USERNAME = 'intec'
+
+USE_RAYCAST_IMAGE = False
 NUM_INPUT_RAYS = 32
-INPUT_DIM = NUM_INPUT_RAYS * 3
 
 SIM_LOAD_NAME = '2019-07-21T21:18:20.175737'
 ENABLE_TASK_MODE = False
 
-TABLE_ENTRIES = 8000  # * 10  # 2000 with 16; 4000 with 8
+TABLE_ENTRIES = 8000  # 8000
 TABLE_LEARN_TIME = TABLE_ENTRIES * 16
 PREDICTION_LEARN_TIME = TABLE_ENTRIES * 16
 
@@ -40,7 +41,7 @@ def get_model_params():
 
 def get_sensors_params():
     params = {
-        'enable_raycast_image': False,
+        'enable_raycast_image': USE_RAYCAST_IMAGE,
         'num_rays': NUM_INPUT_RAYS,
         'fov_degrees': 100
     }
@@ -61,21 +62,40 @@ def get_brain_params():
         # ************ general ************
         'max_history_length': MAX_HISTORY_LENGTH,
         'error_average_steps': 1000,
-        'input_dim': INPUT_DIM,
         'enable_learning': not ENABLE_TASK_MODE,
+        'max_num_goal_states': 9,
 
         # ************ load from file ************
         'predictor_ensemble_load_from_file': ENABLE_TASK_MODE,
         'predictor_ensemble_filename': '/srv/projects/NL-sim/' + SIM_LOAD_NAME + '/ensemble.pkl',
         'predictor_ensemble_save_every_k_secs': None,  # None: never save
-
-        # ************ I-O-C predictor ensemble ************
-        'table_entries': TABLE_ENTRIES,
-        'table_learn_time': TABLE_LEARN_TIME,
-        'prediction_learn_time': PREDICTION_LEARN_TIME,
-        'predict_time_per_layer': [1],  # referenced to layer before it
-        'max_num_goal_states': 9
     }
+
+    if USE_RAYCAST_IMAGE:
+        params.update(
+            {
+                # ************ MultiLayerSharedTiles ************
+                'use_multi_layer': True,
+                'tile_entries_per_layer': [TABLE_ENTRIES],
+                'table_learn_time_per_layer': [TABLE_LEARN_TIME],
+                'prediction_learn_time_per_layer': [PREDICTION_LEARN_TIME],
+                'tiles_per_layer_NxN': [4],  # N where tiled NxN
+                'input_dim': NUM_INPUT_RAYS * NUM_INPUT_RAYS * 3 / (4 * 4),  # (32 * 32 * 3.) / (4 * 4.) = 192.0
+            }
+        )
+    else:
+        params.update(
+            {
+                # ************ SingleLayerTrace ************
+                'use_multi_layer': False,
+                'table_entries': TABLE_ENTRIES,
+                'table_learn_time': TABLE_LEARN_TIME,
+                'prediction_learn_time': PREDICTION_LEARN_TIME,
+                'predict_time_per_layer': [1],  # referenced to layer before it
+                'input_dim': NUM_INPUT_RAYS * 3
+            }
+        )
+
     return params
 
 

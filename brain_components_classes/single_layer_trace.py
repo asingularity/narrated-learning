@@ -306,7 +306,7 @@ class SingleLayerTrace(object):
 
         return motor_out
 
-    def step(self, input_state, input_x_y_theta, goal_context_state_learning, goal_context_state_task, last_motor_command):
+    def step(self, raycast_image, input_state, input_x_y_theta, goal_context_state_learning, goal_context_state_task, last_motor_command):
         '''
 
         :param input_state:
