@@ -4,11 +4,11 @@ import numpy as np
 random.seed(6)
 np.random.seed(6)
 
-from robot_brain import RobotBrain
+from robot_brain_classes.simple_nl_brain import RobotBrain
 from robot_model import RobotModel
-from robot_sensors import RobotSensors
+from robot_sensor_classes.simple_nl_sensor import RobotSensors
 from robot_environment import RobotEnvironment
-from visualizer import Visualizer
+from visualizer_classes.simple_nl_visualizer import Visualizer
 from sim_folder_manager import SimFolderManager
 from task_manager import TaskManager
 import time
