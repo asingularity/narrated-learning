@@ -4,9 +4,9 @@ import numpy as np
 random.seed(6)
 np.random.seed(6)
 
-from segment_brain import SegmentBrain
-from duo_sensor import DuoSensor
-from segment_visualizer import SegmentVisualizer
+from robot_brain_classes.segment_brain import SegmentBrain
+from robot_sensor_classes.video_playback import VideoPlaybackSensor
+from visualizer_classes.segment_visualizer import SegmentVisualizer
 from sim_folder_manager import SimFolderManager
 import time
 from math import pi
@@ -25,7 +25,8 @@ IM_PIXELS = IM_DIM * IM_DIM  # assume grayscale
 
 def get_sensors_params():
     params = {
-        'image_dim': IM_DIM  # sensor class has to figure out subset & scale to achieve this dim
+        'image_dim': IM_DIM,  # sensor class has to figure out subset & scale to achieve this dim
+        'video_filename': '/srv/projects/NL-data/Traffic2.mov'
     }
     return params
 
@@ -51,7 +52,7 @@ def get_brain_params():
         'table_learn_time_per_layer': [TABLE_LEARN_TIME],
         'prediction_learn_time_per_layer': [PREDICTION_LEARN_TIME],
         'tiles_per_layer_NxN': [4],  # N where tiled NxN
-        'input_dim_per_tile': IM_PIXELS / (4 * 4),  # (32 * 32 * 3.) / (4 * 4.) = 192.0
+        'input_dim': IM_PIXELS * 3 / (4 * 4),  # (32 * 32 * 3.) / (4 * 4.) = 192.0
             }
 
     return params
@@ -64,7 +65,7 @@ def get_visualizer_params():
         'waitKey_time_fast': 1,  # 1, 100, 5000
         'image_display_secs_slow': 0,  # 0: every frame
         'waitKey_time_slow': 1,  # 1, 100, 5000  #
-        'scale_camera_factor': 20,
+        'scale_camera_factor': 10,
         'auto_switch_to_slow_disp_time': None,
         'init_fast': True  # start with "fast" display
     }
@@ -74,7 +75,7 @@ def get_visualizer_params():
 def init_demo():
     return {
         'robot_brain': SegmentBrain(get_brain_params()),
-        'robot_sensors': DuoSensor(get_sensors_params()),
+        'robot_sensors': VideoPlaybackSensor(get_sensors_params()),
         'visualizer': SegmentVisualizer(get_visualizer_params()),
         'sim_folder_manager': SimFolderManager(get_sim_folder_manager_params())
     }
@@ -84,6 +85,7 @@ def run_demo(demo_components):
     robot_brain = demo_components['robot_brain']
     robot_sensors = demo_components['robot_sensors']
     visualizer = demo_components['visualizer']
+    sim_folder_manager = demo_components['sim_folder_manager']
 
     random.seed(1233)
 

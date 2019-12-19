@@ -252,6 +252,98 @@ def test_full_reqs_CPU():
         fps.update()
 
 
+def test_actual():
+    '''
+
+    :return:
+    '''
+
+    fps = FPSCounter(params={'display_every_k_seconds': 5})
+
+    N = 256
+    tau = 3  # state history steps
+
+    state_X = np.random.random(N).astype(np.float32)
+    state_X_history_odd = np.zeros((128, tau), np.float32)
+    state_X_history_even = np.zeros((128, tau), np.float32)
+    state_X_history_index = 0
+
+    # 128 2x2 matrices
+    A_condensed_even = np.random.random(N).astype(np.float32) - 0.5
+    A_condensed_odd = np.random.random(N).astype(np.float32) - 0.5
+
+    B_I = np.random.random((256, 2)) - 0.5
+    B_Q = np.random.random((256, 2)) - 0.5
+
+    C_I = np.random.random((128, tau)).astype(np.float32)
+    C_Q = np.random.random((128, tau)).astype(np.float32)
+
+    prev_I = random.random() - 0.5
+    prev_Q = random.random() - 0.5
+
+    sample_I_2 = np.zeros((2, 1), np.float32)
+    sample_Q_2 = np.zeros((2, 1), np.float32)
+
+    STEPS = 100000
+    print('START')
+    for step in range(STEPS):
+
+        # new sample
+
+        curr_I = np.float32(random.random() - 0.5)
+        curr_Q = np.float32(random.random() - 0.5)
+
+        sample_I_2[0, 0] = curr_I
+        sample_I_2[1, 0] = prev_I
+
+        sample_Q_2[0, 0] = curr_Q
+        sample_Q_2[1, 0] = prev_Q
+
+        # state update
+
+        state_X_even = state_X[0::2]
+        state_X_odd = state_X[1::2]
+
+        tmp1 = np.multiply(A_condensed_even, np.repeat(state_X_even, 2))  # 256xM
+        tmp2 = np.multiply(A_condensed_odd, np.repeat(state_X_odd, 2))  # 256xM
+        tmp3 = np.dot(B_I, sample_I_2) + np.dot(B_Q, sample_Q_2)  # 2* 256* (2xM, 1xS)
+        state_X = tmp1 + tmp2 + tmp3[:, 0]  # 256xS
+
+        # error
+
+        error_I = np.float32(random.random() - random.random())
+
+        # output
+
+        state_X_history_index += 1
+        if state_X_history_index > tau - 1:
+            state_X_history_index = 0
+
+        state_X_history_even[:, state_X_history_index] = state_X_even[:]
+        state_X_history_odd[:, state_X_history_index] = state_X_odd[:]
+
+        # TODO if we use indexing to roll history above, how do we make sure weights are aligned with the rolling?
+        # TODO this is currently incorrect - use circmod
+
+        tmp0 = np.sum(np.multiply(C_I, state_X_history_even))  # (128x3)xM, (128x3)xS
+        tmp1 = np.sum(np.multiply(C_Q, state_X_history_odd))  # (128x3)xM, (128x3)xS
+        tmp2 = np.sum(np.multiply(C_I, state_X_history_odd))  # (128x3)xM, (128x3)xS
+        tmp3 = np.sum(np.multiply(C_Q, state_X_history_even))  # (128x3)xM, (128x3)xS
+
+        output_Y_I = tmp0 - tmp1
+        output_Y_Q = tmp2 + tmp3
+
+        # weight update
+
+        # C_I +=
+
+        prev_I = curr_I
+        prev_Q = curr_Q
+
+        # fps.update()
+
+    print('DONE')
+
 if __name__ == '__main__':
     '''
     Goal of this experiment:
@@ -263,10 +355,51 @@ if __name__ == '__main__':
     Equivalent: how much time does it take to send one to GPU, and receive one back.   !!!!!! 10/17: obviously, it also helps to send 1000000 to the gpu and get them back in the same time !!!!!!
     '''
 
+    test_actual()
+
     #test_simple_streaming()
-
     #test_full_reqs_CPU()
-    test_full_reqs_GPU_simple()
-
+    #test_full_reqs_GPU_simple()
     #test_full_reqs_GPU()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 

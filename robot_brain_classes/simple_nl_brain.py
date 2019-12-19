@@ -134,6 +134,9 @@ class RobotBrain(object):
         # TODO properly use goal_index_reached for learning only, goal_index_task for task mode only
         # TODO if goal_index_task is None: assume not in task mode i.e. do default behavior for learning, what it is now, including table look-ups.
 
+        # print(np.amin(raycast_image), np.amax(raycast_image), raycast_image.dtype)
+
+
         goal_context_state_learning = self._get_context_for_goal_state(goal_index=goal_index_reached)
         assert goal_context_state_learning is not None
 
