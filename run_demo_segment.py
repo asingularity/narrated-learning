@@ -82,7 +82,7 @@ def init_demo():
     }
 
 
-@profile
+# @profile
 def run_demo(demo_components):
     robot_brain = demo_components['robot_brain']
     robot_sensors = demo_components['robot_sensors']
