@@ -19,14 +19,15 @@ TABLE_ENTRIES = 8000  # 8000
 TABLE_LEARN_TIME = TABLE_ENTRIES * 16
 PREDICTION_LEARN_TIME = TABLE_ENTRIES * 16
 
-IM_DIM = 32  # assume square image, this is width & height
+IM_DIM = 128  # assume square image, this is width & height
+TILES_LAYER_0 = 32  # N where tiled NxN
 IM_PIXELS = IM_DIM * IM_DIM  # assume grayscale
 
 
 def get_sensors_params():
     params = {
         'image_dim': IM_DIM,  # sensor class has to figure out subset & scale to achieve this dim
-        'video_filename': '/srv/projects/NL-data/Traffic2.mov'
+        'video_filename': '/srv/projects/NL-data/P1033727.mp4'
     }
     return params
 
@@ -51,8 +52,8 @@ def get_brain_params():
         'tile_entries_per_layer': [TABLE_ENTRIES],
         'table_learn_time_per_layer': [TABLE_LEARN_TIME],
         'prediction_learn_time_per_layer': [PREDICTION_LEARN_TIME],
-        'tiles_per_layer_NxN': [4],  # N where tiled NxN
-        'input_dim': IM_PIXELS * 3 / (4 * 4),  # (32 * 32 * 3.) / (4 * 4.) = 192.0
+        'tiles_per_layer_NxN': [TILES_LAYER_0],  # N where tiled NxN
+        'input_dim': IM_PIXELS * 3 / (TILES_LAYER_0 * TILES_LAYER_0),  # (32 * 32 * 3.) / (4 * 4.) = 192.0
             }
 
     return params
@@ -65,7 +66,7 @@ def get_visualizer_params():
         'waitKey_time_fast': 1,  # 1, 100, 5000
         'image_display_secs_slow': 0,  # 0: every frame
         'waitKey_time_slow': 1,  # 1, 100, 5000  #
-        'scale_camera_factor': 10,
+        'scale_camera_factor': 5,
         'auto_switch_to_slow_disp_time': None,
         'init_fast': True  # start with "fast" display
     }
@@ -81,6 +82,7 @@ def init_demo():
     }
 
 
+@profile
 def run_demo(demo_components):
     robot_brain = demo_components['robot_brain']
     robot_sensors = demo_components['robot_sensors']

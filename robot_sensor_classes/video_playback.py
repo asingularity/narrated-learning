@@ -37,7 +37,8 @@ class VideoPlaybackSensor(object):
         mid_pt_r = random.randint(self.image_dim/2 + 1, gray.shape[0] - self.image_dim/2 - 1)
         mid_pt_c = random.randint(self.image_dim/2 + 1, gray.shape[1] - self.image_dim/2 - 1)
 
-        sample = True
+        sample = False
+
         if sample:
 
             sample_im = gray[mid_pt_r - self.image_dim/2:mid_pt_r+self.image_dim/2,

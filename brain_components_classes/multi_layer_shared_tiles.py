@@ -97,6 +97,7 @@ class MultiLayerSharedTiles(object):
 
         # TODO init goal context stuff
 
+    # @profile
     def step(self, raycast_image, input_state, input_x_y_theta, goal_context_state_learning, goal_context_state_task, last_motor_command):
         '''
 
@@ -153,6 +154,7 @@ class MultiLayerSharedTiles(object):
         self.t += 1
         return motor_out
 
+    # @profile
     def _lookup_and_learn_table(self, layer_n, cuda_table_I, input_states_mat, learn_table, input_x_y_theta):
         '''
 
@@ -177,6 +179,7 @@ class MultiLayerSharedTiles(object):
 
         return I_index  # learning might have invalidated this; doesn't matter for now because for now we are not using lookup if learning
 
+    # @profile
     def _learn_table(self, layer_n, cuda_table_I, dists, input_states_mat, input_x_y_theta):
         '''
 
@@ -202,17 +205,24 @@ class MultiLayerSharedTiles(object):
         dists_arr = np.array(dists)
 
         # print()
-        # print(dists_arr.shape)  # (16, 8000)
-        # print(input_states_mat.shape)  # (16, 192)
+        # print(dists_arr.shape)  # (16, 8000) or now (1024, 8000)  ---  note: 16=4x4, 1024=32x32
+        # print(input_states_mat.shape)  # (16, 192) or now (1024, 12)  --- note: 12=2x2x3 (per tile)
         # print()
 
-        sorted_dist_indices = np.argsort(dists_arr)
+        # after improvement to get 4x4 pixel tiles at higher resolution image:s
+        # dists_arr.shape   (1024, 8000)
+        # input_states_mat.shape    (1024, 48)
 
-        # new min ind: for each candidate row, what is "min dist" index (0->8k) in current table?
-        new_min_inds = sorted_dist_indices[:, 0].flatten()  # length 16
-        #  [ 2  0 25  9  2  0 25  9  2  0 25  9 14 12 29 13]
+        # This was extremely inefficient:
+        # sorted_dist_indices = np.argsort(dists_arr)  # consuming 64% of processing of this function
+        ## new min ind: for each candidate row, what is "min dist" index (0->8k) in current table?
+        # new_min_inds = sorted_dist_indices[:, 0].flatten()  # length 16
+        ##  [ 2  0 25  9  2  0 25  9  2  0 25  9 14 12 29 13]
 
-        new_min_dists = dists_arr[range(16), new_min_inds]  # length 16
+        # better way:
+        new_min_inds = np.argmin(dists_arr, axis=1)
+
+        new_min_dists = dists_arr[range(self.tiles_per_layer_NxN[layer_n] * self.tiles_per_layer_NxN[layer_n]), new_min_inds]  # length 16
 
         if self.init_I_row_num[layer_n] is None:
             self.init_I_row_num[layer_n] = 0
@@ -284,7 +294,7 @@ class MultiLayerSharedTiles(object):
         cuda_table = self.tables[0]
         table = np.transpose(cuda_table.get_table_from_gpu())
 
-        N = 32  # display NxN tiles of 8k entries
+        N = 64  # display NxN tiles of 8k entries
         entries = N*N
 
         rows = table[0:entries, :]
