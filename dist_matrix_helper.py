@@ -2,6 +2,7 @@
 import numpy as np
 from time import time
 from utils.fps_counter import FPSCounter
+from cython_dist_helper import set_row_dists as set_row_dists_cython
 
 
 class DumbDistMatrixHelper(object):
@@ -64,6 +65,8 @@ class DistMatrixHelper(object):
 
         self.dist_mat = np.ones((num_rows, num_rows), np.float32) * init_dists_val
 
+        self.use_cython = True
+
     def get_min_dist(self):
         '''
 
@@ -95,8 +98,36 @@ class DistMatrixHelper(object):
             self.argmax_by_row[r] = np.argmax(self.dist_mat[r, :])
             self.max_by_row[r] = self.dist_mat[r, self.argmax_by_row[r]]
 
-    # @profile
     def set_row_dists(self, row_index, new_dists, fast_init=False):
+        if self.use_cython:
+
+            # print()
+            # print(type(row_index))
+            # print((new_dists.dtype))
+            # print((self.dist_mat.dtype))
+            # print((self.argmin_by_row.dtype))
+            # print((self.min_by_row.dtype))
+            # print((self.argmax_by_row.dtype))
+            # print((self.max_by_row.dtype))
+            # print(type(self.num_rows))
+            # print(type(fast_init))
+
+            set_row_dists_cython(row_index,
+                                 new_dists,
+                                 self.dist_mat,
+                                 self.argmin_by_row,
+                                 self.min_by_row,
+                                 self.argmax_by_row,
+                                 self.max_by_row,
+                                 self.num_rows,
+                                 int(fast_init))
+        else:
+            self._set_row_dists_slow(row_index=row_index,
+                                     new_dists=new_dists,
+                                     fast_init=fast_init)
+
+    # @profile
+    def _set_row_dists_slow(self, row_index, new_dists, fast_init=False):
         '''
 
         :param row_index:
