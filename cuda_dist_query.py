@@ -113,8 +113,10 @@ class CudaTable(object):
 
         i_d_t_gpu = self.table_i_gpu
         X_gpu = gpuarray.to_gpu(X)
-        term_1 = linalg.dot(X_gpu, i_d_t_gpu).get()
-        term_1 = -2 * term_1
+
+        # TODO we are not entirely sure that GPUarray does not have a bug below, when you multiply by 2 on-gpu:
+        term_1 = (-2 * linalg.dot(X_gpu, i_d_t_gpu)).get()
+        # term_1 = -2 * term_1
         term_2 = self.term_2_i
         term_3 = np.sum(X ** 2, axis=1)[:, np.newaxis]
         dists = term_1 + term_2 + term_3
@@ -238,11 +240,9 @@ class CudaTable(object):
         misc.set_by_index(dest_gpu=self.table_i_gpu, ind=col + cols * np.arange(rows_i), src_gpu=arr_gpu_i, ind_which='dest')
         self.term_2_i[row_index] = np.sum(row_data_i ** 2)
 
-        ## TODO enable dists below
-
         if not self.disable_row_row_dist:
             # print(self.num_entries, row_to_table_dists.shape, row_to_table_dists.dtype)
-            # THIS IS A BOTTLENECK SLOW STEP:
+            # THIS IS *no longer* A BOTTLENECK SLOW STEP:
             self.d.set_row_dists(row_index=row_index, new_dists=row_to_table_dists, fast_init=fast_init)
 
         self.row_ages = self.row_ages + 1
