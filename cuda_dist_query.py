@@ -99,7 +99,7 @@ class CudaTable(object):
         if not self.disable_row_row_dist:
             self.d.post_init()
 
-    @profile
+    # @profile
     def query_multiple_rows(self, query_inputs):
         '''
         assumes that only query_input is being used
