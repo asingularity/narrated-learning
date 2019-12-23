@@ -112,6 +112,7 @@ class CudaTable(object):
         X = query_inputs
 
         i_d_t_gpu = self.table_i_gpu
+        # print('X.shape', X.shape, 'X.dtype', X.dtype)  # (1024, 48), np.float32
         X_gpu = gpuarray.to_gpu(X)
 
         # TODO we are not entirely sure that GPUarray does not have a bug below, when you multiply by 2 on-gpu:

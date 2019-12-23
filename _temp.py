@@ -1,18 +1,25 @@
-import time
+
 import numpy as np
-from math import sqrt
+import time
+import pycuda.driver as cuda
+import pycuda.autoinit
+from pycuda.compiler import SourceModule
+import pycuda.gpuarray as gpuarray
+import pycuda.cumath as cumath
+import skcuda.linalg as linalg
+import skcuda.misc as misc
+from utils.fps_counter import FPSCounter
 
 if __name__ == '__main__':
+    X = np.random.random((1024, 48)).astype(np.float32)
 
-    rows = 200
-    cols = 200
-    t0 = time.time()
-    for r1 in range(rows):
-        print r1
-        for c1 in range(cols):
-            for r2 in range(rows):
-                for c2 in range(cols):
-                    dist = sqrt(pow(r1 - r2, 2)  + pow(c1 - c2, 2))
-    t1 = time.time()
+    fps = FPSCounter(params={'display_every_k_seconds': 5})
+    linalg.init()
 
-    print 'elapsed: ', t1 - t0
+    while True:
+        X_gpu = gpuarray.to_gpu(X)
+        Y = (-2 * X_gpu).get()
+        fps.update()
+        #print()
+        #print(X[0:4, 0:4])
+        #print(Y[0:4, 0:4])
