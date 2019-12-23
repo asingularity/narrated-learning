@@ -95,6 +95,7 @@ class DistMatrixHelper(object):
             self.argmax_by_row[r] = np.argmax(self.dist_mat[r, :])
             self.max_by_row[r] = self.dist_mat[r, self.argmax_by_row[r]]
 
+    # @profile
     def set_row_dists(self, row_index, new_dists, fast_init=False):
         '''
 
@@ -111,42 +112,58 @@ class DistMatrixHelper(object):
         self.dist_mat[:, row_index] = new_dists
 
         if not fast_init:
+            # min and max values and indices of new dists to updated row (row_index)
             tmp_min_ind = np.argmin(new_dists)
             tmp_max_ind = np.argmax(new_dists)
             tmp_min = new_dists[tmp_min_ind]
             tmp_max = new_dists[tmp_max_ind]
 
+            # for the updated row, new min is the min
             self.argmin_by_row[row_index] = tmp_min_ind
             self.min_by_row[row_index] = tmp_min
 
+            # for the updated row, new max is the max
             self.argmax_by_row[row_index] = tmp_max_ind
             self.max_by_row[row_index] = tmp_max
 
             for r in range(self.num_rows):
+                # for all rows except the newly updated row
                 if not r == row_index:
 
+                    # if updated row was previously the min dist index for current row in loop, but it is no longer
                     if self.argmin_by_row[r] == row_index and new_dists[r] > self.min_by_row[r]:
+
+                        # find new min, taking update into account
                         tmp_ind = np.argmin(self.dist_mat[r, :])
                         tmp_min = self.dist_mat[r, tmp_ind]
 
-                        num_bad_1 += 1
-
+                        # update current row's min dist index / value to the new one after finding this new min
                         self.argmin_by_row[r] = tmp_ind
                         self.min_by_row[r] = tmp_min
+
+                        # debugging
+                        num_bad_1 += 1
                     else:
+                        # if updated row becomes the new min
                         if new_dists[r] < self.min_by_row[r]:
                             self.argmin_by_row[r] = row_index
                             self.min_by_row[r] = new_dists[r]
 
+                    # if updated row was previously the max dist index for current row in loop, but it is no longer
                     if self.argmax_by_row[r] == row_index and new_dists[r] < self.max_by_row[r]:
+
+                        # find new max, taking update into account
                         tmp_ind = np.argmax(self.dist_mat[r, :])
                         tmp_max = self.dist_mat[r, tmp_ind]
 
-                        num_bad_2 += 1
-
+                        # update current row's max dist index / value to the new one after finding this new max
                         self.argmax_by_row[r] = tmp_ind
                         self.max_by_row[r] = tmp_max
+
+                        # debugging
+                        num_bad_2 += 1
                     else:
+                        # if updated row becomes the new max
                         if new_dists[r] > self.max_by_row[r]:
                             self.argmax_by_row[r] = row_index
                             self.max_by_row[r] = new_dists[r]

@@ -99,6 +99,7 @@ class CudaTable(object):
         if not self.disable_row_row_dist:
             self.d.post_init()
 
+    @profile
     def query_multiple_rows(self, query_inputs):
         '''
         assumes that only query_input is being used
@@ -209,6 +210,7 @@ class CudaTable(object):
             # TODO for now make a loop!
             self.d.set_row_dists(row_index=row_index, new_dists=row_to_table_dists, fast_init=fast_init)
 
+    # @profile
     def set_matrix_row(self, row_index, row_input, row_to_table_dists, fast_init=False):
         '''
         all arguments have to be not None
