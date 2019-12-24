@@ -29,6 +29,7 @@ class SegmentBrain(object):
             'max_history_length': params['max_history_length']  # so it can check that learn time ranges are within!
         })
 
+    # @profile
     def process_input(self, input_im):
         '''
 

@@ -73,6 +73,8 @@ class CudaTable(object):
         self.X_i = np.zeros((1, table_i_only.shape[1])).astype(np.float32)
         self.term_2_i = np.sum(table_i_only ** 2, axis=1)
 
+        self.term_2_i_gpu = gpuarray.to_gpu(np.ascontiguousarray(self.term_2_i))
+
         self.pickle_save_temp = {}
 
     def prepare_for_save(self):
@@ -99,7 +101,6 @@ class CudaTable(object):
         if not self.disable_row_row_dist:
             self.d.post_init()
 
-    # @profile
     def query_multiple_rows(self, query_inputs):
         '''
         assumes that only query_input is being used
@@ -115,14 +116,47 @@ class CudaTable(object):
         # print('X.shape', X.shape, 'X.dtype', X.dtype)  # (1024, 48), np.float32
         X_gpu = gpuarray.to_gpu(X)
 
-        # TODO we are not entirely sure that GPUarray does not have a bug below, when you multiply by 2 on-gpu:
-        term_1 = (-2 * linalg.dot(X_gpu, i_d_t_gpu)).get()
-        # term_1 = -2 * term_1
-        term_2 = self.term_2_i
-        term_3 = np.sum(X ** 2, axis=1)[:, np.newaxis]
-        dists = term_1 + term_2 + term_3
+        # reference
+        # a = np.dot(np.random.random((200, 200)), np.random.random((200, 200)))
 
-        return dists
+        use_old = True  # new doesn't seem faster
+
+        # OLD
+        if use_old:
+            tmp = -2 * linalg.dot(X_gpu, i_d_t_gpu)
+            term_1 = tmp.get()
+            term_2 = self.term_2_i
+            term_3 = np.sum(X ** 2, axis=1)[:, np.newaxis]
+            dists = term_1 + term_2 + term_3
+
+            #print()
+            #print(X.shape)  # (4096, 48)
+            #print(term_3.shape)  # (4096, 1)
+            #print()
+            #print(term_1.shape, term_2.shape, term_3.shape)  # (4096, 8000) (8000,) (4096, 1)
+
+            argmin_dists = np.argmin(dists, axis=1)
+        # NEW
+        else:
+            term_1_gpu = -2 * linalg.dot(X_gpu, i_d_t_gpu)
+            term_2_gpu = self.term_2_i_gpu
+
+            term_3 = np.sum(X ** 2, axis=1)[:, np.newaxis]
+            term_3_gpu = gpuarray.to_gpu(term_3)
+
+            tmp0 = misc.add_matvec(x_gpu=term_1_gpu, a_gpu=term_2_gpu)
+            dists_gpu = misc.add_matvec(x_gpu=tmp0, a_gpu=term_3_gpu)
+
+            # doesn't work; doesn't like unaligned dims
+            # dists_gpu = term_1_gpu + term_2_gpu + term_3_gpu
+
+            argmin_dists_gpu = misc.argmin(dists_gpu, axis=1)
+
+            dists = dists_gpu.get()
+            argmin_dists = argmin_dists_gpu.get()
+
+        # print(dists, argmin_dists)
+        return dists, argmin_dists
 
     def query(self, query_input):
         '''

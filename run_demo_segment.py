@@ -93,6 +93,9 @@ def run_demo(demo_components):
 
     while True:
 
+        # reference
+        # a = np.dot(np.random.random((200, 200)), np.random.random((200, 200)))
+
         im = robot_sensors.read_input()
 
         robot_brain.process_input(input_im=im)

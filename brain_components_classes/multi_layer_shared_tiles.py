@@ -166,7 +166,7 @@ class MultiLayerSharedTiles(object):
         :return: I (sparse vector, one-hot)
         '''
 
-        dists = cuda_table_I.query_multiple_rows(query_inputs=input_states_mat)
+        dists, argmin_dists = cuda_table_I.query_multiple_rows(query_inputs=input_states_mat)
 
         I_index = None  # needed? #np.argmin(dists)
 
@@ -174,13 +174,14 @@ class MultiLayerSharedTiles(object):
             self._learn_table(layer_n=layer_n,
                               cuda_table_I=cuda_table_I,
                               dists=dists,
+                              argmin_dists=argmin_dists,
                               input_states_mat=input_states_mat,
                               input_x_y_theta=input_x_y_theta)
 
         return I_index  # learning might have invalidated this; doesn't matter for now because for now we are not using lookup if learning
 
     # @profile
-    def _learn_table(self, layer_n, cuda_table_I, dists, input_states_mat, input_x_y_theta):
+    def _learn_table(self, layer_n, cuda_table_I, dists, argmin_dists, input_states_mat, input_x_y_theta):
         '''
 
         :param cuda_table_I:
@@ -202,10 +203,12 @@ class MultiLayerSharedTiles(object):
         #   because, for now, we learn table, then we leave it alone when learning predictions later
 
         row_replaced = False
-        dists_arr = np.array(dists)
+        dists_arr = dists
 
         # print()
-        # print(dists_arr.shape)  # (16, 8000) or now (1024, 8000)  ---  note: 16=4x4, 1024=32x32
+        # print(dists.shape)  # (16, 8000) or now (1024, 8000)  ---  note: 16=4x4, 1024=32x32
+        # (4096, 8000)
+
         # print(input_states_mat.shape)  # (16, 192) or now (1024, 12)  --- note: 12=2x2x3 (per tile)
         # print()
 
@@ -220,7 +223,7 @@ class MultiLayerSharedTiles(object):
         ##  [ 2  0 25  9  2  0 25  9  2  0 25  9 14 12 29 13]
 
         # better way:
-        new_min_inds = np.argmin(dists_arr, axis=1)
+        new_min_inds = argmin_dists  # np.argmin(dists_arr, axis=1)
 
         new_min_dists = dists_arr[range(self.tiles_per_layer_NxN[layer_n] * self.tiles_per_layer_NxN[layer_n]), new_min_inds]  # length 16
 
