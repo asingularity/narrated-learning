@@ -19,15 +19,15 @@ TABLE_ENTRIES = 8000  # 8000
 TABLE_LEARN_TIME = TABLE_ENTRIES * 16
 PREDICTION_LEARN_TIME = TABLE_ENTRIES * 16
 
-IM_DIM = 128  # 256; assume square image, this is width & height
-TILES_LAYER_0 = 32  # 64; N where tiled NxN
+IM_DIM = 32  # 256; assume square image, this is width & height
+TILES_LAYER_0 = 8  # 64; N where tiled NxN
 IM_PIXELS = IM_DIM * IM_DIM  # assume grayscale
 
 
 def get_sensors_params():
     params = {
         'image_dim': IM_DIM,  # sensor class has to figure out subset & scale to achieve this dim
-        'video_filename': '/srv/projects/NL-data/P1033727.mp4'
+        'video_filename': '/srv/projects/NL-data/P1033727.mp4'  # 3840x2160
     }
     return params
 
@@ -66,7 +66,7 @@ def get_visualizer_params():
         'waitKey_time_fast': 1,  # 1, 100, 5000
         'image_display_secs_slow': 0,  # 0: every frame
         'waitKey_time_slow': 1,  # 1, 100, 5000  #
-        'scale_camera_factor': 5,
+        'scale_camera_factor': 2,
         'auto_switch_to_slow_disp_time': None,
         'init_fast': True  # start with "fast" display
     }
