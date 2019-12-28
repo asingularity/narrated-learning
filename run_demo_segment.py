@@ -16,11 +16,11 @@ MAX_HISTORY_LENGTH = 10600000 + 1
 USERNAME = 'intec'
 
 TABLE_ENTRIES = 8000  # 8000
-TABLE_LEARN_TIME = TABLE_ENTRIES * 16  # 16
+TABLE_LEARN_TIME = TABLE_ENTRIES * 2  # 16
 PREDICTION_LEARN_TIME = TABLE_ENTRIES * 16
 
-IM_DIM = 32  # 128; assume square image, this is width & height
-TILES_LAYER_0 = 8  # 32; N where tiled NxN
+IM_DIM = 64  # 128; assume square image, this is width & height
+TILES_LAYER_0 = 16  # 32; N where tiled NxN
 IM_PIXELS = IM_DIM * IM_DIM  # assume grayscale
 
 
