@@ -57,7 +57,18 @@ class MultiLayerSharedTiles(object):
         print()
 
         self.tables = []
+        self.W_by_layer = []
         self.init_I_row_num = []
+
+        self.trace_tau = 0.9
+        self.max_trace_time = 100  # length of keeping track of trace for W.
+        # so, minimal possible trace value in self.W is = pow(self.trace_tau, self.max_trace_time)
+
+        max_trace_time = self.max_trace_time
+
+        # this is per-tile
+        self.I_history = StatesLimitedHistory(params={'max_delay': max_trace_time,
+                                                      'states_dim_list': [self.tiles_per_layer_NxN[0] * self.tiles_per_layer_NxN[0]]})
 
         for k in range(self.n_layers):
             self.init_I_row_num.append(None)
@@ -82,12 +93,16 @@ class MultiLayerSharedTiles(object):
                 assert False, 'upper layers not implemented yet!'
                 table_input_dim = self.tile_entries_per_layer[k - 1] * self.num_tiles_per_layer[k - 1]
 
-            self.tables.append(CudaTable(num_entries=self.tile_entries_per_layer[k],
+            num_entries = self.tile_entries_per_layer[k]
+
+            self.tables.append(CudaTable(num_entries=num_entries,
                                          input_dim=int(table_input_dim)))
             print('init table with entries:', self.tile_entries_per_layer[k], 'input_dim:', int(table_input_dim))
             print()
 
-            # TODO init prediction matrix stuff
+            # init prediction matrix stuff
+
+            self.W_by_layer.append(np.zeros((num_entries, num_entries), np.float))
 
         print()
 
@@ -113,7 +128,13 @@ class MultiLayerSharedTiles(object):
         for k in range(self.n_layers):
             start_table_learn_t = self.layer_table_learn_time_ranges[k][0]
             stop_table_learn_t = self.layer_table_learn_time_ranges[k][1]
+
+            start_prediction_learn_t = self.layer_prediction_learn_time_ranges[k][0]
+            stop_prediction_learn_t = self.layer_prediction_learn_time_ranges[k][1]
+
             learn_table = self.learning_enabled and (start_table_learn_t < self.t < stop_table_learn_t)
+            learn_prediction = self.learning_enabled and (start_prediction_learn_t < self.t < stop_prediction_learn_t)
+
             tiles_NxN = self.tiles_per_layer_NxN[k]
 
             if k == 0:
@@ -140,19 +161,70 @@ class MultiLayerSharedTiles(object):
                 tile_input_states_mat = np.ascontiguousarray(np.array(tile_input_states_mat, np.float32))
 
             else:
-                # TODO must be from previous layer
+                # TODO later must be from previous layer
                 tile_input_states_mat = None
 
-            I_index_t = self._lookup_and_learn_table(layer_n=k,
-                                                     cuda_table_I=self.tables[k],
-                                                     input_states_mat=tile_input_states_mat,
-                                                     learn_table=learn_table,
-                                                     input_x_y_theta=input_x_y_theta)
+            I_indices_t = self._lookup_and_learn_table(layer_n=k,
+                                                       cuda_table_I=self.tables[k],
+                                                       input_states_mat=tile_input_states_mat,
+                                                       learn_table=learn_table,
+                                                       input_x_y_theta=input_x_y_theta)
+
+            if k == 0:  # first layer
+                # print('I_indices_t: ', I_indices_t.shape)  # I_indices_t:  (1024,)
+                assert self.tiles_per_layer_NxN[0] * self.tiles_per_layer_NxN[0] == I_indices_t.shape[0]
+
+                self.I_history.store_new_states(newest_states_list=[I_indices_t], extra_data_list=[None])
+
+            if learn_prediction:
+                self._learn_predictions()
 
         motor_out = None
 
         self.t += 1
         return motor_out
+
+    def _learn_predictions(self):
+
+        # TODO on every step, there is one prediction to learn per tile, so NxN predictions to learn on same W matrix for NxN tiles
+        # TODO each tile needs its own I_history
+
+        # *** self.W learning ***
+
+        current_I_index_arr, _ = self.I_history.get_state(state_index=0, delay=0)
+        # current_I_index_arr: 1024-length (N-tiles X N-tiles) of indices (int)
+
+        # current_I_index = int(current_I_index_arr[0])
+
+        # minimal possible trace value in self.W is = pow(self.trace_tau, self.max_trace_time)
+        to_indices = current_I_index_arr.astype(np.int)
+
+        # to do later speed up this function
+        from_indices = self.I_history.get_state_sequence(state_index=0,
+                                                         delay_long=self.max_trace_time,
+                                                         delay_short=1).astype(np.int)
+
+        trace_value_arr = np.power(self.trace_tau, np.arange(self.max_trace_time - 1, -1, -1))
+        # trace_value_arr = np.
+
+        # print('***')
+        # print('to_indices:', to_indices.shape, to_indices.dtype)
+        # print('from_indices:', from_indices.shape, from_indices.dtype)
+        # print('trace_value_arr:', trace_value_arr.shape, trace_value_arr.dtype)
+
+        # for 8x8 == 64 tiles, and max trace time of 100:
+        #   to_indices: (64,) int64
+        #   from_indices: (100, 64) int64
+        #   trace_value_arr: (100,) float64
+
+        # TODO speed up with cython when needed
+        for tile_index in range(to_indices.shape[0]):
+            to_index = to_indices[tile_index]
+            from_index_arr = from_indices[:, tile_index]
+            self.W_by_layer[0][to_index, from_index_arr] = np.maximum(trace_value_arr, self.W_by_layer[0][to_index, from_index_arr])
+
+        # set only if trace_value_arr is higher than existing W value:
+        # self.W[to_index, from_index_arr] = np.maximum(trace_value_arr, self.W[to_index, from_index_arr])
 
     # @profile
     def _lookup_and_learn_table(self, layer_n, cuda_table_I, input_states_mat, learn_table, input_x_y_theta):
@@ -168,7 +240,7 @@ class MultiLayerSharedTiles(object):
 
         dists, argmin_dists = cuda_table_I.query_multiple_rows(query_inputs=input_states_mat)
 
-        I_index = None  # needed? #np.argmin(dists)
+        I_indices = argmin_dists  # needed? #np.argmin(dists)
 
         if learn_table:
             self._learn_table(layer_n=layer_n,
@@ -178,7 +250,7 @@ class MultiLayerSharedTiles(object):
                               input_states_mat=input_states_mat,
                               input_x_y_theta=input_x_y_theta)
 
-        return I_index  # learning might have invalidated this; doesn't matter for now because for now we are not using lookup if learning
+        return I_indices  # learning might have invalidated this; doesn't matter for now because for now we are not using lookup if learning
 
     # @profile
     def _learn_table(self, layer_n, cuda_table_I, dists, argmin_dists, input_states_mat, input_x_y_theta):
@@ -250,7 +322,13 @@ class MultiLayerSharedTiles(object):
 
         if init_already_done:
             if not cuda_table_I.post_init_done:
+
+                print()
+                print('Table init done! doing post-init...')
+                print()
+
                 cuda_table_I.post_init()
+
 
             table_min_dist, table_min_dist_r, table_min_dist_c = cuda_table_I.get_min_dist()
 
@@ -332,7 +410,14 @@ class MultiLayerSharedTiles(object):
         imscale = 4
         table_im = cv2.resize(table_im, dsize=(0,0), fx=imscale, fy=imscale, interpolation=cv2.INTER_NEAREST)
 
-        return [table_im]
+        W_im = (self.W_by_layer[0] * 255.0).astype(np.uint8)
+        max_dim = max(W_im.shape[0], W_im.shape[1])
+
+        imscale = 1000. / max_dim  # 0.2: full table, 2.0
+        # imscale = 5.0
+        W_im = cv2.resize(W_im, dsize=(0, 0), fx=imscale, fy=imscale, interpolation=cv2.INTER_NEAREST)
+
+        return [table_im, W_im]
 
 
 class SingleLayerSharedTile(object):

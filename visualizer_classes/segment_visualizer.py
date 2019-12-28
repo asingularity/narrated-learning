@@ -109,6 +109,9 @@ class SegmentVisualizer(object):
                 if table_ims[0] is not None:
                     cv2.imshow('tile', table_ims[0])
 
+                if table_ims[1] is not None:
+                    cv2.imshow('W', table_ims[1])
+
                 if input_im is not None:
                     self._display_raycast_image(raycast_image=input_im)
 

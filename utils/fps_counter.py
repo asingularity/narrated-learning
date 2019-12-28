@@ -2,8 +2,12 @@
 import time
 
 class FPSCounter(object):
-    def __init__(self, params):
-        self.display_every_k_seconds = params['display_every_k_seconds']
+    def __init__(self, params={}):
+        if 'display_every_k_seconds' in params:
+            self.display_every_k_seconds = params['display_every_k_seconds']
+        else:
+            self.display_every_k_seconds = 5
+
         self.frames = 0
         self.last_time = time.time()
 
