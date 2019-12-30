@@ -58,7 +58,10 @@ class MultiLayerSharedTiles(object):
 
         self.tables = []
         self.W_by_layer = []
+        self.W_count_by_layer = []
+        self.S_count_by_layer = []
         self.init_I_row_num = []
+        self.nz_by_layer_row = []
 
         self.trace_tau = 0.9
         self.max_trace_time = 100  # length of keeping track of trace for W.
@@ -103,6 +106,16 @@ class MultiLayerSharedTiles(object):
             # init prediction matrix stuff
 
             self.W_by_layer.append(np.zeros((num_entries, num_entries), np.float))
+            self.W_count_by_layer.append(np.zeros((num_entries, num_entries), np.int))
+            self.S_count_by_layer.append(np.zeros(num_entries, np.int))
+
+            # nnz lists for optimization
+
+            nnz_counts_list = []
+            for row in range(num_entries):
+                nnz_counts_list.append([])
+
+            self.nz_by_layer_row.append(nnz_counts_list)
 
         print()
 
@@ -184,47 +197,65 @@ class MultiLayerSharedTiles(object):
         self.t += 1
         return motor_out
 
+    # @profile
     def _learn_predictions(self):
-
-        # TODO on every step, there is one prediction to learn per tile, so NxN predictions to learn on same W matrix for NxN tiles
-        # TODO each tile needs its own I_history
 
         # *** self.W learning ***
 
-        current_I_index_arr, _ = self.I_history.get_state(state_index=0, delay=0)
         # current_I_index_arr: 1024-length (N-tiles X N-tiles) of indices (int)
+        current_I_index_arr, _ = self.I_history.get_state(state_index=0, delay=0)
 
-        # current_I_index = int(current_I_index_arr[0])
-
-        # minimal possible trace value in self.W is = pow(self.trace_tau, self.max_trace_time)
         to_indices = current_I_index_arr.astype(np.int)
 
-        # to do later speed up this function
-        from_indices = self.I_history.get_state_sequence(state_index=0,
-                                                         delay_long=self.max_trace_time,
-                                                         delay_short=1).astype(np.int)
+        prediction_type = 0  # 0, 1
 
-        trace_value_arr = np.power(self.trace_tau, np.arange(self.max_trace_time - 1, -1, -1))
-        # trace_value_arr = np.
+        if prediction_type == 0:
+            prev_I_index_arr, _ = self.I_history.get_state(state_index=0, delay=1)
+            from_indices = prev_I_index_arr.astype(np.int)
 
-        # print('***')
-        # print('to_indices:', to_indices.shape, to_indices.dtype)
-        # print('from_indices:', from_indices.shape, from_indices.dtype)
-        # print('trace_value_arr:', trace_value_arr.shape, trace_value_arr.dtype)
+            # use to_indices, from_indices
+            for tile_index in range(to_indices.shape[0]):
+                to_index = to_indices[tile_index]
+                from_index = from_indices[tile_index]
 
-        # for 8x8 == 64 tiles, and max trace time of 100:
-        #   to_indices: (64,) int64
-        #   from_indices: (100, 64) int64
-        #   trace_value_arr: (100,) float64
+                if self.W_count_by_layer[0][to_index, from_index] == 0:
+                    self.nz_by_layer_row[0][from_index].append(to_index)
 
-        # TODO speed up with cython when needed
-        for tile_index in range(to_indices.shape[0]):
-            to_index = to_indices[tile_index]
-            from_index_arr = from_indices[:, tile_index]
-            self.W_by_layer[0][to_index, from_index_arr] = np.maximum(trace_value_arr, self.W_by_layer[0][to_index, from_index_arr])
+                self.W_count_by_layer[0][to_index, from_index] += 1
+                self.S_count_by_layer[0][from_index] += 1
 
-        # set only if trace_value_arr is higher than existing W value:
-        # self.W[to_index, from_index_arr] = np.maximum(trace_value_arr, self.W[to_index, from_index_arr])
+                # THIS IS STILL VERY SLOW- NEEDS TO BE STORED AND ITERATED INSTEAD OF COMPUTED EACH TIME
+                # tmp_ind = np.nonzero(self.W_count_by_layer[0][:, from_index])[0]
+                tmp_ind = self.nz_by_layer_row[0][from_index]
+
+                self.W_by_layer[0][tmp_ind, from_index] = self.W_count_by_layer[0][tmp_ind, from_index] / self.S_count_by_layer[0][from_index]
+
+            # super slow, instead we put above. Take this out when confirmed:
+            # W_prob = self.W_count_by_layer[0] * 1.0 / self.S_count_by_layer[0]
+            # use W_by_layer to represent the result (W_prob)
+            # self.W_by_layer[0] = W_prob
+
+        elif prediction_type == 1:
+            # to do later speed up this function
+            from_indices = self.I_history.get_state_sequence(state_index=0,
+                                                             delay_long=self.max_trace_time,
+                                                             delay_short=1).astype(np.int)
+
+            # minimal possible trace value in self.W is = pow(self.trace_tau, self.max_trace_time)
+            trace_value_arr = np.power(self.trace_tau, np.arange(self.max_trace_time - 1, -1, -1))
+
+            # for 8x8 == 64 tiles, and max trace time of 100:
+            #   to_indices: (64,) int64
+            #   from_indices: (100, 64) int64
+            #   trace_value_arr: (100,) float64
+
+            # TODO speed up with cython when needed
+            for tile_index in range(to_indices.shape[0]):
+                to_index = to_indices[tile_index]
+                from_index_arr = from_indices[:, tile_index]
+                self.W_by_layer[0][to_index, from_index_arr] = np.maximum(trace_value_arr, self.W_by_layer[0][to_index, from_index_arr])
+        else:
+            assert False, 'Error! Invalid prediction_type: ' + str(prediction_type)
 
     # @profile
     def _lookup_and_learn_table(self, layer_n, cuda_table_I, input_states_mat, learn_table, input_x_y_theta):
