@@ -1,3 +1,5 @@
+import os
+os.environ["OMP_NUM_THREADS"] = "8"
 
 import numpy as np
 import time
@@ -10,6 +12,7 @@ import skcuda.linalg as linalg
 import skcuda.misc as misc
 import random
 from utils.fps_counter import FPSCounter
+from fast_streaming import loop_fast
 
 
 def test_simple_streaming():
@@ -251,6 +254,91 @@ def test_full_reqs_CPU():
 
         fps.update()
 
+def print_arr_info(arr_name, arr):
+    print(arr_name, arr.shape, arr.dtype)
+
+def loop_actual(state_X, sample_I_2, sample_Q_2, B_I, B_Q, C_I, C_Q, A_condensed_even, A_condensed_odd, state_X_history_index, state_X_history_even, state_X_history_odd):
+    '''
+
+    state_X (256,) float32
+    sample_I_2 (2, 1) float32
+    sample_Q_2 (2, 1) float32
+    B_I (256, 2) float32
+    B_Q (256, 2) float32
+    C_I (128, 3) float32
+    C_Q (128, 3) float32
+    A_condensed_even (256,) float32
+    A_condensed_odd (256,) float32
+    state_X_history_even (128, 3) float32
+    state_X_history_odd (128, 3) float32
+
+    # cython vars check
+
+    print()
+    print_arr_info('state_X', state_X)
+    print_arr_info('sample_I_2', sample_I_2)
+    print_arr_info('sample_Q_2', sample_Q_2)
+    print_arr_info('B_I', B_I)
+    print_arr_info('B_Q', B_Q)
+    print_arr_info('C_I', C_I)
+    print_arr_info('C_Q', C_Q)
+    print_arr_info('A_condensed_even', A_condensed_even)
+    print_arr_info('A_condensed_odd', A_condensed_odd)
+    print_arr_info('state_X_history_even', state_X_history_even)
+    print_arr_info('state_X_history_odd', state_X_history_odd)
+    print()
+
+    :param state_X:
+    :param sample_I_2:
+    :param sample_Q_2:
+    :param B_I:
+    :param B_Q:
+    :param C_I:
+    :param C_Q:
+    :param A_condensed_even:
+    :param A_condensed_odd:
+    :param state_X_history_index:
+    :param state_X_history_even:
+    :param state_X_history_odd:
+    :return:
+    '''
+
+    # state update
+
+    state_X_even = state_X[0::2]
+    state_X_odd = state_X[1::2]
+
+    tmp1 = np.multiply(A_condensed_even, np.repeat(state_X_even, 2))  # 256xM
+    tmp2 = np.multiply(A_condensed_odd, np.repeat(state_X_odd, 2))  # 256xM
+    tmp3 = np.dot(B_I, sample_I_2) + np.dot(B_Q, sample_Q_2)  # 2* 256* (2xM, 1xS)
+    state_X = tmp1 + tmp2 + tmp3[:, 0]  # 256xS
+
+    # error
+
+    error_I = np.float32(random.random() - random.random())
+
+    # output
+
+
+    state_X_history_even[:, state_X_history_index] = state_X_even[:]
+    state_X_history_odd[:, state_X_history_index] = state_X_odd[:]
+
+    # TODO if we use indexing to roll history above, how do we make sure weights are aligned with the rolling?
+    # TODO this is currently incorrect - use circmod
+
+    tmp0 = np.sum(np.multiply(C_I, state_X_history_even))  # (128x3)xM, (128x3)xS
+    tmp1 = np.sum(np.multiply(C_Q, state_X_history_odd))  # (128x3)xM, (128x3)xS
+    tmp2 = np.sum(np.multiply(C_I, state_X_history_odd))  # (128x3)xM, (128x3)xS
+    tmp3 = np.sum(np.multiply(C_Q, state_X_history_even))  # (128x3)xM, (128x3)xS
+
+    output_Y_I = tmp0 - tmp1
+    output_Y_Q = tmp2 + tmp3
+
+    # weight update
+
+    # C_I +=
+    return output_Y_I, output_Y_Q
+
 
 def test_actual():
     '''
@@ -272,20 +360,22 @@ def test_actual():
     A_condensed_even = np.random.random(N).astype(np.float32) - 0.5
     A_condensed_odd = np.random.random(N).astype(np.float32) - 0.5
 
-    B_I = np.random.random((256, 2)) - 0.5
-    B_Q = np.random.random((256, 2)) - 0.5
+    B_I = np.random.random((256, 2)).astype(np.float32) - 0.5
+    B_Q = np.random.random((256, 2)).astype(np.float32) - 0.5
 
     C_I = np.random.random((128, tau)).astype(np.float32)
     C_Q = np.random.random((128, tau)).astype(np.float32)
 
-    prev_I = random.random() - 0.5
-    prev_Q = random.random() - 0.5
+    prev_I = np.float32(random.random() - 0.5)
+    prev_Q = np.float32(random.random() - 0.5)
 
     sample_I_2 = np.zeros((2, 1), np.float32)
     sample_Q_2 = np.zeros((2, 1), np.float32)
 
     STEPS = 100000
     print('START')
+    t_start = time.time()
+
     for step in range(STEPS):
 
         # new sample
@@ -299,50 +389,24 @@ def test_actual():
         sample_Q_2[0, 0] = curr_Q
         sample_Q_2[1, 0] = prev_Q
 
-        # state update
-
-        state_X_even = state_X[0::2]
-        state_X_odd = state_X[1::2]
-
-        tmp1 = np.multiply(A_condensed_even, np.repeat(state_X_even, 2))  # 256xM
-        tmp2 = np.multiply(A_condensed_odd, np.repeat(state_X_odd, 2))  # 256xM
-        tmp3 = np.dot(B_I, sample_I_2) + np.dot(B_Q, sample_Q_2)  # 2* 256* (2xM, 1xS)
-        state_X = tmp1 + tmp2 + tmp3[:, 0]  # 256xS
-
-        # error
-
-        error_I = np.float32(random.random() - random.random())
-
-        # output
-
         state_X_history_index += 1
         if state_X_history_index > tau - 1:
             state_X_history_index = 0
 
-        state_X_history_even[:, state_X_history_index] = state_X_even[:]
-        state_X_history_odd[:, state_X_history_index] = state_X_odd[:]
+        output_Y_I, output_Y_Q = loop_actual(state_X, sample_I_2, sample_Q_2, B_I, B_Q, C_I, C_Q, A_condensed_even, A_condensed_odd, state_X_history_index, state_X_history_even, state_X_history_odd)
+        # output_Y_I, output_Y_Q = loop_fast(state_X, sample_I_2, sample_Q_2, B_I, B_Q, C_I, C_Q, A_condensed_even, A_condensed_odd, state_X_history_index, state_X_history_even, state_X_history_odd)
 
-        # TODO if we use indexing to roll history above, how do we make sure weights are aligned with the rolling?
-        # TODO this is currently incorrect - use circmod
-
-        tmp0 = np.sum(np.multiply(C_I, state_X_history_even))  # (128x3)xM, (128x3)xS
-        tmp1 = np.sum(np.multiply(C_Q, state_X_history_odd))  # (128x3)xM, (128x3)xS
-        tmp2 = np.sum(np.multiply(C_I, state_X_history_odd))  # (128x3)xM, (128x3)xS
-        tmp3 = np.sum(np.multiply(C_Q, state_X_history_even))  # (128x3)xM, (128x3)xS
-
-        output_Y_I = tmp0 - tmp1
-        output_Y_Q = tmp2 + tmp3
-
-        # weight update
-
-        # C_I +=
+        # loop_fast
 
         prev_I = curr_I
         prev_Q = curr_Q
 
         # fps.update()
 
+    t_end = time.time()
+
     print('DONE')
+    print('FPS: ', STEPS * 1.0 / (t_end - t_start))
 
 if __name__ == '__main__':
     '''
