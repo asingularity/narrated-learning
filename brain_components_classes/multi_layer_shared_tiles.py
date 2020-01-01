@@ -4,6 +4,7 @@ import numpy as np
 import random
 import pickle
 
+from utils.w_save_load_helper import save_W_prob
 from math import sqrt, sin, cos
 from cuda_dist_query import CudaTable
 from utils.load_sim_history import load_states_history, load_td_info_history
@@ -123,6 +124,8 @@ class MultiLayerSharedTiles(object):
 
         self.t = 0
 
+        self.last_analysis_time = 0
+
         # TODO init goal context stuff
 
     # @profile
@@ -234,6 +237,25 @@ class MultiLayerSharedTiles(object):
             # W_prob = self.W_count_by_layer[0] * 1.0 / self.S_count_by_layer[0]
             # use W_by_layer to represent the result (W_prob)
             # self.W_by_layer[0] = W_prob
+
+            do_analysis = (time.time() - self.last_analysis_time > 30)
+            if do_analysis:
+                print()
+                print('Prediction Analysis:')
+                print()
+
+                # clustering
+                # top K per row, above threshold, target number of labels, etc.
+
+                save_W_prob(filename='tmp.txt', nz=self.nz_by_layer_row[0], W=self.W_by_layer[0])
+
+                # debug
+                # nz = self.nz_by_layer_row[0]
+                # for k in range(len(nz)):
+                #     print('    ', k, len(nz[k]))  # , self.W_by_layer[0][nz[k], k])
+
+                print()
+                self.last_analysis_time = time.time()
 
         elif prediction_type == 1:
             # to do later speed up this function
@@ -406,6 +428,7 @@ class MultiLayerSharedTiles(object):
         cuda_table = self.tables[0]
         table = np.transpose(cuda_table.get_table_from_gpu())
 
+        # 24 for 800
         N = 64  # display NxN tiles of 8k entries
         entries = N*N
 
