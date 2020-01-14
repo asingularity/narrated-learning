@@ -15,10 +15,14 @@ class VideoPlaybackSensor(object):
         self.image_dim = params['image_dim']
         self.video_filename = params['video_filename']
 
+        # TODO make argument:
+        self.stop_preload_at_frames = 3000  # None: all frames
+
         if self.preload_file:
             self._sample_frames = []
-            self._preload_file()
+
             self._frame_index = 0
+            self._preload_file()
         else:
             self.cap = cv2.VideoCapture(self.video_filename)
 
@@ -29,10 +33,19 @@ class VideoPlaybackSensor(object):
         print('Starting Pre-loading...')
         cap = cv2.VideoCapture(self.video_filename)
 
+        fr = 0
+
         while ret:
             ret, frame = cap.read()
 
+            if fr > self.stop_preload_at_frames:
+                break
+
             if ret:
+
+                if fr % 100 == 0:
+                    print('    preload frame:', fr)
+
                 gray = frame
 
                 mid_pt_r = 2 * gray.shape[0] / 4
@@ -42,15 +55,16 @@ class VideoPlaybackSensor(object):
                 im_cols = gray.shape[1]
                 min_dim = min(im_rows, im_cols)
 
-                factor = 8  # 8, but tried 4
-
-                sample_im = gray[mid_pt_r - min_dim / factor:mid_pt_r + min_dim / factor,
-                                 mid_pt_c - min_dim / factor:mid_pt_c + min_dim / factor, :]
+                #factor = 8  # 8, but tried 4
+                #sample_im = gray[mid_pt_r - min_dim / factor:mid_pt_r + min_dim / factor,
+                #                 mid_pt_c - min_dim / factor:mid_pt_c + min_dim / factor, :]
+                sample_im = gray[0:min_dim, 0:min_dim, :]
 
                 if not displayed_info:
                     print('before resize: ', sample_im.shape)
                 sample_im = cv2.resize(src=sample_im, dsize=(self.image_dim, self.image_dim),
                                        interpolation=cv2.INTER_NEAREST)
+                sample_im = cv2.cvtColor(sample_im, cv2.COLOR_BGR2GRAY)
 
                 if not displayed_info:
                     print('after resize: ', sample_im.shape)
@@ -59,8 +73,13 @@ class VideoPlaybackSensor(object):
 
                 displayed_info = True
 
+                fr += 1
+
         print('Pre-loading complete.')
 
+        # HACK for testing
+        self._frame_index = int(len(self._sample_frames) / 2)
+        print('starting on frame index: ', self._frame_index, 'of', len(self._sample_frames))
     # @profile
     def read_input(self):
         '''

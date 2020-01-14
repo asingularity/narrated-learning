@@ -15,19 +15,21 @@ from math import pi
 MAX_HISTORY_LENGTH = 10600000 + 1
 USERNAME = 'intec'
 
-TABLE_ENTRIES = 8000  # 8000
+TABLE_ENTRIES = 4000  # 8000
 TABLE_LEARN_TIME = TABLE_ENTRIES * 2  # 16
-PREDICTION_LEARN_TIME = TABLE_ENTRIES * 16
+PREDICTION_LEARN_TIME = TABLE_ENTRIES * 160
 
-IM_DIM = 64  # 128; assume square image, this is width & height
-TILES_LAYER_0 = 16  # 32; N where tiled NxN
+IM_DIM = 64 * 8  # 128; assume square image, this is width & height
+TILES_LAYER_0 = 2 * 8  # 32; N where tiled NxN
 IM_PIXELS = IM_DIM * IM_DIM  # assume grayscale
 
+COLOR_ENABLED = False
 
 def get_sensors_params():
     params = {
         'image_dim': IM_DIM,  # sensor class has to figure out subset & scale to achieve this dim
-        'video_filename': '/srv/projects/NL-data/P1033727.mp4'  # 3840x2160
+        #'video_filename': '/srv/projects/NL-data/P1033727.mp4'  # 3840x2160
+        'video_filename': '/srv/projects/NL-data/videoplayback'  # 3840x2160
     }
     return params
 
@@ -42,18 +44,25 @@ def get_sim_folder_manager_params():
 
 
 def get_brain_params():
+
+    if COLOR_ENABLED:
+        input_dim = IM_PIXELS * 3 / (TILES_LAYER_0 * TILES_LAYER_0)  # (32 * 32 * 3.) / (4 * 4.) = 192.0
+    else:
+        input_dim = IM_PIXELS / (TILES_LAYER_0 * TILES_LAYER_0)
+
     params = {
         # ************ general ************
         'max_history_length': MAX_HISTORY_LENGTH,
         'enable_learning': True,
 
         # ************ MultiLayerSharedTiles ************
+        'color_enabled': COLOR_ENABLED,
         'use_multi_layer': True,
         'tile_entries_per_layer': [TABLE_ENTRIES],
         'table_learn_time_per_layer': [TABLE_LEARN_TIME],
         'prediction_learn_time_per_layer': [PREDICTION_LEARN_TIME],
         'tiles_per_layer_NxN': [TILES_LAYER_0],  # N where tiled NxN
-        'input_dim': IM_PIXELS * 3 / (TILES_LAYER_0 * TILES_LAYER_0),  # (32 * 32 * 3.) / (4 * 4.) = 192.0
+        'input_dim': input_dim
             }
 
     return params
@@ -61,6 +70,7 @@ def get_brain_params():
 
 def get_visualizer_params():
     params = {
+        'color_enabled': COLOR_ENABLED,
         'fps_display_interval': 3,
         'image_display_secs_fast': 5,
         'waitKey_time_fast': 1,  # 1, 100, 5000

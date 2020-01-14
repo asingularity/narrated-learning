@@ -31,6 +31,7 @@ class SegmentVisualizer(object):
         self.last_FPS_time = time.time()
         self.fps_display_interval = params['fps_display_interval']
         self.scale_camera_factor = params['scale_camera_factor']
+        self.color_enabled = params['color_enabled']
 
         self.waitKey_time_slow = params['waitKey_time_slow']
         self.image_display_secs_slow = params['image_display_secs_slow']
