@@ -15,21 +15,25 @@ from math import pi
 MAX_HISTORY_LENGTH = 10600000 + 1
 USERNAME = 'intec'
 
-TABLE_ENTRIES = 4000  # 8000
+TABLE_ENTRIES = 1000  # 8000
 TABLE_LEARN_TIME = TABLE_ENTRIES * 2  # 16
 PREDICTION_LEARN_TIME = TABLE_ENTRIES * 160
 
-IM_DIM = 64 * 8  # 128; assume square image, this is width & height
-TILES_LAYER_0 = 2 * 8  # 32; N where tiled NxN
+IM_DIM = 64 * 8  # assume square image, this is width & height
+TILES_LAYER_0 = 2 * 8  # N where tiled NxN
 IM_PIXELS = IM_DIM * IM_DIM  # assume grayscale
 
 COLOR_ENABLED = False
+
 
 def get_sensors_params():
     params = {
         'image_dim': IM_DIM,  # sensor class has to figure out subset & scale to achieve this dim
         #'video_filename': '/srv/projects/NL-data/P1033727.mp4'  # 3840x2160
-        'video_filename': '/srv/projects/NL-data/videoplayback'  # 3840x2160
+        'video_filename': '/srv/projects/NL-data/videoplayback',  # 3840x2160
+        'stop_preload_at_frames': 2000,  # None: use whole video
+        'use_full_frame': False,  # use the whole image
+        'partial_frame_factor': 2  # from center, what factor to use - larger factor ~ smaller part of image
     }
     return params
 
@@ -62,7 +66,14 @@ def get_brain_params():
         'table_learn_time_per_layer': [TABLE_LEARN_TIME],
         'prediction_learn_time_per_layer': [PREDICTION_LEARN_TIME],
         'tiles_per_layer_NxN': [TILES_LAYER_0],  # N where tiled NxN
-        'input_dim': input_dim
+        'input_dim': input_dim,
+        'enable_table_im': True,
+        'combine_table_with_weights': False,
+        'enable_weights_im': True,
+        'enable_selection_im': False,
+        'selection_im_last_k_samples': 1,  # only allows 1 currently
+        'enable_inv_selection_im': True,
+        'inv_selection_im_last_k_samples': 5
             }
 
     return params

@@ -15,8 +15,9 @@ class VideoPlaybackSensor(object):
         self.image_dim = params['image_dim']
         self.video_filename = params['video_filename']
 
-        # TODO make argument:
-        self.stop_preload_at_frames = 3000  # None: all frames
+        self.stop_preload_at_frames = params['stop_preload_at_frames']  # 3000  # None: all frames
+        self.use_full_frame = params['use_full_frame']
+        self.partial_frame_factor = params['partial_frame_factor']
 
         if self.preload_file:
             self._sample_frames = []
@@ -55,10 +56,13 @@ class VideoPlaybackSensor(object):
                 im_cols = gray.shape[1]
                 min_dim = min(im_rows, im_cols)
 
-                #factor = 8  # 8, but tried 4
-                #sample_im = gray[mid_pt_r - min_dim / factor:mid_pt_r + min_dim / factor,
-                #                 mid_pt_c - min_dim / factor:mid_pt_c + min_dim / factor, :]
-                sample_im = gray[0:min_dim, 0:min_dim, :]
+                if self.use_full_frame:
+                    sample_im = gray[0:min_dim, 0:min_dim, :]
+                else:
+                    factor = self.partial_frame_factor  # 8, but tried 4
+                    sample_im = gray[mid_pt_r - min_dim / factor:mid_pt_r + min_dim / factor,
+                                     mid_pt_c - min_dim / factor:mid_pt_c + min_dim / factor, :]
+                    #
 
                 if not displayed_info:
                     print('before resize: ', sample_im.shape)
