@@ -82,7 +82,9 @@ class VideoPlaybackSensor(object):
         print('Pre-loading complete.')
 
         # HACK for testing
-        self._frame_index = int(len(self._sample_frames) / 2)
+        # self._frame_index = int(len(self._sample_frames) / 2)
+        self._frame_index = 0
+
         print('starting on frame index: ', self._frame_index, 'of', len(self._sample_frames))
     # @profile
     def read_input(self):

@@ -55,6 +55,11 @@ class MultiLayerSharedTiles(object):
         #'enable_inv_selection_im': True,
         #'inv_selection_im_last_k_samples': 5
 
+        # TODO these are current settings for display:
+        self.enable_select_im = False
+        self.enable_separate_weights_im = False  # if False, will show combined table + weights with best method
+        self.enable_W_im = False
+
         # predictors always try to predict the next step (but there is decaying trace)
         self.predict_time = 1
 
@@ -273,8 +278,6 @@ class MultiLayerSharedTiles(object):
         # this is the currently selected row index of the table, one row index per tile
         current_I_index_arr, _ = self.I_history.get_state(state_index=0, delay=0)
 
-        select_im_on = True
-
         # for each input_state in input_states_list
 
         r_offset = 0
@@ -301,7 +304,7 @@ class MultiLayerSharedTiles(object):
             # print('errors:', np.amin(per_pixel_dist), np.amax(per_pixel_dist), np.mean(per_pixel_dist))
             # print('new weights: ', np.amin(weights[int(current_I_index_arr[k]), :]), np.amax(weights[int(current_I_index_arr[k]), :]), np.mean(weights[int(current_I_index_arr[k]), :]))
 
-            if select_im_on and k < num_to_disp:
+            if self.enable_select_im and k < num_to_disp:
                 r0 = k * tile_r_c + r_offset
                 r1 = (k + 1) * tile_r_c + r_offset
                 c00 = 0
@@ -577,12 +580,13 @@ class MultiLayerSharedTiles(object):
         else:
             tile_r_c = int(sqrt(rows.shape[1]))
             table_im = np.zeros((N * tile_r_c + N * 1, N * tile_r_c + N * 1)) + 0.5
-            weights_im = np.zeros((N * tile_r_c + N * 1, N * tile_r_c + N * 1)) + 0.5
+
+            if self.enable_separate_weights_im:
+                weights_im = np.zeros((N * tile_r_c + N * 1, N * tile_r_c + N * 1)) + 0.5
 
             # false color:
-
-            #table_im = np.zeros((N * tile_r_c + N * 1, N * tile_r_c + N * 1, 3)) + 0.5
-            #tile_im_color = np.zeros((tile_r_c, tile_r_c, 3), np.float32)
+            table_im_false_color = np.zeros((N * tile_r_c + N * 1, N * tile_r_c + N * 1, 3)) + 0.5
+            tile_im_false_color = np.zeros((tile_r_c, tile_r_c, 3), np.float32)
 
         r_offset = 0
         for disp_r in range(N):
@@ -608,33 +612,39 @@ class MultiLayerSharedTiles(object):
                     tile_im = table[tile_n, :].reshape((tile_r_c, tile_r_c))
                     tile_weights = weights[tile_n, :].reshape((tile_r_c, tile_r_c))
 
-                    table_im[r0:r1, c0:c1] = tile_im[:, :]
-                    weights_im[r0:r1, c0:c1] = tile_weights[:, :]
+                    if self.enable_separate_weights_im:
+                        table_im[r0:r1, c0:c1] = tile_im[:, :]
+                        weights_im[r0:r1, c0:c1] = tile_weights[:, :]
+                    else:
+                        # not very clear, just grayscale multiply:
+                        # table_im[r0:r1, c0:c1] = np.multiply(np.multiply(tile_weights, tile_weights), tile_im)
 
-                    # for more emphasis for false color
-                    # tile_weights_color[:, :] = np.multiply(tile_weights[:, :], tile_weights[:, :])
+                        #
+                        tmp_r_n, tmp_c_n = np.nonzero(tile_weights < 0.75)  # 0.5
+                        # tmp_r_p, tmp_c_p = np.nonzero(tile_weights > 0.5)  # 0.5
 
-                    # FALSE COLOR
-                    # tile_im_color[:, :, 0] = tile_im[:, :]
-                    # tile_im_color[:, :, 1] = tile_im[:, :]
-                    # tile_im_color[:, :, 2] = tile_im[:, :]
-                    #
-                    # tmp_r_n, tmp_c_n = np.nonzero(tile_weights < 0.8)  # 0.5
-                    # tile_im_color[tmp_r_n, tmp_c_n, 0] = 0.0
-                    # tile_im_color[tmp_r_n, tmp_c_n, 1] = 1.0
-                    # tile_im_color[tmp_r_n, tmp_c_n, 2] = 0.0
+                        # FALSE COLOR
+                        tile_im_false_color[:, :, 0] = tile_im[:, :]
+                        tile_im_false_color[:, :, 1] = tile_im[:, :]
+                        tile_im_false_color[:, :, 2] = tile_im[:, :]
 
-                    # table_im[r0:r1, c0:c1, :] = tile_im_color[:, :, :]
+                        #tile_im_false_color[tmp_r_p, tmp_c_p, 0] = tile_im[tmp_r_p, tmp_c_p]
+                        #tile_im_false_color[tmp_r_n, tmp_c_n, 1] = tile_im[tmp_r_n, tmp_c_n]
+                        #tile_im_false_color[:, :, 2] = 0.0
 
-                    # first way (all grayscale), not very clear:
-                    # table_im[r0:r1, c0:c1] = np.multiply(tile_weights_color, tile_im)
+                        # what we want
+                        # W=1: [1] = tile_im, [0, 2] = 0
+                        # W=0: [0] = tile_im, [1, 2] = 0
 
-                    # only weights:
+                        # tile_im_false_color[:, :, 0] = 0
+                        # tile_im_false_color[:, :, 1] = np.multiply(np.multiply(tile_weights, tile_weights), tile_im)
+                        # tile_im_false_color[:, :, 2] = np.multiply(np.multiply(1.0 - tile_weights, 1.0 - tile_weights), tile_im)
 
+                        tile_im_false_color[tmp_r_n, tmp_c_n, 1] = 0.0
+                        tile_im_false_color[tmp_r_n, tmp_c_n, 0] = tile_im[tmp_r_n, tmp_c_n]
+                        tile_im_false_color[tmp_r_n, tmp_c_n, 2] = 0.0
 
-                #print('***')
-                #print(tile_weights_color.shape, np.amin(tile_weights_color), np.amax(tile_weights_color))
-                #print(tile_im.shape, np.amin(tile_im), np.amax(tile_im))
+                        table_im_false_color[r0:r1, c0:c1, :] = tile_im_false_color[:, :, :]
 
                 tile_n += 1
 
@@ -642,30 +652,31 @@ class MultiLayerSharedTiles(object):
 
             r_offset += 1
 
-        # print(np.amin(table_im), np.amax(table_im))
-        #imscale = 4
-        #table_im = cv2.resize(table_im, dsize=(0,0), fx=imscale, fy=imscale, interpolation=cv2.INTER_NEAREST)
+        # false color
+        table_im = table_im_false_color
 
         max_dim = max(table_im.shape[0], table_im.shape[1])
         imscale = 2000. / max_dim  # 0.2: full table, 2.0
         table_im = cv2.resize(table_im, dsize=(0, 0), fx=imscale, fy=imscale, interpolation=cv2.INTER_NEAREST)
 
-        max_dim = max(weights_im.shape[0], weights_im.shape[1])
-        imscale = 2000. / max_dim  # 0.2: full table, 2.0
-        weights_im = cv2.resize(weights_im, dsize=(0, 0), fx=imscale, fy=imscale, interpolation=cv2.INTER_NEAREST)
-        # weights_im = None
+        if self.enable_separate_weights_im:
+            max_dim = max(weights_im.shape[0], weights_im.shape[1])
+            imscale = 2000. / max_dim  # 0.2: full table, 2.0
+            weights_im = cv2.resize(weights_im, dsize=(0, 0), fx=imscale, fy=imscale, interpolation=cv2.INTER_NEAREST)
+            # weights_im = None
+        else:
+            weights_im = None
 
-        other_im = None
-
-        if self.selection_im is not None:
+        if self.selection_im is not None and self.enable_select_im:
             select_im = self.selection_im
             max_dim = max(select_im.shape[0], select_im.shape[1])
             imscale = 2000. / max_dim  # 0.2: full table, 2.0
             select_im = cv2.resize(select_im, dsize=(0, 0), fx=imscale, fy=imscale, interpolation=cv2.INTER_NEAREST)
             other_im = select_im
+        else:
+            select_im = None
 
-        display_W = False
-        if display_W:
+        if self.enable_W_im:
             W_im = (self.W_by_layer[0] * 255.0).astype(np.uint8)
             max_dim = max(W_im.shape[0], W_im.shape[1])
 
@@ -673,12 +684,14 @@ class MultiLayerSharedTiles(object):
             # imscale = 5.0
             W_im = cv2.resize(W_im, dsize=(0, 0), fx=imscale, fy=imscale, interpolation=cv2.INTER_NEAREST)
             other_im = W_im
+        else:
+            W_im = None
 
         # TODO make flags!
         # table_im = None
         # weights_im = None
 
-        return [table_im, other_im, weights_im], ['tile', 'W', 'weights']
+        return [table_im, W_im, weights_im, select_im], ['tile', 'W', 'weights', 'select']
 
 
 def build_checkerboard(w, h):
