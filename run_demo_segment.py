@@ -66,14 +66,7 @@ def get_brain_params():
         'table_learn_time_per_layer': [TABLE_LEARN_TIME],
         'prediction_learn_time_per_layer': [PREDICTION_LEARN_TIME],
         'tiles_per_layer_NxN': [TILES_LAYER_0],  # N where tiled NxN
-        'input_dim': input_dim,
-        'enable_table_im': True,
-        'combine_table_with_weights': False,
-        'enable_weights_im': True,
-        'enable_selection_im': False,
-        'selection_im_last_k_samples': 1,  # only allows 1 currently
-        'enable_inv_selection_im': True,
-        'inv_selection_im_last_k_samples': 5
+        'input_dim': input_dim
             }
 
     return params
