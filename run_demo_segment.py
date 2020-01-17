@@ -32,7 +32,7 @@ def get_sensors_params():
         #'video_filename': '/srv/projects/NL-data/P1033727.mp4'  # 3840x2160
         'video_dir': '/srv/projects/NL-data/',
         'video_filename': 'videoplayback',  # 3840x2160
-        'stop_preload_at_frames': 6000,  # None: use whole video
+        'stop_preload_at_frames': None,  # None: use whole video
         'use_full_frame': False,  # use the whole image
         'partial_frame_factor': 2  # from center, what factor to use - larger factor ~ smaller part of image
     }

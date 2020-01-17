@@ -51,8 +51,9 @@ class VideoPlaybackSensor(object):
             while ret:
                 ret, frame = cap.read()
 
-                if fr > self.stop_preload_at_frames:
-                    break
+                if self.stop_preload_at_frames is not None:
+                    if fr > self.stop_preload_at_frames:
+                        break
 
                 if ret:
 
