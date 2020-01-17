@@ -59,6 +59,7 @@ class MultiLayerSharedTiles(object):
         self.enable_select_im = False
         self.enable_separate_weights_im = False  # if False, will show combined table + weights with best method
         self.enable_W_im = False
+        self.enable_samples_by_row_im = False
 
         # predictors always try to predict the next step (but there is decaying trace)
         self.predict_time = 1
@@ -165,7 +166,7 @@ class MultiLayerSharedTiles(object):
         self.checkerboard = None
 
         self.selection_im = None
-
+        self.samples_by_row_im = None
         # TODO init goal context stuff
 
     # @profile
@@ -329,6 +330,10 @@ class MultiLayerSharedTiles(object):
                 r_offset += 1
 
         self.selection_im = selection_im
+
+        # if self.enable_samples_by_row_im:
+        #     for k in range(num_to_disp):  # this could also be a random subset instead of first N
+        #         table_row, _, _ = self.tables[0].get_matrix_row(row_index=k)
 
     # @profile
     def _learn_predictions(self):
