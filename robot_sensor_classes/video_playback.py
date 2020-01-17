@@ -1,6 +1,7 @@
 import random
 import cv2
 import numpy as np
+import pickle
 
 
 class VideoPlaybackSensor(object):
@@ -13,6 +14,7 @@ class VideoPlaybackSensor(object):
         self.preload_file = True
 
         self.image_dim = params['image_dim']
+        self.video_dir = params['video_dir']
         self.video_filename = params['video_filename']
 
         self.stop_preload_at_frames = params['stop_preload_at_frames']  # 3000  # None: all frames
@@ -25,59 +27,71 @@ class VideoPlaybackSensor(object):
             self._frame_index = 0
             self._preload_file()
         else:
-            self.cap = cv2.VideoCapture(self.video_filename)
+            self.cap = cv2.VideoCapture(self.video_dir + self.video_filename)
 
     def _preload_file(self):
-        displayed_info = False
 
-        ret = True
-        print('Starting Pre-loading...')
-        cap = cv2.VideoCapture(self.video_filename)
+        pkl_filename = self.video_dir + self.video_filename + '_' + str(self.stop_preload_at_frames) + '_' + str(self.use_full_frame) + '_' + str(self.partial_frame_factor) + '.pkl'
 
-        fr = 0
+        print('Trying to load from pkl...')
 
-        while ret:
-            ret, frame = cap.read()
+        try:
+            self.load_from_pkl(pkl_filename=pkl_filename)
+        except:
+            print('pkl not found, loading video...')
 
-            if fr > self.stop_preload_at_frames:
-                break
+            displayed_info = False
 
-            if ret:
+            ret = True
+            print('Starting Pre-loading...')
+            cap = cv2.VideoCapture(self.video_dir + self.video_filename)
 
-                if fr % 100 == 0:
-                    print('    preload frame:', fr)
+            fr = 0
 
-                gray = frame
+            while ret:
+                ret, frame = cap.read()
 
-                mid_pt_r = 2 * gray.shape[0] / 4
-                mid_pt_c = 2 * gray.shape[1] / 4
+                if fr > self.stop_preload_at_frames:
+                    break
 
-                im_rows = gray.shape[0]
-                im_cols = gray.shape[1]
-                min_dim = min(im_rows, im_cols)
+                if ret:
 
-                if self.use_full_frame:
-                    sample_im = gray[0:min_dim, 0:min_dim, :]
-                else:
-                    factor = self.partial_frame_factor  # 8, but tried 4
-                    sample_im = gray[mid_pt_r - min_dim / factor:mid_pt_r + min_dim / factor,
-                                     mid_pt_c - min_dim / factor:mid_pt_c + min_dim / factor, :]
-                    #
+                    if fr % 100 == 0:
+                        print('    preload frame:', fr)
 
-                if not displayed_info:
-                    print('before resize: ', sample_im.shape)
-                sample_im = cv2.resize(src=sample_im, dsize=(self.image_dim, self.image_dim),
-                                       interpolation=cv2.INTER_NEAREST)
-                sample_im = cv2.cvtColor(sample_im, cv2.COLOR_BGR2GRAY)
+                    gray = frame
 
-                if not displayed_info:
-                    print('after resize: ', sample_im.shape)
+                    mid_pt_r = 2 * gray.shape[0] / 4
+                    mid_pt_c = 2 * gray.shape[1] / 4
 
-                self._sample_frames.append(sample_im.copy())
+                    im_rows = gray.shape[0]
+                    im_cols = gray.shape[1]
+                    min_dim = min(im_rows, im_cols)
 
-                displayed_info = True
+                    if self.use_full_frame:
+                        sample_im = gray[0:min_dim, 0:min_dim, :]
+                    else:
+                        factor = self.partial_frame_factor  # 8, but tried 4
+                        sample_im = gray[mid_pt_r - min_dim / factor:mid_pt_r + min_dim / factor,
+                                         mid_pt_c - min_dim / factor:mid_pt_c + min_dim / factor, :]
+                        #
 
-                fr += 1
+                    if not displayed_info:
+                        print('before resize: ', sample_im.shape)
+                    sample_im = cv2.resize(src=sample_im, dsize=(self.image_dim, self.image_dim),
+                                           interpolation=cv2.INTER_NEAREST)
+                    sample_im = cv2.cvtColor(sample_im, cv2.COLOR_BGR2GRAY)
+
+                    if not displayed_info:
+                        print('after resize: ', sample_im.shape)
+
+                    self._sample_frames.append(sample_im.copy())
+
+                    displayed_info = True
+
+                    fr += 1
+
+            self.save_to_pkl(pkl_filename=pkl_filename)
 
         print('Pre-loading complete.')
 
@@ -86,6 +100,21 @@ class VideoPlaybackSensor(object):
         self._frame_index = 0
 
         print('starting on frame index: ', self._frame_index, 'of', len(self._sample_frames))
+
+    def load_from_pkl(self, pkl_filename):
+        print('Loading from pkl...')
+        f = open(pkl_filename, 'rb')
+        self._sample_frames = pickle.load(f)
+        f.close()
+        print('Loading complete.')
+
+    def save_to_pkl(self, pkl_filename):
+        print('Saving to pkl...')
+        f = open(pkl_filename, 'wb')
+        pickle.dump(self._sample_frames, f)
+        f.close()
+        print('Saving complete.')
+
     # @profile
     def read_input(self):
         '''
@@ -110,7 +139,7 @@ class VideoPlaybackSensor(object):
 
                 # TODO must put in thread!!!
                 # TODO and/or make an option to preload sampled & resized video into memory
-                self.cap = cv2.VideoCapture(self.video_filename)
+                self.cap = cv2.VideoCapture(self.video_dir + self.video_filename)
                 ret, frame = self.cap.read()
 
             # gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
