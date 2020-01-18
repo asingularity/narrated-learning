@@ -29,11 +29,11 @@ COLOR_ENABLED = False
 def get_sensors_params():
     params = {
         'image_dim': IM_DIM,  # sensor class has to figure out subset & scale to achieve this dim
-        #'video_filename': '/srv/projects/NL-data/P1033727.mp4'  # 3840x2160
         'video_dir': '/srv/projects/NL-data/',
         'video_filename': 'videoplayback',  # 3840x2160
+        # 'video_filename': 'P1033727.mp4',  # 3840x2160
         'stop_preload_at_frames': None,  # None: use whole video
-        'use_full_frame': False,  # use the whole image
+        'use_full_frame': True,  # use the whole image
         'partial_frame_factor': 2  # from center, what factor to use - larger factor ~ smaller part of image
     }
     return params
@@ -67,7 +67,8 @@ def get_brain_params():
         'table_learn_time_per_layer': [TABLE_LEARN_TIME],
         'prediction_learn_time_per_layer': [PREDICTION_LEARN_TIME],
         'tiles_per_layer_NxN': [TILES_LAYER_0],  # N where tiled NxN
-        'input_dim': input_dim
+        'input_dim': input_dim,
+        'table_ims_scale_pixels': 1600  # 2000 for 4k monitor, 1600 for laptop
             }
 
     return params

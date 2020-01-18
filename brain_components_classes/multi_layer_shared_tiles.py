@@ -46,6 +46,8 @@ class MultiLayerSharedTiles(object):
         pre_init_goal_contexts = params['pre_init_goal_contexts']
         max_history_length = params['max_history_length']
 
+        self.table_ims_scale = float(params['table_ims_scale_pixels'])
+
         # TODO should we have these arguments??
         #'enable_table_im': True,
         #'combine_table_with_weights': False,
@@ -56,7 +58,7 @@ class MultiLayerSharedTiles(object):
         #'inv_selection_im_last_k_samples': 5
 
         # TODO these are current settings for display:
-        self.enable_select_im = False
+        self.enable_select_im = True
         self.enable_separate_weights_im = False  # if False, will show combined table + weights with best method
         self.enable_W_im = False
         self.enable_samples_by_row_im = False
@@ -274,14 +276,20 @@ class MultiLayerSharedTiles(object):
         # leave buffer of 1 pixel between images, leave room for input images
 
         num_to_disp = 32  # input_states_mat.shape[0]  # this is a lot!
-        selection_im = np.zeros((tile_r_c * num_to_disp + num_to_disp, tile_r_c * (2 + select_im_top_k) + 4), np.float32)
+        disp_list = list(np.random.permutation(input_states_mat.shape[0])[0:num_to_disp])
+        curr_disp_ind = 0
+
+        selection_im = np.zeros((tile_r_c * num_to_disp + num_to_disp, tile_r_c * (1 + select_im_top_k) + 4, 3), np.float32)
 
         # this is the currently selected row index of the table, one row index per tile
         current_I_index_arr, _ = self.I_history.get_state(state_index=0, delay=0)
 
+        tile_im_false_color = np.zeros((tile_r_c, tile_r_c, 3), np.float32)
+
         # for each input_state in input_states_list
 
         r_offset = 0
+
         for k in range(input_states_mat.shape[0]):
             tile_input_vect = input_states_mat[k, :]
 
@@ -305,29 +313,46 @@ class MultiLayerSharedTiles(object):
             # print('errors:', np.amin(per_pixel_dist), np.amax(per_pixel_dist), np.mean(per_pixel_dist))
             # print('new weights: ', np.amin(weights[int(current_I_index_arr[k]), :]), np.amax(weights[int(current_I_index_arr[k]), :]), np.mean(weights[int(current_I_index_arr[k]), :]))
 
-            if self.enable_select_im and k < num_to_disp:
-                r0 = k * tile_r_c + r_offset
-                r1 = (k + 1) * tile_r_c + r_offset
+            if self.enable_select_im and k in disp_list:
+                r0 = curr_disp_ind * tile_r_c + r_offset
+                r1 = (curr_disp_ind + 1) * tile_r_c + r_offset
                 c00 = 0
                 c01 = tile_r_c
                 c10 = tile_r_c + 2
                 c11 = tile_r_c + 2 + tile_r_c
-                c20 = tile_r_c + 2 + tile_r_c + 2
-                c21 = tile_r_c + 2 + tile_r_c + 2 + tile_r_c
+                # c20 = tile_r_c + 2 + tile_r_c + 2
+                # c21 = tile_r_c + 2 + tile_r_c + 2 + tile_r_c
 
                 # print(tile_input_vect.shape, tile_r_c)
                 tmp0 = tile_input_vect.reshape((tile_r_c, tile_r_c))
                 # print(selection_im.shape, r0, r1, c00, c01, tmp0.shape)
-                selection_im[r0:r1, c00:c01] = tmp0[:, :]
+                selection_im[r0:r1, c00:c01, 0] = tmp0[:, :]
+                selection_im[r0:r1, c00:c01, 1] = tmp0[:, :]
+                selection_im[r0:r1, c00:c01, 2] = tmp0[:, :]
 
-                tmp0 = table_row.reshape((tile_r_c, tile_r_c))
-                selection_im[r0:r1, c10:c11] = tmp0[:, :]
+                tile_row_im = table_row.reshape((tile_r_c, tile_r_c))
 
                 tile_weights = weights[int(current_I_index_arr[k]), :].reshape((tile_r_c, tile_r_c))
-                tile_weights = np.multiply(tile_weights, tile_weights)
-                selection_im[r0:r1, c20:c21] = tile_weights[:, :]
+
+                # selection_im[r0:r1, c10:c11] = tile_row_im[:, :]  # tile_weights[:, :]
+
+                tmp_r_n, tmp_c_n = np.nonzero(tile_weights < 0.75)  # 0.5
+                # tmp_r_p, tmp_c_p = np.nonzero(tile_weights > 0.5)  # 0.5
+
+                # FALSE COLOR
+                tile_im_false_color[:, :, 0] = tile_row_im[:, :]
+                tile_im_false_color[:, :, 1] = tile_row_im[:, :]
+                tile_im_false_color[:, :, 2] = tile_row_im[:, :]
+
+                tile_im_false_color[tmp_r_n, tmp_c_n, 1] = 0.0
+                tile_im_false_color[tmp_r_n, tmp_c_n, 0] = tile_row_im[tmp_r_n, tmp_c_n]
+                tile_im_false_color[tmp_r_n, tmp_c_n, 2] = 0.0
+
+                selection_im[r0:r1, c10:c11, :] = tile_im_false_color[:, :, :]
 
                 r_offset += 1
+
+                curr_disp_ind += 1
 
         self.selection_im = selection_im
 
@@ -661,12 +686,12 @@ class MultiLayerSharedTiles(object):
         table_im = table_im_false_color
 
         max_dim = max(table_im.shape[0], table_im.shape[1])
-        imscale = 2000. / max_dim  # 0.2: full table, 2.0
+        imscale = self.table_ims_scale / max_dim  # 0.2: full table, 2.0
         table_im = cv2.resize(table_im, dsize=(0, 0), fx=imscale, fy=imscale, interpolation=cv2.INTER_NEAREST)
 
         if self.enable_separate_weights_im:
             max_dim = max(weights_im.shape[0], weights_im.shape[1])
-            imscale = 2000. / max_dim  # 0.2: full table, 2.0
+            imscale = self.table_ims_scale / max_dim  # 0.2: full table, 2.0
             weights_im = cv2.resize(weights_im, dsize=(0, 0), fx=imscale, fy=imscale, interpolation=cv2.INTER_NEAREST)
             # weights_im = None
         else:
@@ -675,7 +700,7 @@ class MultiLayerSharedTiles(object):
         if self.selection_im is not None and self.enable_select_im:
             select_im = self.selection_im
             max_dim = max(select_im.shape[0], select_im.shape[1])
-            imscale = 2000. / max_dim  # 0.2: full table, 2.0
+            imscale = self.table_ims_scale / max_dim  # 0.2: full table, 2.0
             select_im = cv2.resize(select_im, dsize=(0, 0), fx=imscale, fy=imscale, interpolation=cv2.INTER_NEAREST)
             other_im = select_im
         else:
@@ -685,7 +710,7 @@ class MultiLayerSharedTiles(object):
             W_im = (self.W_by_layer[0] * 255.0).astype(np.uint8)
             max_dim = max(W_im.shape[0], W_im.shape[1])
 
-            imscale = 1000. / max_dim  # 0.2: full table, 2.0
+            imscale = self.table_ims_scale / max_dim  # 0.2: full table, 2.0
             # imscale = 5.0
             W_im = cv2.resize(W_im, dsize=(0, 0), fx=imscale, fy=imscale, interpolation=cv2.INTER_NEAREST)
             other_im = W_im

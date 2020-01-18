@@ -27,7 +27,8 @@ class SegmentBrain(object):
             'prediction_learn_time_per_layer': params['prediction_learn_time_per_layer'],
             'tiles_per_layer_NxN': params['tiles_per_layer_NxN'],
             'pre_init_goal_contexts': None,  # this matches _get_context_for_goal_state
-            'max_history_length': params['max_history_length']  # so it can check that learn time ranges are within!
+            'max_history_length': params['max_history_length'],  # so it can check that learn time ranges are within!
+            'table_ims_scale_pixels': params['table_ims_scale_pixels']
         })
 
     # @profile
