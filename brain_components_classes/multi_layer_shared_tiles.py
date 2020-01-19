@@ -269,6 +269,7 @@ class MultiLayerSharedTiles(object):
 
         # print('dists.shape', dists.shape)  # dists.shape (256, 6000)  for a total of 256 tiles of input, and 6000 entries. dist for each tile input to each table row
         # this is very slow but needed for making multiple selections of rows, per input tile
+        # TODO this is very slow, needs to be sped up or done on GPU, etc
         sorted_dists_indices = np.argsort(dists, axis=1)  # (256, 6000)
 
         weights = self.weight_masks[0]
