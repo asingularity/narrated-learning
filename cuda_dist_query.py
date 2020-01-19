@@ -157,6 +157,9 @@ class CudaTable(object):
             argmin_dists = argmin_dists_gpu.get()
 
         # print(dists, argmin_dists)
+        # print('dists.shape', dists.shape)  # dists.shape (256, 6000)  for a total of 256 tiles of input, and 6000 entries. dist for each tile input to each table row
+        # print('argmin_dists.shape', argmin_dists.shape)  # argmin_dists.shape (256,), for a total of 16 x 16 = 256 tiles to cover input. for each tile, this is the min row index, in range [0... num_entries]
+
         return dists, argmin_dists
 
     def query(self, query_input):

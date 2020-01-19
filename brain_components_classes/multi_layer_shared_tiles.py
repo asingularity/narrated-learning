@@ -229,11 +229,11 @@ class MultiLayerSharedTiles(object):
                 # TODO later must be from previous layer
                 tile_input_states_mat = None
 
-            I_indices_t = self._lookup_and_learn_table(layer_n=k,
-                                                       cuda_table_I=self.tables[k],
-                                                       input_states_mat=tile_input_states_mat,
-                                                       learn_table=learn_table,
-                                                       input_x_y_theta=input_x_y_theta)
+            I_indices_t, dists = self._lookup_and_learn_table(layer_n=k,
+                                                              cuda_table_I=self.tables[k],
+                                                              input_states_mat=tile_input_states_mat,
+                                                              learn_table=learn_table,
+                                                              input_x_y_theta=input_x_y_theta)
 
             if k == 0:  # first layer
                 # print('I_indices_t: ', I_indices_t.shape)  # I_indices_t:  (1024,)
@@ -245,14 +245,14 @@ class MultiLayerSharedTiles(object):
                 self._learn_predictions()
 
             if learn_weights:
-                self._learn_weights(input_states_mat=tile_input_states_mat)
+                self._learn_weights(input_states_mat=tile_input_states_mat, dists=dists)
 
         motor_out = None
 
         self.t += 1
         return motor_out
 
-    def _learn_weights(self, input_states_mat):
+    def _learn_weights(self, input_states_mat, dists):
         '''
 
         :param input_states_mat: current set of input images, one image per tile
@@ -267,19 +267,23 @@ class MultiLayerSharedTiles(object):
 
         '''
 
+        # print('dists.shape', dists.shape)  # dists.shape (256, 6000)  for a total of 256 tiles of input, and 6000 entries. dist for each tile input to each table row
+        # this is very slow but needed for making multiple selections of rows, per input tile
+        sorted_dists_indices = np.argsort(dists, axis=1)  # (256, 6000)
+
         weights = self.weight_masks[0]
 
-        select_im_top_k = 1  # TODO k > 1 needs bigger lookup not just I_history!
 
         tile_r_c = int(sqrt(weights.shape[1]))
 
         # leave buffer of 1 pixel between images, leave room for input images
 
+        select_im_top_k = 5  # how many of the top selected rows to display for each input tile
         num_to_disp = 32  # input_states_mat.shape[0]  # this is a lot!
         disp_list = list(np.random.permutation(input_states_mat.shape[0])[0:num_to_disp])
         curr_disp_ind = 0
 
-        selection_im = np.zeros((tile_r_c * num_to_disp + num_to_disp, tile_r_c * (1 + select_im_top_k) + 4, 3), np.float32)
+        selection_im = np.zeros((tile_r_c * num_to_disp + num_to_disp, tile_r_c * (1 + select_im_top_k) + 2 * select_im_top_k + 4, 3), np.float32)
 
         # this is the currently selected row index of the table, one row index per tile
         current_I_index_arr, _ = self.I_history.get_state(state_index=0, delay=0)
@@ -314,14 +318,11 @@ class MultiLayerSharedTiles(object):
             # print('new weights: ', np.amin(weights[int(current_I_index_arr[k]), :]), np.amax(weights[int(current_I_index_arr[k]), :]), np.mean(weights[int(current_I_index_arr[k]), :]))
 
             if self.enable_select_im and k in disp_list:
+
                 r0 = curr_disp_ind * tile_r_c + r_offset
                 r1 = (curr_disp_ind + 1) * tile_r_c + r_offset
                 c00 = 0
                 c01 = tile_r_c
-                c10 = tile_r_c + 2
-                c11 = tile_r_c + 2 + tile_r_c
-                # c20 = tile_r_c + 2 + tile_r_c + 2
-                # c21 = tile_r_c + 2 + tile_r_c + 2 + tile_r_c
 
                 # print(tile_input_vect.shape, tile_r_c)
                 tmp0 = tile_input_vect.reshape((tile_r_c, tile_r_c))
@@ -330,25 +331,40 @@ class MultiLayerSharedTiles(object):
                 selection_im[r0:r1, c00:c01, 1] = tmp0[:, :]
                 selection_im[r0:r1, c00:c01, 2] = tmp0[:, :]
 
-                tile_row_im = table_row.reshape((tile_r_c, tile_r_c))
+                for k2 in range(select_im_top_k):
 
-                tile_weights = weights[int(current_I_index_arr[k]), :].reshape((tile_r_c, tile_r_c))
+                    # TODO generalize c indices below, given k2
+                    c10 = int((k2 + 1) * (tile_r_c + 2) + 4)
+                    c11 = int(c10 + tile_r_c)
 
-                # selection_im[r0:r1, c10:c11] = tile_row_im[:, :]  # tile_weights[:, :]
+                    # c10 = tile_r_c + 2
+                    # c11 = tile_r_c + 2 + tile_r_c
+                    # c20 = tile_r_c + 2 + tile_r_c + 2
+                    # c21 = tile_r_c + 2 + tile_r_c + 2 + tile_r_c
 
-                tmp_r_n, tmp_c_n = np.nonzero(tile_weights < 0.75)  # 0.5
-                # tmp_r_p, tmp_c_p = np.nonzero(tile_weights > 0.5)  # 0.5
+                    table_row_index = int(sorted_dists_indices[k, k2])
 
-                # FALSE COLOR
-                tile_im_false_color[:, :, 0] = tile_row_im[:, :]
-                tile_im_false_color[:, :, 1] = tile_row_im[:, :]
-                tile_im_false_color[:, :, 2] = tile_row_im[:, :]
+                    table_row, _, _ = self.tables[0].get_matrix_row(row_index=table_row_index)
 
-                tile_im_false_color[tmp_r_n, tmp_c_n, 1] = 0.0
-                tile_im_false_color[tmp_r_n, tmp_c_n, 0] = tile_row_im[tmp_r_n, tmp_c_n]
-                tile_im_false_color[tmp_r_n, tmp_c_n, 2] = 0.0
+                    tile_row_im = table_row.reshape((tile_r_c, tile_r_c))
 
-                selection_im[r0:r1, c10:c11, :] = tile_im_false_color[:, :, :]
+                    tile_weights = weights[table_row_index, :].reshape((tile_r_c, tile_r_c))
+
+                    # selection_im[r0:r1, c10:c11] = tile_row_im[:, :]  # tile_weights[:, :]
+
+                    tmp_r_n, tmp_c_n = np.nonzero(tile_weights < 0.75)  # 0.5
+                    # tmp_r_p, tmp_c_p = np.nonzero(tile_weights > 0.5)  # 0.5
+
+                    # FALSE COLOR
+                    tile_im_false_color[:, :, 0] = tile_row_im[:, :]
+                    tile_im_false_color[:, :, 1] = tile_row_im[:, :]
+                    tile_im_false_color[:, :, 2] = tile_row_im[:, :]
+
+                    tile_im_false_color[tmp_r_n, tmp_c_n, 1] = 0.0
+                    tile_im_false_color[tmp_r_n, tmp_c_n, 0] = tile_row_im[tmp_r_n, tmp_c_n]
+                    tile_im_false_color[tmp_r_n, tmp_c_n, 2] = 0.0
+
+                    selection_im[r0:r1, c10:c11, :] = tile_im_false_color[:, :, :]
 
                 r_offset += 1
 
@@ -463,7 +479,7 @@ class MultiLayerSharedTiles(object):
                               input_states_mat=input_states_mat,
                               input_x_y_theta=input_x_y_theta)
 
-        return I_indices  # learning might have invalidated this; doesn't matter for now because for now we are not using lookup if learning
+        return I_indices, dists  # learning might have invalidated this; doesn't matter for now because for now we are not using lookup if learning
 
     # @profile
     def _learn_table(self, layer_n, cuda_table_I, dists, argmin_dists, input_states_mat, input_x_y_theta):

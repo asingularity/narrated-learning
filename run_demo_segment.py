@@ -15,8 +15,8 @@ from math import pi
 MAX_HISTORY_LENGTH = 10600000 + 1
 USERNAME = 'intec'
 
-TABLE_ENTRIES = 1000  # 8000
-TABLE_LEARN_TIME = TABLE_ENTRIES * 2  # 16
+TABLE_ENTRIES = 6000  # 8000
+TABLE_LEARN_TIME = TABLE_ENTRIES * 1  # 16
 PREDICTION_LEARN_TIME = TABLE_ENTRIES * 160
 
 IM_DIM = 64 * 8  # assume square image, this is width & height
@@ -33,8 +33,8 @@ def get_sensors_params():
         'video_filename': 'videoplayback',  # 3840x2160
         # 'video_filename': 'P1033727.mp4',  # 3840x2160
         'stop_preload_at_frames': None,  # None: use whole video
-        'use_full_frame': True,  # use the whole image
-        'partial_frame_factor': 2  # from center, what factor to use - larger factor ~ smaller part of image
+        'use_full_frame': False,  # use the whole image
+        'partial_frame_factor': 4  # from center, what factor to use - larger factor ~ smaller part of image
     }
     return params
 
