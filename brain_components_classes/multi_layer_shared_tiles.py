@@ -77,7 +77,6 @@ class MultiLayerSharedTiles(object):
         print()
 
         self.tables = []
-        self.weight_masks = []
         self.weight_error_sums = []
         self.weight_error_counts = []
 
@@ -127,19 +126,14 @@ class MultiLayerSharedTiles(object):
             print('init table with entries:', self.tile_entries_per_layer[k], 'input_dim:', int(table_input_dim))
             print()
 
-            # per-pixel weights, not per-color-channel
-            #self.weight_masks.append(np.random.random((num_entries, int(table_input_dim / 3))).astype(np.float32))
-
             if self.color_enabled:
-                per_pixel_weights = 1.0 * np.ones((num_entries, int(table_input_dim) / 3), np.float32)
+                assert False, 'Not implemented! need to pass in color_enabled to CudaTable init'
                 error_sum = np.zeros((num_entries, int(table_input_dim) / 3), np.float32)
                 error_count = np.zeros((num_entries, int(table_input_dim) / 3), np.float32)
             else:
-                per_pixel_weights = 1.0 * np.ones((num_entries, int(table_input_dim)), np.float32)
                 error_sum = np.zeros((num_entries, int(table_input_dim)), np.float32)
                 error_count = np.zeros((num_entries, int(table_input_dim)), np.float32)
 
-            self.weight_masks.append(per_pixel_weights)
             self.weight_error_sums.append(error_sum)
             self.weight_error_counts.append(error_count)
 
@@ -272,8 +266,7 @@ class MultiLayerSharedTiles(object):
         # TODO this is very slow, needs to be sped up or done on GPU, etc
         sorted_dists_indices = np.argsort(dists, axis=1)  # (256, 6000)
 
-        weights = self.weight_masks[0]
-
+        weights = self.tables[0].weight_masks
 
         tile_r_c = int(sqrt(weights.shape[1]))
 
@@ -313,7 +306,8 @@ class MultiLayerSharedTiles(object):
             self.weight_error_counts[0][int(current_I_index_arr[k]), :] = self.weight_error_counts[0][int(current_I_index_arr[k]), :] + 1
             # USE: self.weight_error_sums[0], self.weight_error_counts[0]
 
-            weights[int(current_I_index_arr[k]), :] = 1.0 - np.divide(self.weight_error_sums[0][int(current_I_index_arr[k]), :], self.weight_error_counts[0][int(current_I_index_arr[k]), :])
+            self.tables[0].set_row_weights(row_index=int(current_I_index_arr[k]),
+                                           weights=1.0 - np.divide(self.weight_error_sums[0][int(current_I_index_arr[k]), :], self.weight_error_counts[0][int(current_I_index_arr[k]), :]))
 
             # print('errors:', np.amin(per_pixel_dist), np.amax(per_pixel_dist), np.mean(per_pixel_dist))
             # print('new weights: ', np.amin(weights[int(current_I_index_arr[k]), :]), np.amax(weights[int(current_I_index_arr[k]), :]), np.mean(weights[int(current_I_index_arr[k]), :]))
@@ -607,7 +601,7 @@ class MultiLayerSharedTiles(object):
 
         cuda_table = self.tables[0]
         table = np.transpose(cuda_table.get_table_from_gpu())
-        weights = self.weight_masks[0]
+        weights = self.tables[0].weight_masks
 
         # 31 for 1000
         # 63 for 4000

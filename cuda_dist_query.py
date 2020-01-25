@@ -77,6 +77,13 @@ class CudaTable(object):
 
         self.pickle_save_temp = {}
 
+        # weights
+        # for color it would be:
+        # per_pixel_weights = 1.0 * np.ones((num_entries, int(table_input_dim) / 3), np.float32)
+        # but we are using grayscale pixels for now
+
+        self.weight_masks = 1.0 * np.ones((num_entries, input_dim), np.float32)
+
     def prepare_for_save(self):
         # here prepare each layer's cuda table for save: offload matrices from gpu to local!
 
@@ -124,7 +131,7 @@ class CudaTable(object):
         if use_old:
 
             # trick here is:
-            # L2 norm:
+            # L2 norm of difference:
             #   (x-y)^2 = x^2 + y^2 - 2xy
 
             tmp = -2 * linalg.dot(X_gpu, i_d_t_gpu)
@@ -201,63 +208,19 @@ class CudaTable(object):
         query_data = query_input
         X = self.X_i
         X[0, :] = query_data[:]
-        i_d_t_gpu = self.table_i_gpu
-        X_gpu = gpuarray.to_gpu(X)
-        term_1 = linalg.dot(X_gpu, i_d_t_gpu).get()
-        term_1 = -2 * term_1
-        term_2 = self.term_2_i
-        term_3 = np.sum(X ** 2, axis=1)[:, np.newaxis]
-        dists = term_1 + term_2 + term_3
+
+        # # old code, now it uses same query_multiple_rows instead:
+        # i_d_t_gpu = self.table_i_gpu
+        # X_gpu = gpuarray.to_gpu(X)
+        # term_1 = linalg.dot(X_gpu, i_d_t_gpu).get()
+        # term_1 = -2 * term_1
+        # term_2 = self.term_2_i
+        # term_3 = np.sum(X ** 2, axis=1)[:, np.newaxis]
+        # dists = term_1 + term_2 + term_3
+
+        dists, argmin_dists = self.query_multiple_rows(query_inputs=X)
 
         return dists[0]
-
-    def set_multiple_rows(self, row_indices, row_inputs, rows_to_table_dists, fast_init=False):
-        '''
-
-        set multiple rows at once
-
-        :param row_indices: array
-        :param row_inputs: list of arrays
-        :param row_to_table_dists: list of arrays
-        :param fast_init: bool
-        :return:
-        '''
-
-        # necessary for CudaMultiTable
-
-        # transposed
-        n_rows = self.input_dim
-        n_cols = self.num_entries
-        cols = row_indices
-
-        if row_inputs is not None:
-            arr_input = np.zeros(self.input_dim * row_indices.shape[0], np.float32)
-
-            k = 0
-            for row_index in list(row_indices):
-                row_data_i = row_inputs[k]
-                row_index_int = int(row_index)
-                self.term_2_i[row_index_int] = np.sum(row_data_i ** 2)
-                arr_input[k * row_inputs[0].shape[0]:(k + 1) * row_inputs[0].shape[0]] = row_data_i[:]
-                k += 1
-
-            arr_gpu_i = gpuarray.to_gpu(arr_input)
-
-            ind_1 = np.repeat(cols, n_rows)
-            ind_2 = np.tile(n_cols * np.arange(n_rows), cols.shape[0])
-
-            misc.set_by_index(dest_gpu=self.table_i_gpu, ind=ind_1 + ind_2, src_gpu=arr_gpu_i, ind_which='dest')
-
-        # TODO enable dists below
-
-        if rows_to_table_dists is not None:
-            # print(self.num_entries, row_to_table_dists.shape, row_to_table_dists.dtype)
-            # THIS IS A BOTTLENECK SLOW STEP:
-
-            # TODO internally, this could process multiple rows in one for loop! parallelize it!
-
-            # TODO for now make a loop!
-            self.d.set_row_dists(row_index=row_index, new_dists=row_to_table_dists, fast_init=fast_init)
 
     # @profile
     def set_matrix_row(self, row_index, row_input, row_to_table_dists, fast_init=False):
@@ -285,6 +248,8 @@ class CudaTable(object):
         row_data_i = row_input
         arr_gpu_i = gpuarray.to_gpu(row_data_i)
         misc.set_by_index(dest_gpu=self.table_i_gpu, ind=col + cols * np.arange(rows_i), src_gpu=arr_gpu_i, ind_which='dest')
+
+        # TODO need to use weights when setting this here!
         self.term_2_i[row_index] = np.sum(row_data_i ** 2)
 
         if not self.disable_row_row_dist:
@@ -294,6 +259,11 @@ class CudaTable(object):
 
         self.row_ages = self.row_ages + 1
         self.row_ages[row_index] = 0
+
+    def set_row_weights(self, row_index, weights):
+        self.weight_masks[row_index, :] = weights[:]
+
+        # TODO need to reset self.term_2_i here!
 
     def get_oldest_row_ind(self):
         return np.argmax(self.row_ages)
@@ -416,6 +386,57 @@ class CudaTable(object):
                             row_input=new_row_input,
                             row_output=new_row_output,
                             row_context=new_row_context)
+
+
+    def _UNUSED_set_multiple_rows(self, row_indices, row_inputs, rows_to_table_dists, fast_init=False):
+        '''
+
+        set multiple rows at once
+
+        :param row_indices: array
+        :param row_inputs: list of arrays
+        :param row_to_table_dists: list of arrays
+        :param fast_init: bool
+        :return:
+        '''
+
+        # necessary for CudaMultiTable
+
+        # transposed
+        n_rows = self.input_dim
+        n_cols = self.num_entries
+        cols = row_indices
+
+        if row_inputs is not None:
+            arr_input = np.zeros(self.input_dim * row_indices.shape[0], np.float32)
+
+            k = 0
+            for row_index in list(row_indices):
+                row_data_i = row_inputs[k]
+                row_index_int = int(row_index)
+                self.term_2_i[row_index_int] = np.sum(row_data_i ** 2)
+                arr_input[k * row_inputs[0].shape[0]:(k + 1) * row_inputs[0].shape[0]] = row_data_i[:]
+                k += 1
+
+            arr_gpu_i = gpuarray.to_gpu(arr_input)
+
+            ind_1 = np.repeat(cols, n_rows)
+            ind_2 = np.tile(n_cols * np.arange(n_rows), cols.shape[0])
+
+            misc.set_by_index(dest_gpu=self.table_i_gpu, ind=ind_1 + ind_2, src_gpu=arr_gpu_i, ind_which='dest')
+
+        # TODO enable dists below
+
+        if rows_to_table_dists is not None:
+            # print(self.num_entries, row_to_table_dists.shape, row_to_table_dists.dtype)
+            # THIS IS A BOTTLENECK SLOW STEP:
+
+            # TODO internally, this could process multiple rows in one for loop! parallelize it!
+
+            # TODO for now make a loop!
+            self.d.set_row_dists(row_index=row_index, new_dists=row_to_table_dists, fast_init=fast_init)
+
+
 
 
 class CudaQuery_DEPRECATED(object):
