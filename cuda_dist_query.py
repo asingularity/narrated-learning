@@ -121,11 +121,17 @@ class CudaTable(object):
         # a = np.dot(np.random.random((200, 200)), np.random.random((200, 200)))
 
         use_old = True  # new doesn't seem faster
-
-        # OLD
         if use_old:
+
+            # trick here is:
+            # L2 norm:
+            #   (x-y)^2 = x^2 + y^2 - 2xy
+
             tmp = -2 * linalg.dot(X_gpu, i_d_t_gpu)
             term_1 = tmp.get()
+
+            # self.term_2_i is set like: self.term_2_i[row_index_int] = np.sum(row_data_i ** 2)
+            # would need to be weighted
             term_2 = self.term_2_i
             term_3 = np.sum(X ** 2, axis=1)[:, np.newaxis]
             dists = term_1 + term_2 + term_3
@@ -140,6 +146,8 @@ class CudaTable(object):
         # NEW
         else:
             term_1_gpu = -2 * linalg.dot(X_gpu, i_d_t_gpu)
+
+            # This doesn't work because, not updating this when we update self.term_2_i
             term_2_gpu = self.term_2_i_gpu
 
             term_3 = np.sum(X ** 2, axis=1)[:, np.newaxis]
