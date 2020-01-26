@@ -19,6 +19,7 @@ class SegmentBrain(object):
 
         self.predictor_ensemble = MultiLayerSharedTiles(params={
             'color_enabled': params['color_enabled'],
+            'enable_weight_bias': params['enable_weight_bias'],
             'input_dim': dim,
             'goal_context_dim': None,
             'enable_learning': params['enable_learning'],

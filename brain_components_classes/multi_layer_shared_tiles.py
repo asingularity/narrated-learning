@@ -40,6 +40,7 @@ class MultiLayerSharedTiles(object):
         self.table_learn_time_per_layer = params['table_learn_time_per_layer']
         self.prediction_learn_time_per_layer = params['prediction_learn_time_per_layer']
         self.tiles_per_layer_NxN = params['tiles_per_layer_NxN']
+        self.enable_weight_bias = params['enable_weight_bias']
 
         self.color_enabled = params['color_enabled']
 
@@ -122,7 +123,9 @@ class MultiLayerSharedTiles(object):
             num_entries = self.tile_entries_per_layer[k]
 
             self.tables.append(CudaTable(num_entries=num_entries,
-                                         input_dim=int(table_input_dim)))
+                                         input_dim=int(table_input_dim),
+                                         enable_weight_bias=self.enable_weight_bias))
+
             print('init table with entries:', self.tile_entries_per_layer[k], 'input_dim:', int(table_input_dim))
             print()
 
@@ -204,11 +207,11 @@ class MultiLayerSharedTiles(object):
                 for r in range(tiles_NxN):
                     for c in range(tiles_NxN):
 
-                        r0 = r * grid
-                        r1 = (r + 1) * grid
+                        r0 = int(r * grid)
+                        r1 = int((r + 1) * grid)
 
-                        c0 = c * grid
-                        c1 = (c + 1) * grid
+                        c0 = int(c * grid)
+                        c1 = int((c + 1) * grid)
 
                         if self.color_enabled:
                             tile_input_vect = raycast_image[r0:r1, c0:c1, :].flatten()
@@ -347,7 +350,7 @@ class MultiLayerSharedTiles(object):
 
                     # selection_im[r0:r1, c10:c11] = tile_row_im[:, :]  # tile_weights[:, :]
 
-                    tmp_r_n, tmp_c_n = np.nonzero(tile_weights < 0.75)  # 0.5
+                    tmp_r_n, tmp_c_n = np.nonzero(tile_weights < 0.75/(tile_r_c*tile_r_c))  # 0.5
                     # tmp_r_p, tmp_c_p = np.nonzero(tile_weights > 0.5)  # 0.5
 
                     # FALSE COLOR
@@ -476,7 +479,6 @@ class MultiLayerSharedTiles(object):
 
         return I_indices, dists  # learning might have invalidated this; doesn't matter for now because for now we are not using lookup if learning
 
-    # @profile
     def _learn_table(self, layer_n, cuda_table_I, dists, argmin_dists, input_states_mat, input_x_y_theta):
         '''
 
@@ -529,6 +531,7 @@ class MultiLayerSharedTiles(object):
         init_already_done = True
         for k in range(len(new_min_dists)):
             if self.init_I_row_num[layer_n] < cuda_table_I.get_num_rows():
+                # print('init row:', self.init_I_row_num[layer_n])
                 init_already_done = False
 
                 input_state_tmp = input_states_mat[k, :].flatten().astype(np.float32)
@@ -661,7 +664,7 @@ class MultiLayerSharedTiles(object):
                         # table_im[r0:r1, c0:c1] = np.multiply(np.multiply(tile_weights, tile_weights), tile_im)
 
                         #
-                        tmp_r_n, tmp_c_n = np.nonzero(tile_weights < 0.75)  # 0.5
+                        tmp_r_n, tmp_c_n = np.nonzero(tile_weights < 0.75/(tile_r_c*tile_r_c))  # 0.5
                         # tmp_r_p, tmp_c_p = np.nonzero(tile_weights > 0.5)  # 0.5
 
                         # FALSE COLOR

@@ -17,7 +17,7 @@ class CudaTable(object):
         cuda_table_test.py
     '''
 
-    def __init__(self, num_entries, input_dim, table=None, use_dumb_dist=False, disable_row_row_dist=False):
+    def __init__(self, num_entries, input_dim, table=None, use_dumb_dist=False, disable_row_row_dist=False, enable_weight_bias=False):
         '''
 
         need to init twice: input + context, input + output + context
@@ -34,6 +34,8 @@ class CudaTable(object):
             include_layers = ['io_only', 'i_only']
 
         '''
+
+        self.enable_weight_bias = enable_weight_bias
 
         self.post_init_done = False
         self.compute_d = True
@@ -73,7 +75,7 @@ class CudaTable(object):
         self.X_i = np.zeros((1, table_i_only.shape[1])).astype(np.float32)
         self.term_2_i = np.sum(table_i_only ** 2, axis=1)
 
-        self.term_2_i_gpu = gpuarray.to_gpu(np.ascontiguousarray(self.term_2_i))
+        # self.term_2_i_gpu = gpuarray.to_gpu(np.ascontiguousarray(self.term_2_i))
 
         self.pickle_save_temp = {}
 
@@ -83,6 +85,9 @@ class CudaTable(object):
         # but we are using grayscale pixels for now
 
         self.weight_masks = 1.0 * np.ones((num_entries, input_dim), np.float32)
+        self.weight_masks_square = 1.0 * np.ones((num_entries, input_dim), np.float32)
+
+        self.weight_masks_square_gpu = gpuarray.to_gpu(np.ascontiguousarray(np.transpose(self.weight_masks_square)))
 
     def prepare_for_save(self):
         # here prepare each layer's cuda table for save: offload matrices from gpu to local!
@@ -108,7 +113,6 @@ class CudaTable(object):
         if not self.disable_row_row_dist:
             self.d.post_init()
 
-    # @profile
     def query_multiple_rows(self, query_inputs):
         '''
         assumes that only query_input is being used
@@ -117,11 +121,9 @@ class CudaTable(object):
         :return: list of [dists] per each query input
         '''
 
-        #query_arr = np.array(query_inputs, np.float32)
         X = query_inputs
 
         i_d_t_gpu = self.table_i_gpu
-        # print('X.shape', X.shape, 'X.dtype', X.dtype)  # (1024, 48), np.float32
         X_gpu = gpuarray.to_gpu(X)
 
         # reference
@@ -129,29 +131,65 @@ class CudaTable(object):
 
         use_old = True  # new doesn't seem faster
         if use_old:
+            if self.enable_weight_bias:
 
-            # trick here is:
-            # L2 norm of difference:
-            #   (x-y)^2 = x^2 + y^2 - 2xy
+                # trick here is:
+                # L2 norm of difference:
+                #   (x-y)^2 = x^2 + y^2 - 2xy
 
-            tmp = -2 * linalg.dot(X_gpu, i_d_t_gpu)
-            term_1 = tmp.get()
+                # TERM 1
+                # -2 * Wi^2 * Ri * Ii
+                wsquare_r = linalg.multiply(i_d_t_gpu, self.weight_masks_square_gpu)
+                tmp = -2 * linalg.dot(X_gpu, wsquare_r)
+                term_1 = tmp.get()
 
-            # self.term_2_i is set like: self.term_2_i[row_index_int] = np.sum(row_data_i ** 2)
-            # would need to be weighted
+                # TERM 3
+                # if weighted, the actual term_3 becomes (256, 6000) instead of (256, 1)
+                #   one sum per input, per weight vector
+                #   where sum is: Wi^2 * Ii^2 , with i: [0, 1024)
+                #
+                #   which is: linalg.dot(X**2, W squared gpu) ?
+
+                X_square_gpu = linalg.multiply(X_gpu, X_gpu)
+                #                  (256, 1024)      (1024, 6000)
+                tmp = linalg.dot(X_square_gpu, self.weight_masks_square_gpu)
+                term_3 = tmp.get()  # (256, 6000)
+
+            else:
+                # TERM 1
+                tmp = -2 * linalg.dot(X_gpu, i_d_t_gpu)
+                term_1 = tmp.get()
+
+                # TERM 3
+                term_3 = np.sum(X ** 2, axis=1)[:, np.newaxis]
+
+            # TERM 2
+
+            # this is already weighted properly
             term_2 = self.term_2_i
-            term_3 = np.sum(X ** 2, axis=1)[:, np.newaxis]
+
+
+            # 256: N: number of input vectors I in query_inputs
+            # 6000: T: number of reference vectors R in table
+            # 1024: D: vector length i.e. input dimensionality
+
+            # weights_masks:        (6000, 1024)
+            # weights_masks_square: (6000, 1024)
+            # table_i_gpu:          (1024, 6000)
+            # X:                    (256, 1024)
+            # term_1:               (256, 6000)
+            # term_2:               (6000,)
+            # term_3:               (256, 1)
+            # dists:                (256, 6000)
+
             dists = term_1 + term_2 + term_3
 
-            #print()
-            #print(X.shape)  # (4096, 48)
-            #print(term_3.shape)  # (4096, 1)
-            #print()
-            #print(term_1.shape, term_2.shape, term_3.shape)  # (4096, 8000) (8000,) (4096, 1)
-
             argmin_dists = np.argmin(dists, axis=1)
+
         # NEW
         else:
+            assert False, 'not implemented currently'
+
             term_1_gpu = -2 * linalg.dot(X_gpu, i_d_t_gpu)
 
             # This doesn't work because, not updating this when we update self.term_2_i
@@ -249,8 +287,11 @@ class CudaTable(object):
         arr_gpu_i = gpuarray.to_gpu(row_data_i)
         misc.set_by_index(dest_gpu=self.table_i_gpu, ind=col + cols * np.arange(rows_i), src_gpu=arr_gpu_i, ind_which='dest')
 
-        # TODO need to use weights when setting this here!
-        self.term_2_i[row_index] = np.sum(row_data_i ** 2)
+        if self.enable_weight_bias:
+            # need to use weights when setting this here
+            self.term_2_i[row_index] = np.sum(np.multiply(row_data_i ** 2, self.weight_masks_square[row_index, :]))
+        else:
+            self.term_2_i[row_index] = np.sum(row_data_i ** 2)
 
         if not self.disable_row_row_dist:
             # print(self.num_entries, row_to_table_dists.shape, row_to_table_dists.dtype)
@@ -260,10 +301,32 @@ class CudaTable(object):
         self.row_ages = self.row_ages + 1
         self.row_ages[row_index] = 0
 
-    def set_row_weights(self, row_index, weights):
-        self.weight_masks[row_index, :] = weights[:]
+        # new or replaced row: for now, set weights to all ones
+        self.set_row_weights(row_index=row_index, weights=np.ones(self.input_dim, np.float32))
 
-        # TODO need to reset self.term_2_i here!
+    def set_row_weights(self, row_index, weights):
+
+        # IMPORTANT: WEIGHTS NEED TO SUM TO 1
+        # TODO need to update visualizer to take this into account!
+        weights = weights * 1.0 / np.sum(weights)
+        weights_square = weights ** 2
+
+        self.weight_masks[row_index, :] = weights[:]
+        self.weight_masks_square[row_index, :] = weights_square[:]
+
+        if self.enable_weight_bias:
+            # also need to set weights masks square gpu here!
+            arr_gpu_i = gpuarray.to_gpu(weights_square)
+            col = row_index
+            # transposed
+            rows_i = self.input_dim
+            cols = self.num_entries
+            misc.set_by_index(dest_gpu=self.weight_masks_square_gpu, ind=col + cols * np.arange(rows_i),
+                              src_gpu=arr_gpu_i, ind_which='dest')
+
+            # need to reset self.term_2_i here
+            row_data_i, _, _ = self.get_matrix_row(row_index=row_index)
+            self.term_2_i[row_index] = np.sum(np.multiply(row_data_i ** 2, self.weight_masks_square[row_index, :]))
 
     def get_oldest_row_ind(self):
         return np.argmax(self.row_ages)

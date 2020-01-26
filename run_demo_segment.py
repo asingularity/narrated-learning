@@ -25,6 +25,8 @@ IM_PIXELS = IM_DIM * IM_DIM  # assume grayscale
 
 COLOR_ENABLED = False
 
+ENABLE_WEIGHT_BIAS = False
+
 
 def get_sensors_params():
     params = {
@@ -62,6 +64,7 @@ def get_brain_params():
 
         # ************ MultiLayerSharedTiles ************
         'color_enabled': COLOR_ENABLED,
+        'enable_weight_bias': ENABLE_WEIGHT_BIAS,
         'use_multi_layer': True,
         'tile_entries_per_layer': [TABLE_ENTRIES],
         'table_learn_time_per_layer': [TABLE_LEARN_TIME],
