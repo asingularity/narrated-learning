@@ -89,6 +89,9 @@ class CudaTable(object):
 
         self.weight_masks_square_gpu = gpuarray.to_gpu(np.ascontiguousarray(np.transpose(self.weight_masks_square)))
 
+        wsquare_x_table = 1.0 * np.ones((num_entries, input_dim), np.float32)
+        self.wsquare_x_table_gpu = gpuarray.to_gpu(np.ascontiguousarray(np.transpose(wsquare_x_table)))
+
     def prepare_for_save(self):
         # here prepare each layer's cuda table for save: offload matrices from gpu to local!
 
@@ -139,7 +142,9 @@ class CudaTable(object):
 
                 # TERM 1
                 # -2 * Wi^2 * Ri * Ii
-                wsquare_r = linalg.multiply(i_d_t_gpu, self.weight_masks_square_gpu)
+                # wsquare_r = linalg.multiply(i_d_t_gpu, self.weight_masks_square_gpu)
+                wsquare_r = self.wsquare_x_table_gpu  # weight^2 * table_row
+
                 tmp = -2 * linalg.dot(X_gpu, wsquare_r)
                 term_1 = tmp.get()
 
@@ -149,8 +154,7 @@ class CudaTable(object):
                 #   where sum is: Wi^2 * Ii^2 , with i: [0, 1024)
                 #
                 #   which is: linalg.dot(X**2, W squared gpu) ?
-
-                X_square_gpu = linalg.multiply(X_gpu, X_gpu)
+                X_square_gpu = gpuarray.to_gpu(np.multiply(X, X))
                 #                  (256, 1024)      (1024, 6000)
                 tmp = linalg.dot(X_square_gpu, self.weight_masks_square_gpu)
                 term_3 = tmp.get()  # (256, 6000)
@@ -302,9 +306,18 @@ class CudaTable(object):
         self.row_ages[row_index] = 0
 
         # new or replaced row: for now, set weights to all ones
-        self.set_row_weights(row_index=row_index, weights=np.ones(self.input_dim, np.float32))
+        self.set_row_weights(row_index=row_index, weights=np.ones(self.input_dim, np.float32), row_values=row_data_i)
 
-    def set_row_weights(self, row_index, weights):
+    def set_row_weights(self, row_index, weights, row_values):
+        '''
+
+        # needs row values to set wsquared*table
+
+        :param row_index:
+        :param weights:
+        :param row_values:
+        :return:
+        '''
 
         # IMPORTANT: WEIGHTS NEED TO SUM TO 1
         # TODO need to update visualizer to take this into account!
@@ -324,9 +337,15 @@ class CudaTable(object):
             misc.set_by_index(dest_gpu=self.weight_masks_square_gpu, ind=col + cols * np.arange(rows_i),
                               src_gpu=arr_gpu_i, ind_which='dest')
 
+            arr_gpu_i_2 = gpuarray.to_gpu(np.multiply(weights_square, row_values))
+
+            misc.set_by_index(dest_gpu=self.wsquare_x_table_gpu, ind=col + cols * np.arange(rows_i),
+                              src_gpu=arr_gpu_i_2, ind_which='dest')
+
             # need to reset self.term_2_i here
             row_data_i, _, _ = self.get_matrix_row(row_index=row_index)
             self.term_2_i[row_index] = np.sum(np.multiply(row_data_i ** 2, self.weight_masks_square[row_index, :]))
+
 
     def get_oldest_row_ind(self):
         return np.argmax(self.row_ages)

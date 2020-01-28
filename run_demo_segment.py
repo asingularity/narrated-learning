@@ -25,7 +25,7 @@ IM_PIXELS = IM_DIM * IM_DIM  # assume grayscale
 
 COLOR_ENABLED = False
 
-ENABLE_WEIGHT_BIAS = False
+ENABLE_WEIGHT_BIAS = True
 
 
 def get_sensors_params():
