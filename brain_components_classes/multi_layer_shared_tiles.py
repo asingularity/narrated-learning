@@ -168,7 +168,6 @@ class MultiLayerSharedTiles(object):
         self.samples_by_row_im = None
         # TODO init goal context stuff
 
-    # @profile
     def step(self, raycast_image, input_state, input_x_y_theta, goal_context_state_learning, goal_context_state_task, last_motor_command):
         '''
 
@@ -311,7 +310,8 @@ class MultiLayerSharedTiles(object):
 
             self.tables[0].set_row_weights(row_index=int(current_I_index_arr[k]),
                                            weights=1.0 - np.divide(self.weight_error_sums[0][int(current_I_index_arr[k]), :], self.weight_error_counts[0][int(current_I_index_arr[k]), :]),
-                                           row_values=table_row)  # needs row values to set wsquared*table
+                                           row_values=table_row,
+                                           fast_set_need_commit=True)  # needs row values to set wsquared*table
 
             # print('errors:', np.amin(per_pixel_dist), np.amax(per_pixel_dist), np.mean(per_pixel_dist))
             # print('new weights: ', np.amin(weights[int(current_I_index_arr[k]), :]), np.amax(weights[int(current_I_index_arr[k]), :]), np.mean(weights[int(current_I_index_arr[k]), :]))
@@ -370,7 +370,7 @@ class MultiLayerSharedTiles(object):
                 curr_disp_ind += 1
 
         self.selection_im = selection_im
-
+        self.tables[0].commit_weights_changes()
         # if self.enable_samples_by_row_im:
         #     for k in range(num_to_disp):  # this could also be a random subset instead of first N
         #         table_row, _, _ = self.tables[0].get_matrix_row(row_index=k)

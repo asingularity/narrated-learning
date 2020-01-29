@@ -71,6 +71,7 @@ class CudaTable(object):
 
         self.size_gb += (table_i_only.size * 4.0) / (1e9)
 
+        self.table_i = table_i_only
         self.table_i_gpu = gpuarray.to_gpu(np.ascontiguousarray(np.transpose(table_i_only)))
         self.X_i = np.zeros((1, table_i_only.shape[1])).astype(np.float32)
         self.term_2_i = np.sum(table_i_only ** 2, axis=1)
@@ -89,8 +90,8 @@ class CudaTable(object):
 
         self.weight_masks_square_gpu = gpuarray.to_gpu(np.ascontiguousarray(np.transpose(self.weight_masks_square)))
 
-        wsquare_x_table = 1.0 * np.ones((num_entries, input_dim), np.float32)
-        self.wsquare_x_table_gpu = gpuarray.to_gpu(np.ascontiguousarray(np.transpose(wsquare_x_table)))
+        self.wsquare_x_table = 1.0 * np.ones((num_entries, input_dim), np.float32)
+        self.wsquare_x_table_gpu = gpuarray.to_gpu(np.ascontiguousarray(np.transpose(self.wsquare_x_table)))
 
     def prepare_for_save(self):
         # here prepare each layer's cuda table for save: offload matrices from gpu to local!
@@ -291,6 +292,9 @@ class CudaTable(object):
         arr_gpu_i = gpuarray.to_gpu(row_data_i)
         misc.set_by_index(dest_gpu=self.table_i_gpu, ind=col + cols * np.arange(rows_i), src_gpu=arr_gpu_i, ind_which='dest')
 
+        # for fast query
+        self.table_i[row_index, :] = row_input[:]
+
         if self.enable_weight_bias:
             # need to use weights when setting this here
             self.term_2_i[row_index] = np.sum(np.multiply(row_data_i ** 2, self.weight_masks_square[row_index, :]))
@@ -308,7 +312,7 @@ class CudaTable(object):
         # new or replaced row: for now, set weights to all ones
         self.set_row_weights(row_index=row_index, weights=np.ones(self.input_dim, np.float32), row_values=row_data_i)
 
-    def set_row_weights(self, row_index, weights, row_values):
+    def set_row_weights(self, row_index, weights, row_values, fast_set_need_commit=False):
         '''
 
         # needs row values to set wsquared*table
@@ -323,29 +327,36 @@ class CudaTable(object):
         # TODO need to update visualizer to take this into account!
         weights = weights * 1.0 / np.sum(weights)
         weights_square = weights ** 2
+        weights_square_x = np.multiply(weights_square, row_values)
 
         self.weight_masks[row_index, :] = weights[:]
         self.weight_masks_square[row_index, :] = weights_square[:]
+        self.wsquare_x_table[row_index, :] = weights_square_x[:]
 
         if self.enable_weight_bias:
-            # also need to set weights masks square gpu here!
-            arr_gpu_i = gpuarray.to_gpu(weights_square)
-            col = row_index
-            # transposed
-            rows_i = self.input_dim
-            cols = self.num_entries
-            misc.set_by_index(dest_gpu=self.weight_masks_square_gpu, ind=col + cols * np.arange(rows_i),
-                              src_gpu=arr_gpu_i, ind_which='dest')
+            if not fast_set_need_commit:
+                # also need to set weights masks square gpu here!
+                arr_gpu_i = gpuarray.to_gpu(weights_square)
+                col = row_index
+                # transposed
+                rows_i = self.input_dim
+                cols = self.num_entries
+                misc.set_by_index(dest_gpu=self.weight_masks_square_gpu, ind=col + cols * np.arange(rows_i),
+                                  src_gpu=arr_gpu_i, ind_which='dest')
 
-            arr_gpu_i_2 = gpuarray.to_gpu(np.multiply(weights_square, row_values))
+                arr_gpu_i_2 = gpuarray.to_gpu(weights_square_x)
 
-            misc.set_by_index(dest_gpu=self.wsquare_x_table_gpu, ind=col + cols * np.arange(rows_i),
-                              src_gpu=arr_gpu_i_2, ind_which='dest')
+                misc.set_by_index(dest_gpu=self.wsquare_x_table_gpu, ind=col + cols * np.arange(rows_i),
+                                  src_gpu=arr_gpu_i_2, ind_which='dest')
 
             # need to reset self.term_2_i here
             row_data_i, _, _ = self.get_matrix_row(row_index=row_index)
             self.term_2_i[row_index] = np.sum(np.multiply(row_data_i ** 2, self.weight_masks_square[row_index, :]))
 
+    def commit_weights_changes(self):
+        if self.enable_weight_bias:
+            self.weight_masks_square_gpu = gpuarray.to_gpu(np.ascontiguousarray(np.transpose(self.weight_masks_square)))
+            self.wsquare_x_table_gpu = gpuarray.to_gpu(np.ascontiguousarray(np.transpose(self.wsquare_x_table)))
 
     def get_oldest_row_ind(self):
         return np.argmax(self.row_ages)
@@ -368,11 +379,13 @@ class CudaTable(object):
 
     def get_matrix_row(self, row_index):
 
-        col = row_index
-        rows = self.input_dim
-        cols = self.num_entries
+        # This was the old slow way, but then realized we can also store as numpy array for fast retrieval
+        #col = row_index
+        #rows = self.input_dim
+        #cols = self.num_entries
+        #row_i = misc.get_by_index(src_gpu=self.table_i_gpu, ind=col + cols * np.arange(rows)).get()
 
-        row_i = misc.get_by_index(src_gpu=self.table_i_gpu, ind=col + cols * np.arange(rows)).get()
+        row_i = self.table_i[row_index, :]
         row_input = row_i[0:self.input_dim]
         row_output = None
         row_context = None
