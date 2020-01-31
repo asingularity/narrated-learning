@@ -291,30 +291,37 @@ class MultiLayerSharedTiles(object):
         r_offset = 0
 
         for k in range(input_states_mat.shape[0]):
+            #   currently: weight is (1.0 - average_pixel_error)
+            #       lower average error per pixel (row - input) --> higher weight
+            #       higher average error per pixel (row - input) --> lower weight
+            #   new, if learning a sequence:
+            #       if error low for previous selected row -> don't allow higher weight (?)
+            #       or perhaps: error for row is max(error for that pixel for previous selected rows, and current error) or something like this...
+            #           (error is per_pixel_dist)
+            #           or min or something like that
+            # minimum distance of previous selected rows. use max(1.0-prev_min_dist, computed dist) for each row, as dist to compute new weights
+
             tile_input_vect = input_states_mat[k, :]
+            dist_bias = np.ones_like(tile_input_vect)
 
-            # get per-pixel distances from corresponding tile stored in table given current_I_index_arr
-            table_row, _, _ = self.tables[0].get_matrix_row(row_index=int(current_I_index_arr[k]))
+            for k2 in range(select_im_top_k):
+                table_row_index = int(sorted_dists_indices[k, k2])
 
-            # print('***')
-            # print(tile_input_vect.shape, table_row.shape)
-            per_pixel_dist = np.abs(tile_input_vect - table_row)
+                table_row, _, _ = self.tables[0].get_matrix_row(row_index=table_row_index)
 
-            # then, modify weights
-            # note that there could be repeat indices in current_I_index_arr
-            # print(per_pixel_dist.shape) # (1024)
+                per_pixel_dist_row = np.abs(tile_input_vect - table_row)
 
-            self.weight_error_sums[0][int(current_I_index_arr[k]), :] = self.weight_error_sums[0][int(current_I_index_arr[k]), :] + per_pixel_dist
-            self.weight_error_counts[0][int(current_I_index_arr[k]), :] = self.weight_error_counts[0][int(current_I_index_arr[k]), :] + 1
-            # USE: self.weight_error_sums[0], self.weight_error_counts[0]
+                per_pixel_dist_weight_learn = np.maximum(per_pixel_dist_row, 1.0 - dist_bias)
 
-            self.tables[0].set_row_weights(row_index=int(current_I_index_arr[k]),
-                                           weights=1.0 - np.divide(self.weight_error_sums[0][int(current_I_index_arr[k]), :], self.weight_error_counts[0][int(current_I_index_arr[k]), :]),
-                                           row_values=table_row,
-                                           fast_set_need_commit=True)  # needs row values to set wsquared*table
+                dist_bias = np.minimum(per_pixel_dist_row, dist_bias)
 
-            # print('errors:', np.amin(per_pixel_dist), np.amax(per_pixel_dist), np.mean(per_pixel_dist))
-            # print('new weights: ', np.amin(weights[int(current_I_index_arr[k]), :]), np.amax(weights[int(current_I_index_arr[k]), :]), np.mean(weights[int(current_I_index_arr[k]), :]))
+                self.weight_error_sums[0][table_row_index, :] = self.weight_error_sums[0][table_row_index, :] + per_pixel_dist_weight_learn
+                self.weight_error_counts[0][table_row_index, :] = self.weight_error_counts[0][table_row_index, :] + 1
+
+                self.tables[0].set_row_weights(row_index=table_row_index,
+                                               weights=1.0 - np.divide(self.weight_error_sums[0][table_row_index, :], self.weight_error_counts[0][table_row_index, :]),
+                                               row_values=table_row,
+                                               fast_set_need_commit=True)  # needs row values to set wsquared*table
 
             if self.enable_select_im and k in disp_list:
 
@@ -351,7 +358,7 @@ class MultiLayerSharedTiles(object):
 
                     # selection_im[r0:r1, c10:c11] = tile_row_im[:, :]  # tile_weights[:, :]
 
-                    tmp_r_n, tmp_c_n = np.nonzero(tile_weights < 0.75/(tile_r_c*tile_r_c))  # 0.5
+                    tmp_r_n, tmp_c_n = np.nonzero(tile_weights < 0.9/(tile_r_c*tile_r_c))  # 0.5
                     # tmp_r_p, tmp_c_p = np.nonzero(tile_weights > 0.5)  # 0.5
 
                     # FALSE COLOR
