@@ -81,6 +81,9 @@ class MultiLayerSharedTiles(object):
         self.weight_error_sums = []
         self.weight_error_counts = []
 
+        # alternative
+        self.current_weights = []
+
         self.W_by_layer = []
         self.W_count_by_layer = []
         self.S_count_by_layer = []
@@ -136,9 +139,13 @@ class MultiLayerSharedTiles(object):
             else:
                 error_sum = np.zeros((num_entries, int(table_input_dim)), np.float32)
                 error_count = np.zeros((num_entries, int(table_input_dim)), np.float32)
+                current_weights = np.ones((num_entries, int(table_input_dim)), np.float32)
 
             self.weight_error_sums.append(error_sum)
             self.weight_error_counts.append(error_count)
+
+            # alternative:
+            self.current_weights.append(current_weights)
 
             # init prediction matrix stuff
 
@@ -248,6 +255,7 @@ class MultiLayerSharedTiles(object):
         self.t += 1
         return motor_out
 
+    # @profile
     def _learn_weights(self, input_states_mat, dists):
         '''
 
@@ -291,37 +299,47 @@ class MultiLayerSharedTiles(object):
         r_offset = 0
 
         for k in range(input_states_mat.shape[0]):
-            #   currently: weight is (1.0 - average_pixel_error)
-            #       lower average error per pixel (row - input) --> higher weight
-            #       higher average error per pixel (row - input) --> lower weight
-            #   new, if learning a sequence:
-            #       if error low for previous selected row -> don't allow higher weight (?)
-            #       or perhaps: error for row is max(error for that pixel for previous selected rows, and current error) or something like this...
-            #           (error is per_pixel_dist)
-            #           or min or something like that
-            # minimum distance of previous selected rows. use max(1.0-prev_min_dist, computed dist) for each row, as dist to compute new weights
 
             tile_input_vect = input_states_mat[k, :]
             dist_bias = np.ones_like(tile_input_vect)
+
+            initial_learning_rate = 0.1
+            per_pixel_learning_rate = initial_learning_rate * np.ones_like(tile_input_vect)
 
             for k2 in range(select_im_top_k):
                 table_row_index = int(sorted_dists_indices[k, k2])
 
                 table_row, _, _ = self.tables[0].get_matrix_row(row_index=table_row_index)
-
                 per_pixel_dist_row = np.abs(tile_input_vect - table_row)
 
-                per_pixel_dist_weight_learn = np.maximum(per_pixel_dist_row, 1.0 - dist_bias)
+                # new way:
+                current_weights = self.current_weights[0][table_row_index, :]
+                new_weights = np.multiply(per_pixel_learning_rate, (1.0 - per_pixel_dist_row)) + np.multiply((1.0 - per_pixel_learning_rate), current_weights)
 
-                dist_bias = np.minimum(per_pixel_dist_row, dist_bias)
-
-                self.weight_error_sums[0][table_row_index, :] = self.weight_error_sums[0][table_row_index, :] + per_pixel_dist_weight_learn
-                self.weight_error_counts[0][table_row_index, :] = self.weight_error_counts[0][table_row_index, :] + 1
-
+                self.current_weights[0][table_row_index, :] = new_weights[:]
                 self.tables[0].set_row_weights(row_index=table_row_index,
-                                               weights=1.0 - np.divide(self.weight_error_sums[0][table_row_index, :], self.weight_error_counts[0][table_row_index, :]),
+                                               weights=new_weights,
                                                row_values=table_row,
                                                fast_set_need_commit=True)  # needs row values to set wsquared*table
+
+                # here, update per_pixel_learning_rate based on:
+                #   weight * (1 - distance_sample_selected) > threshold
+                #   such that pixels that are closer to above criteria, have greatly reduced learning rate for next selection
+                per_pixel_learning_rate = np.multiply(per_pixel_learning_rate, 1.0 - (np.multiply(new_weights, 1.0 - per_pixel_dist_row)))
+
+                old_way = False
+                if old_way:
+                    per_pixel_dist_weight_learn = np.maximum(per_pixel_dist_row, 1.0 - dist_bias)
+
+                    dist_bias = np.minimum(per_pixel_dist_row, dist_bias)
+
+                    self.weight_error_sums[0][table_row_index, :] = self.weight_error_sums[0][table_row_index, :] + per_pixel_dist_weight_learn
+                    self.weight_error_counts[0][table_row_index, :] = self.weight_error_counts[0][table_row_index, :] + 1
+
+                    self.tables[0].set_row_weights(row_index=table_row_index,
+                                                   weights=1.0 - np.divide(self.weight_error_sums[0][table_row_index, :], self.weight_error_counts[0][table_row_index, :]),
+                                                   row_values=table_row,
+                                                   fast_set_need_commit=True)  # needs row values to set wsquared*table
 
             if self.enable_select_im and k in disp_list:
 
@@ -672,7 +690,7 @@ class MultiLayerSharedTiles(object):
                         # table_im[r0:r1, c0:c1] = np.multiply(np.multiply(tile_weights, tile_weights), tile_im)
 
                         #
-                        tmp_r_n, tmp_c_n = np.nonzero(tile_weights < 0.75/(tile_r_c*tile_r_c))  # 0.5
+                        tmp_r_n, tmp_c_n = np.nonzero(tile_weights < 0.9/(tile_r_c*tile_r_c))  # 0.5
                         # tmp_r_p, tmp_c_p = np.nonzero(tile_weights > 0.5)  # 0.5
 
                         # FALSE COLOR
