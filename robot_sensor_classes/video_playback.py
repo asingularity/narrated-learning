@@ -21,6 +21,9 @@ class VideoPlaybackSensor(object):
         self.use_full_frame = params['use_full_frame']
         self.partial_frame_factor = params['partial_frame_factor']
 
+        assert params['return_type'] is np.float32 or params['return_type'] is np.float64
+        self.return_type = params['return_type']
+
         if self.preload_file:
             self._sample_frames = []
 
@@ -176,7 +179,7 @@ class VideoPlaybackSensor(object):
                 sample_im = cv2.resize(src=sample_im, dsize=(self.image_dim, self.image_dim),
                                        interpolation=cv2.INTER_NEAREST)
 
-        sample_im = sample_im.astype(np.float) * 1.0/255.
+        sample_im = sample_im.astype(self.return_type) * 1.0/255.
 
         assert sample_im.shape[0] == self.image_dim
         assert sample_im.shape[1] == self.image_dim

@@ -266,7 +266,7 @@ class CudaTable(object):
         return dists[0]
 
     # @profile
-    def set_matrix_row(self, row_index, row_input, row_to_table_dists, fast_init=False):
+    def set_matrix_row(self, row_index, row_input, row_to_table_dists=None, row_weights=None, fast_init=False):
         '''
         all arguments have to be not None
 
@@ -302,6 +302,7 @@ class CudaTable(object):
             self.term_2_i[row_index] = np.sum(row_data_i ** 2)
 
         if not self.disable_row_row_dist:
+            assert row_to_table_dists is not None
             # print(self.num_entries, row_to_table_dists.shape, row_to_table_dists.dtype)
             # THIS IS *no longer* A BOTTLENECK SLOW STEP:
             self.d.set_row_dists(row_index=row_index, new_dists=row_to_table_dists, fast_init=fast_init)
@@ -310,7 +311,12 @@ class CudaTable(object):
         self.row_ages[row_index] = 0
 
         # new or replaced row: for now, set weights to all ones
-        self.set_row_weights(row_index=row_index, weights=np.ones(self.input_dim, np.float32), row_values=row_data_i)
+        if row_weights is None:
+            weights_to_use = np.ones(self.input_dim, np.float32)
+        else:
+            weights_to_use = row_weights
+
+        self.set_row_weights(row_index=row_index, weights=weights_to_use, row_values=row_data_i)
 
     def set_row_weights(self, row_index, weights, row_values, fast_set_need_commit=False):
         '''
@@ -392,11 +398,26 @@ class CudaTable(object):
 
         return row_input, row_output, row_context  # TODO deprecate this
 
+    def get_row_weights(self, row_index):
+        return self.weight_masks[row_index, :]
+
+    def get_multiple_rows_and_weights(self, row_indices):
+
+        rows = self.table_i[row_indices, :]
+        weights = self.weight_masks[row_indices, :]
+
+        return rows, weights
+
     def get_table_from_gpu(self):
         '''
         WARNING: SLOW
         :return:
         '''
+
+        return self.table_i
+
+        # Why did we have the below code at all when we already have a copy in numpy??
+
         try:
             table_numpy = self.table_gpu.get()
         except:
