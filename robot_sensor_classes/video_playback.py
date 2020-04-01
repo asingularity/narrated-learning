@@ -34,7 +34,7 @@ class VideoPlaybackSensor(object):
 
     def _preload_file(self):
 
-        pkl_filename = self.video_dir + self.video_filename + '_' + str(self.stop_preload_at_frames) + '_' + str(self.use_full_frame) + '_' + str(self.partial_frame_factor) + '.pkl'
+        pkl_filename = self.video_dir + self.video_filename + '_' + str(self.stop_preload_at_frames) + '_' + str(self.use_full_frame) + '_' + str(self.partial_frame_factor) + '_' + str(self.image_dim) + '.pkl'
 
         print('Trying to load from pkl...')
 
@@ -181,7 +181,7 @@ class VideoPlaybackSensor(object):
 
         sample_im = sample_im.astype(self.return_type) * 1.0/255.
 
-        assert sample_im.shape[0] == self.image_dim
-        assert sample_im.shape[1] == self.image_dim
+        assert sample_im.shape[0] == self.image_dim, (sample_im.shape[0], self.image_dim)
+        assert sample_im.shape[1] == self.image_dim, (sample_im.shape[1], self.image_dim)
 
         return sample_im
