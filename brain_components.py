@@ -6,3 +6,4 @@ from brain_components_classes.debug_topdown_info_history import DebugTopdownInfo
 from brain_components_classes.single_layer_trace import SingleLayerTrace
 from brain_components_classes.multi_layer_shared_tiles import MultiLayerSharedTiles
 from brain_components_classes.new_shared_tiles import NewSharedTiles
+from brain_components_classes.simple_weight_tiles import SimpleWeightTiles

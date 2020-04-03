@@ -15,13 +15,13 @@ from math import pi
 MAX_HISTORY_LENGTH = 10600000 + 1
 USERNAME = 'intec'
 
-TABLE_ENTRIES = 6000  # 8000
-TABLE_LEARN_TIME = TABLE_ENTRIES * 10  # 16
-PREDICTION_LEARN_TIME = TABLE_ENTRIES * 160
-
 IM_DIM = 64 * 8  # assume square image, this is width & height
 TILES_LAYER_0 = 2 * 8  # N where tiled NxN
 IM_PIXELS = IM_DIM * IM_DIM  # assume grayscale
+
+TABLE_ENTRIES = 6000  # 8000
+TABLE_LEARN_TIME = 50  # TABLE_ENTRIES
+PREDICTION_LEARN_TIME = TABLE_ENTRIES * 160
 
 COLOR_ENABLED = False
 
@@ -65,7 +65,7 @@ def get_brain_params():
         'max_history_length': MAX_HISTORY_LENGTH,
         'enable_learning': True,
 
-        # ************ MultiLayerSharedTiles ************
+        # ************ SimpleWeightTiles ************
         'color_enabled': COLOR_ENABLED,
         'enable_weight_bias': ENABLE_WEIGHT_BIAS,
         'use_multi_layer': True,
