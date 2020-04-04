@@ -265,7 +265,6 @@ class CudaTable(object):
 
         return dists[0]
 
-    # @profile
     def set_matrix_row(self, row_index, row_input, row_to_table_dists=None, row_weights=None, fast_init=False):
         '''
         all arguments have to be not None

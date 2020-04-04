@@ -99,8 +99,8 @@ class SimpleWeightTiles(object):
 
         self.table = CudaTable(num_entries=self.num_entries,
                                input_dim=self.input_dim,
-                               disable_row_row_dist=True,  # TODO depending on learning rule, may need to re-enable!
-                               enable_weight_bias=True)
+                               disable_row_row_dist=False,  # TODO depending on learning rule, may need to re-enable!
+                               enable_weight_bias=False)  # TODO set correctly; for now disable, only learn weight, don't apply
 
         print()
         print('Done Initializing NewSharedTiles.')
@@ -112,6 +112,8 @@ class SimpleWeightTiles(object):
         self.im_c_indices = None
 
         self.t = 0
+
+        self.stage_index = None  # what stage of learning are we in
 
         # *** debug / print variables ***
 
@@ -168,6 +170,12 @@ class SimpleWeightTiles(object):
             print('    argmin_dists min, max: ', np.amin(argmin_dists), np.amax(argmin_dists))
 
         if self.table_learn_time_start < self.t < self.table_learn_time_end:
+            if self.stage_index is None:
+                print()
+                print('Starting: _learn_table')
+                print()
+                self.stage_index = 0
+
             self._learn_table(cuda_table=self.table,
                               dists=dists,
                               argmin_dists=argmin_dists,
@@ -177,6 +185,12 @@ class SimpleWeightTiles(object):
         if self.prediction_learn_time_start < self.t < self.prediction_learn_time_end:
             # for now, we learn weights during prediction time
             # hypothesis: predictions + weights learn together
+
+            if self.stage_index == 0:
+                print()
+                print('Starting: _learn_weights')
+                print()
+                self.stage_index = 1
 
             self._learn_weights(cuda_table=self.table,
                                 dists=dists,
@@ -214,17 +228,53 @@ class SimpleWeightTiles(object):
                 # get candidate row + weights we are adding to table
                 candidate_row = tile_input_states_mat[k, :]
 
+                dists_tmp = cuda_table.query(query_input=candidate_row)
+                dists_tmp[replacement_candidate_row_index] = np.inf
+
                 cuda_table.set_matrix_row(row_index=replacement_candidate_row_index,
                                           row_input=candidate_row,
-                                          row_weights=None)
+                                          row_weights=None,
+                                          row_to_table_dists=dists_tmp,
+                                          fast_init=True)
 
                 self.init_I_row_num += 1
             else:
-                # TODO add learning / replacement rule here! may need to enable distances for table!
-                # i.e. seq-nn, or a new weighted seq-nn
-                # for now, no learning once init is done
-                # or, if the following line is enabled, will continue process from first row again
-                # self.init_I_row_num = 0
+                if not cuda_table.post_init_done:
+                    print()
+                    print('Table init done! doing post-init...')
+                    print()
+
+                    cuda_table.post_init()
+
+        if cuda_table.post_init_done:
+
+            table_min_dist, table_min_dist_r, table_min_dist_c = cuda_table.get_min_dist()
+
+            # print(table_min_dist_r, table_min_dist_c)
+
+            # from the 256 new inputs, choose the one with largest [minimum distance to table rows]
+            min_dist_per_input_tile = dists[range(self.tiles_NxN * self.tiles_NxN), argmin_dists]
+
+            #print('. ', min_dist_per_input_tile)
+
+            input_tile_index_with_max_min_table_dist = np.argmax(min_dist_per_input_tile)
+            tmp = input_tile_index_with_max_min_table_dist
+
+            candidate_row = tile_input_states_mat[tmp, :]
+            new_min_dist = min_dist_per_input_tile[tmp]
+            dists_tmp = dists[tmp, :].flatten()
+
+            if new_min_dist > table_min_dist:
+                # print('replacing ', new_min_dist, table_min_dist)
+                dists_tmp[table_min_dist_r] = np.inf
+
+                # replace the current min dist row, with the new row
+                cuda_table.set_matrix_row(row_index=table_min_dist_r,
+                                          row_input=candidate_row,
+                                          row_to_table_dists=dists_tmp)
+                # print('... ! replacing')
+            else:
+                # print('NOT replacing ', new_min_dist, table_min_dist)
                 pass
 
     def _learn_weights(self, cuda_table, dists, argmin_dists, tile_input_states_mat, input_x_y_theta):
@@ -316,7 +366,7 @@ class SimpleWeightTiles(object):
 
         # 31 for 1000
         # 63 for 4000
-        N = 31  # display NxN tiles of 8k entries
+        N = int(min(31, sqrt(self.num_entries) - 1))  # display NxN tiles of 8k entries
         entries = N*N
 
         cuda_table = self.table
