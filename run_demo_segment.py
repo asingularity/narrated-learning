@@ -19,8 +19,8 @@ IM_DIM = 64 * 8  # assume square image, this is width & height
 TILES_LAYER_0 = 2 * 8  # N where tiled NxN
 IM_PIXELS = IM_DIM * IM_DIM  # assume grayscale
 
-TABLE_ENTRIES = 600  # 8000
-TABLE_LEARN_TIME = 10000  # TABLE_ENTRIES
+TABLE_ENTRIES = 600 * 2  # 8000
+TABLE_LEARN_TIME = 2000  # 10000; TABLE_ENTRIES
 PREDICTION_LEARN_TIME = TABLE_ENTRIES * 160
 
 COLOR_ENABLED = False
@@ -84,7 +84,7 @@ def get_visualizer_params():
     params = {
         'color_enabled': COLOR_ENABLED,
         'fps_display_interval': 3,
-        'image_display_secs_fast': 5,
+        'image_display_secs_fast': 3,
         'waitKey_time_fast': 1,  # 1, 100, 5000
         'image_display_secs_slow': 0,  # 0: every frame
         'waitKey_time_slow': 1,  # 1, 100, 5000  #
