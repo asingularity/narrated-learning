@@ -15,11 +15,11 @@ from math import pi
 MAX_HISTORY_LENGTH = 10600000 + 1
 USERNAME = 'intec'
 
-IM_DIM = 64 * 8  # assume square image, this is width & height
-TILES_LAYER_0 = 2 * 8  # N where tiled NxN
+IM_DIM = 64  # 64, 32, # assume square image, this is width & height
+TILES_LAYER_0 = 1  # N where tiled NxN
 IM_PIXELS = IM_DIM * IM_DIM  # assume grayscale
 
-TABLE_ENTRIES = 600 * 2  # 8000
+TABLE_ENTRIES = 36  # 8000
 TABLE_LEARN_TIME = 2000  # 10000; TABLE_ENTRIES
 PREDICTION_LEARN_TIME = TABLE_ENTRIES * 160
 

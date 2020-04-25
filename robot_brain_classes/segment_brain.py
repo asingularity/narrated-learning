@@ -1,7 +1,7 @@
 
 
 import numpy as np
-from brain_components import SimpleWeightTiles
+from brain_components import WinRegionTiles
 
 
 class SegmentBrain(object):
@@ -17,7 +17,7 @@ class SegmentBrain(object):
 
         dim = params['input_dim']
 
-        self.predictor_ensemble = SimpleWeightTiles(params={
+        self.predictor_ensemble = WinRegionTiles(params={
             'color_enabled': params['color_enabled'],
             'enable_weight_bias': params['enable_weight_bias'],
             'input_dim': dim,
