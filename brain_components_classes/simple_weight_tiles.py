@@ -372,7 +372,7 @@ class SimpleWeightTiles(object):
         # 31 for 1000
         # 63 for 4000
         # N = int(min(31, sqrt(self.num_entries) - 1))  # display NxN tiles of 8k entries
-        N = int(sqrt(self.num_entries) - 1)  # display NxN tiles of 8k entries
+        N = int(sqrt(self.num_entries))  # display NxN tiles of 8k entries
 
         entries = N*N
 
