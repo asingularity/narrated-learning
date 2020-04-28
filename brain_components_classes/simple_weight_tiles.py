@@ -120,6 +120,10 @@ class SimpleWeightTiles(object):
         self.printed_init_step = False
         self.last_select_im_data = None
 
+        self.num_row_swaps = 0
+        self.last_row_swap_disp = time.time()
+        self.row_swap_disp_time = 1  # every K seconds
+
     def step(self, raycast_image, input_state, input_x_y_theta, goal_context_state_learning, goal_context_state_task, last_motor_command):
         '''
 
@@ -266,6 +270,7 @@ class SimpleWeightTiles(object):
             dists_tmp = dists[tmp, :].flatten()
 
             if new_min_dist > table_min_dist:
+                self.num_row_swaps += 1
                 # print('replacing ', new_min_dist, table_min_dist)
                 dists_tmp[table_min_dist_r] = np.inf
 
@@ -277,6 +282,11 @@ class SimpleWeightTiles(object):
             else:
                 # print('NOT replacing ', new_min_dist, table_min_dist)
                 pass
+
+            if time.time() - self.last_row_swap_disp > self.row_swap_disp_time:
+                print('    num row swaps:', self.num_row_swaps)
+                self.num_row_swaps  = 0
+                self.last_row_swap_disp = time.time()
 
     def _learn_weights(self, cuda_table, dists, argmin_dists, tile_input_states_mat, input_x_y_theta):
         '''
@@ -301,12 +311,17 @@ class SimpleWeightTiles(object):
             table_row, _, _ = cuda_table.get_matrix_row(row_index=row_index)
             current_weights = cuda_table.get_row_weights(row_index=row_index)
 
-            self.last_select_im_data.append((tile_input_vect, table_row, current_weights))
-
             per_pixel_dist_row = np.abs(tile_input_vect - table_row)
 
             learning_rate = 0.1
-            new_weights = learning_rate * (1.0 - per_pixel_dist_row) + (1.0 - learning_rate) * current_weights
+            term_1 = (1.0 - per_pixel_dist_row)
+            new_weights = learning_rate * term_1 + (1.0 - learning_rate) * current_weights
+
+            # print('        term_1', np.amin(term_1), np.amax(term_1))
+            # print('        current_weights', np.amin(current_weights), np.amax(current_weights))
+            # print('        new_weights', np.amin(new_weights), np.amax(new_weights))
+
+            self.last_select_im_data.append((tile_input_vect.copy(), table_row.copy(), current_weights.copy(), new_weights.copy()))
 
             cuda_table.set_row_weights(row_index=row_index, weights=new_weights, row_values=tile_input_vect)
 
@@ -376,18 +391,17 @@ class SimpleWeightTiles(object):
 
         entries = N*N
 
+        spacer = 4  # pixels
+
         cuda_table = self.table
 
         rows = cuda_table.table_i
-        weights_orig = cuda_table.weight_masks
-
-        # for display, normalize back to max 1 for each weight
-        weights = np.multiply(weights_orig, 1.0 / np.amax(weights_orig, axis=1)[:, np.newaxis])
+        weights = cuda_table.get_all_weights()
 
         tile_r_c = int(sqrt(rows.shape[1]))
 
-        table_im = np.zeros((N * tile_r_c + N * 1, N * tile_r_c + N * 1)) + 0.5
-        weights_im = np.zeros((N * tile_r_c + N * 1, N * tile_r_c + N * 1)) + 0.5
+        table_im = np.zeros((N * tile_r_c + N * spacer, N * tile_r_c + N * spacer)) + 0.5
+        weights_im = np.zeros((N * tile_r_c + N * spacer, N * tile_r_c + N * spacer)) + 0.5
 
         tile_n = 0
 
@@ -409,16 +423,16 @@ class SimpleWeightTiles(object):
                 weights_im[r0:r1, c0:c1] = tile_weights
 
                 tile_n += 1
-                c_offset += 1
+                c_offset += spacer
 
-            r_offset += 1
+            r_offset += spacer
 
         # selection image
 
         if self.last_select_im_data is not None:
-            num_select = 30
+            num_select = 1
 
-            select_im = np.zeros((num_select * tile_r_c + num_select * 1, 3 * tile_r_c + 3 * 1)) + 0.5
+            select_im = np.zeros((num_select * tile_r_c + num_select * 1, 4 * tile_r_c + 4 * 1)) + 0.5
 
             select_list = np.random.permutation(len(self.last_select_im_data))
 
@@ -426,15 +440,17 @@ class SimpleWeightTiles(object):
                 thing = self.last_select_im_data[select_list[r]]
 
                 # self.last_select_im_data.append((tile_input_vect, table_row, current_weights))
-                tile_input_vect, table_row, current_weights = thing
+                tile_input_vect, table_row, current_weights, new_weights = thing
                 r0 = r * tile_r_c + r
                 r1 = (r + 1) * tile_r_c + r
 
                 current_weights = current_weights * 1.0 / np.amax(current_weights)
+                new_weights = new_weights * 1.0 / np.amax(new_weights)
 
                 select_im[r0:r1, 0:tile_r_c] = tile_input_vect.reshape((tile_r_c, tile_r_c))
                 select_im[r0:r1, tile_r_c+1:2*tile_r_c + 1] = table_row.reshape((tile_r_c, tile_r_c))
                 select_im[r0:r1, 2*tile_r_c+2:3*tile_r_c + 2] = current_weights.reshape((tile_r_c, tile_r_c))
+                select_im[r0:r1, 3*tile_r_c+3:4*tile_r_c + 3] = new_weights.reshape((tile_r_c, tile_r_c))
         else:
             select_im = None
 
@@ -457,7 +473,7 @@ class SimpleWeightTiles(object):
             select_im = cv2.resize(select_im, dsize=(0, 0), fx=imscale, fy=imscale, interpolation=cv2.INTER_NEAREST)
 
             ims_list.append(select_im)
-            ims_names_list.append('select')
+            ims_names_list.append('input, row, current weights, new weights')
 
         return ims_list, ims_names_list
 

@@ -6,6 +6,7 @@ np.random.seed(6)
 
 from robot_brain_classes.segment_brain import SegmentBrain
 from robot_sensor_classes.video_playback import VideoPlaybackSensor
+from robot_sensor_classes.physics_2d import Physics2DSensor
 from visualizer_classes.segment_visualizer import SegmentVisualizer
 from sim_folder_manager import SimFolderManager
 import time
@@ -15,12 +16,12 @@ from math import pi
 MAX_HISTORY_LENGTH = 10600000 + 1
 USERNAME = 'intec'
 
-IM_DIM = 256  # 64, 32, # assume square image, this is width & height
+IM_DIM = 128  # 64, 32, # assume square image, this is width & height
 TILES_LAYER_0 = 1  # N where tiled NxN
 IM_PIXELS = IM_DIM * IM_DIM  # assume grayscale
 
-TABLE_ENTRIES = 10 * 10  # 8000
-TABLE_LEARN_TIME = 2000000  # 10000; TABLE_ENTRIES
+TABLE_ENTRIES = 30 * 30  # 8000
+TABLE_LEARN_TIME = 3000  # 10000; TABLE_ENTRIES
 PREDICTION_LEARN_TIME = TABLE_ENTRIES * 160
 
 COLOR_ENABLED = False
@@ -29,7 +30,7 @@ ENABLE_WEIGHT_BIAS = True
 
 
 def get_sensors_params():
-    params = {
+    params_video_playback = {
         'image_dim': IM_DIM,  # sensor class has to figure out subset & scale to achieve this dim
         'video_dir': '/srv/projects/NL-data/',
         'video_filename': 'videoplayback',  # 3840x2160
@@ -39,6 +40,14 @@ def get_sensors_params():
         'partial_frame_factor': 4,  # from center, what factor to use - larger factor ~ smaller part of image
         'return_type': np.float32  # 32 or 64
     }
+
+    params_physics_2d = {
+        'image_dim': IM_DIM,  # sensor class has to figure out subset & scale to achieve this dim
+        'return_type': np.float32  # 32 or 64
+    }
+
+    params = params_physics_2d
+
     return params
 
 
@@ -98,7 +107,8 @@ def get_visualizer_params():
 def init_demo():
     return {
         'robot_brain': SegmentBrain(get_brain_params()),
-        'robot_sensors': VideoPlaybackSensor(get_sensors_params()),
+        #'robot_sensors': VideoPlaybackSensor(get_sensors_params()),
+        'robot_sensors': Physics2DSensor(get_sensors_params()),
         'visualizer': SegmentVisualizer(get_visualizer_params()),
         'sim_folder_manager': SimFolderManager(get_sim_folder_manager_params())
     }

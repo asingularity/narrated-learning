@@ -88,6 +88,8 @@ class CudaTable(object):
         self.weight_masks = 1.0 * np.ones((num_entries, input_dim), np.float32)
         self.weight_masks_square = 1.0 * np.ones((num_entries, input_dim), np.float32)
 
+        self.weight_sums = np.sum(self.weight_masks, axis=1)
+
         self.weight_masks_square_gpu = gpuarray.to_gpu(np.ascontiguousarray(np.transpose(self.weight_masks_square)))
 
         self.wsquare_x_table = 1.0 * np.ones((num_entries, input_dim), np.float32)
@@ -330,7 +332,10 @@ class CudaTable(object):
 
         # IMPORTANT: WEIGHTS NEED TO SUM TO 1
         # TODO need to update visualizer to take this into account!
-        weights = weights * 1.0 / np.sum(weights)
+
+        sum_weights = np.sum(weights)
+        self.weight_sums[row_index] = sum_weights
+        weights = weights * 1.0 / sum_weights
         weights_square = weights ** 2
         weights_square_x = np.multiply(weights_square, row_values)
 
@@ -398,7 +403,10 @@ class CudaTable(object):
         return row_input, row_output, row_context  # TODO deprecate this
 
     def get_row_weights(self, row_index):
-        return self.weight_masks[row_index, :]
+        return self.weight_masks[row_index, :] * self.weight_sums[row_index]
+
+    def get_all_weights(self):
+        return np.multiply(self.weight_masks, self.weight_sums[:, np.newaxis])
 
     def get_multiple_rows_and_weights(self, row_indices):
 
