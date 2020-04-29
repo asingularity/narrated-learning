@@ -367,6 +367,8 @@ class SimpleWeightTiles(object):
 
                 learning_rate = 0.1 * lowest_dist_mask  # * (1.0 - weighted_dist / max_dist)
 
+                # TODO lowest_dist_mask should only block INCREASING weight, not DECREASING it. such that if another row had a good match, it shouldn't block us decreasing our weight if we had bad match
+
                 # independent
                 term_1 = (1.0 - per_pixel_dist_row)
 
