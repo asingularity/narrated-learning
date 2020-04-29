@@ -365,7 +365,7 @@ class SimpleWeightTiles(object):
 
                 per_pixel_dist_row = np.abs(tile_input_vect - table_row)
 
-                learning_rate = 0.1 * (1.0 - weighted_dist / max_dist)
+                learning_rate = 0.1 * lowest_dist_mask  # * (1.0 - weighted_dist / max_dist)
 
                 # independent
                 term_1 = (1.0 - per_pixel_dist_row)
@@ -374,12 +374,13 @@ class SimpleWeightTiles(object):
                 # when should weights go towards zero?
                 #   error is high for this pixel AND weighted dist was low
                 #   OR
+                #   error was low for this pixel AND lowest_dist_mask is low for this pixel
                 #
                 # ??? term_1 = (1.0 - np.maximum(per_pixel_dist_row, 1.0 - lowest_dist_mask))
                 # eff_error_this_row = np.maximum(per_pixel_dist_row, 1.0 - lowest_dist_mask)
                 # term_1 = 1.0 - eff_error_this_row
 
-                new_weights = learning_rate * term_1 + (1.0 - learning_rate) * current_weights
+                new_weights = np.multiply(learning_rate, term_1) + np.multiply((1.0 - learning_rate), current_weights)
 
                 if k == 0:
                     self.last_select_im_data.append((tile_input_vect.copy(), table_row.copy(), current_weights.copy(), new_weights.copy()))
