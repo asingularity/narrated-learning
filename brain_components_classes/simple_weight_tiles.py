@@ -97,10 +97,12 @@ class SimpleWeightTiles(object):
         self.prediction_learn_time_start = self.table_learn_time_end + 100
         self.prediction_learn_time_end = self.prediction_learn_time_start + self.prediction_learn_time
 
+        self.enable_weight_bias = True
+
         self.table = CudaTable(num_entries=self.num_entries,
                                input_dim=self.input_dim,
                                disable_row_row_dist=False,  # TODO depending on learning rule, may need to re-enable!
-                               enable_weight_bias=False)  # TODO set correctly; for now disable, only learn weight, don't apply
+                               enable_weight_bias=self.enable_weight_bias)  # TODO set correctly; for now disable, only learn weight, don't apply
 
         print()
         print('Done Initializing NewSharedTiles.')
@@ -299,31 +301,94 @@ class SimpleWeightTiles(object):
         :return:
         '''
 
+        dists = dists.flatten()
+
+        #print()
+        #print('Debug info:')
+        #print('    cuda_table.table_i.shape', cuda_table.table_i.shape)
+        #print('    dists.shape', dists.shape)
+        #print('    argmin_dists.shape', argmin_dists.shape)
+        #print('    tile_input_states_mat.shape', tile_input_states_mat.shape)
+        #print()
+
+        '''
+            cuda_table.table_i.shape (25, 16384)
+            dists.shape (25,)
+            argmin_dists.shape (1,)
+            tile_input_states_mat.shape (1, 16384)
+        '''
+
         self.last_select_im_data = []
 
-        for k in range(tile_input_states_mat.shape[0]):
+        '''
+        # for 128x128 image, max weighted dist is 6.1e-5:
 
+        >>> a = np.ones((128, 128), np.float32)
+        >>> b = np.zeros((128, 128), np.float32)
+        >>> a = a * 1.0 / np.sum(a)
+        >>> np.sum((a - b) ** 2)
+        6.1035156e-05
+
+        equivalent to:
+        max_dist = 1.0 / (cuda_table.table_i.shape[1])
+
+        '''
+
+        if self.enable_weight_bias:
+            max_dist = 1.0 / (cuda_table.table_i.shape[1])
+        else:
+            max_dist = cuda_table.table_i.shape[1]
+
+        for k in range(tile_input_states_mat.shape[0]):
+            assert k == 0, 'only support 1 tile currently'
             # only update top 1 match weights
 
             tile_input_vect = tile_input_states_mat[k, :]
-            row_index = argmin_dists[k]
 
-            table_row, _, _ = cuda_table.get_matrix_row(row_index=row_index)
-            current_weights = cuda_table.get_row_weights(row_index=row_index)
+            argsort_dists = np.argsort(dists)  # lowest distance (i.e. best match) first
 
-            per_pixel_dist_row = np.abs(tile_input_vect - table_row)
+            # ranks = np.zeros(dists.shape[0], np.int)
+            # ranks[argsort_dists] = np.arange(dists.shape[0])
 
-            learning_rate = 0.1
-            term_1 = (1.0 - per_pixel_dist_row)
-            new_weights = learning_rate * term_1 + (1.0 - learning_rate) * current_weights
+            lowest_dist_mask = np.ones(tile_input_vect.shape[0], np.float32)
 
-            # print('        term_1', np.amin(term_1), np.amax(term_1))
-            # print('        current_weights', np.amin(current_weights), np.amax(current_weights))
-            # print('        new_weights', np.amin(new_weights), np.amax(new_weights))
+            # for given input image, loop over all rows in order of weighted match (lowest error first):
 
-            self.last_select_im_data.append((tile_input_vect.copy(), table_row.copy(), current_weights.copy(), new_weights.copy()))
+            # for k in range(2):
+            for k in range(argsort_dists.shape[0]):
 
-            cuda_table.set_row_weights(row_index=row_index, weights=new_weights, row_values=tile_input_vect)
+                row_index = argsort_dists[k]
+                weighted_dist = dists[row_index]
+
+                table_row, _, _ = cuda_table.get_matrix_row(row_index=row_index)
+                current_weights = cuda_table.get_row_weights(row_index=row_index)
+
+                per_pixel_dist_row = np.abs(tile_input_vect - table_row)
+
+                learning_rate = 0.1 * (1.0 - weighted_dist / max_dist)
+
+                # independent
+                term_1 = (1.0 - per_pixel_dist_row)
+
+                # inter-dependent
+                # when should weights go towards zero?
+                #   error is high for this pixel AND weighted dist was low
+                #   OR
+                #
+                # ??? term_1 = (1.0 - np.maximum(per_pixel_dist_row, 1.0 - lowest_dist_mask))
+                # eff_error_this_row = np.maximum(per_pixel_dist_row, 1.0 - lowest_dist_mask)
+                # term_1 = 1.0 - eff_error_this_row
+
+                new_weights = learning_rate * term_1 + (1.0 - learning_rate) * current_weights
+
+                if k == 0:
+                    self.last_select_im_data.append((tile_input_vect.copy(), table_row.copy(), current_weights.copy(), new_weights.copy()))
+
+                cuda_table.set_row_weights(row_index=row_index, weights=new_weights, row_values=tile_input_vect, fast_set_need_commit=True)
+
+                lowest_dist_mask = np.minimum(lowest_dist_mask, per_pixel_dist_row)
+
+            cuda_table.commit_weights_changes()
 
     def _get_tile_inputs_for_image(self, image):
         '''

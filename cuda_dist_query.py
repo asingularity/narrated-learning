@@ -95,6 +95,11 @@ class CudaTable(object):
         self.wsquare_x_table = 1.0 * np.ones((num_entries, input_dim), np.float32)
         self.wsquare_x_table_gpu = gpuarray.to_gpu(np.ascontiguousarray(np.transpose(self.wsquare_x_table)))
 
+        for k in range(num_entries):
+            self.set_row_weights(row_index=k, weights=np.ones(self.input_dim), row_values=self.table_i[k, :], fast_set_need_commit=True)
+        self.commit_weights_changes()
+
+
     def prepare_for_save(self):
         # here prepare each layer's cuda table for save: offload matrices from gpu to local!
 
