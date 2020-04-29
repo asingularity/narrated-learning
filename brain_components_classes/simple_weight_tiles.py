@@ -356,6 +356,7 @@ class SimpleWeightTiles(object):
 
             # for k in range(2):
             for k in range(argsort_dists.shape[0]):
+            #for k in range(argsort_dists.shape[0] - 1, -1, -1):
 
                 row_index = argsort_dists[k]
                 weighted_dist = dists[row_index]
@@ -365,8 +366,8 @@ class SimpleWeightTiles(object):
 
                 per_pixel_dist_row = np.abs(tile_input_vect - table_row)
 
-                learning_rate = 0.1 * lowest_dist_mask  # * (1.0 - weighted_dist / max_dist)
-
+                #learning_rate = 0.1 * np.maximum(lowest_dist_mask, per_pixel_dist_row)  # * (1.0 - weighted_dist / max_dist)
+                learning_rate = 0.1 * lowest_dist_mask
                 # TODO lowest_dist_mask should only block INCREASING weight, not DECREASING it. such that if another row had a good match, it shouldn't block us decreasing our weight if we had bad match
 
                 # independent
@@ -384,9 +385,12 @@ class SimpleWeightTiles(object):
 
                 new_weights = np.multiply(learning_rate, term_1) + np.multiply((1.0 - learning_rate), current_weights)
 
+                # new_row = np.multiply(learning_rate, tile_input_vect) + np.multiply((1.0 - learning_rate), table_row)
+
                 if k == 0:
                     self.last_select_im_data.append((tile_input_vect.copy(), table_row.copy(), current_weights.copy(), new_weights.copy()))
 
+                #cuda_table.set_matrix_row(row_index=row_index, row_weights=new_weights, row_input=new_row, fast_set_weight=True, override_disable_dists=True)
                 cuda_table.set_row_weights(row_index=row_index, weights=new_weights, row_values=tile_input_vect, fast_set_need_commit=True)
 
                 lowest_dist_mask = np.minimum(lowest_dist_mask, per_pixel_dist_row)

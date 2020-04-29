@@ -272,7 +272,7 @@ class CudaTable(object):
 
         return dists[0]
 
-    def set_matrix_row(self, row_index, row_input, row_to_table_dists=None, row_weights=None, fast_init=False):
+    def set_matrix_row(self, row_index, row_input, row_to_table_dists=None, row_weights=None, fast_init=False, fast_set_weight=False, override_disable_dists=False):
         '''
         all arguments have to be not None
 
@@ -307,7 +307,7 @@ class CudaTable(object):
         else:
             self.term_2_i[row_index] = np.sum(row_data_i ** 2)
 
-        if not self.disable_row_row_dist:
+        if not (self.disable_row_row_dist or override_disable_dists):
             assert row_to_table_dists is not None
             # print(self.num_entries, row_to_table_dists.shape, row_to_table_dists.dtype)
             # THIS IS *no longer* A BOTTLENECK SLOW STEP:
@@ -322,7 +322,7 @@ class CudaTable(object):
         else:
             weights_to_use = row_weights
 
-        self.set_row_weights(row_index=row_index, weights=weights_to_use, row_values=row_data_i)
+        self.set_row_weights(row_index=row_index, weights=weights_to_use, row_values=row_data_i, fast_set_need_commit=fast_set_weight)
 
     def set_row_weights(self, row_index, weights, row_values, fast_set_need_commit=False):
         '''
