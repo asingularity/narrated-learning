@@ -347,16 +347,10 @@ class SimpleWeightTiles(object):
 
             argsort_dists = np.argsort(dists)  # lowest distance (i.e. best match) first
 
-            # ranks = np.zeros(dists.shape[0], np.int)
-            # ranks[argsort_dists] = np.arange(dists.shape[0])
-
-            lowest_dist_mask = np.ones(tile_input_vect.shape[0], np.float32)
+            best_weighted_per_pixel_match = np.zeros(tile_input_vect.shape[0], np.float32)
 
             # for given input image, loop over all rows in order of weighted match (lowest error first):
-
-            # for k in range(2):
             for k in range(argsort_dists.shape[0]):
-            #for k in range(argsort_dists.shape[0] - 1, -1, -1):
 
                 row_index = argsort_dists[k]
                 weighted_dist = dists[row_index]
@@ -364,39 +358,56 @@ class SimpleWeightTiles(object):
                 table_row, _, _ = cuda_table.get_matrix_row(row_index=row_index)
                 current_weights = cuda_table.get_row_weights(row_index=row_index)
 
-                per_pixel_dist_row = np.abs(tile_input_vect - table_row)
+                per_pixel_error = np.abs(tile_input_vect - table_row)
+                per_pixel_match = 1.0 - per_pixel_error
+                weighted_per_pixel_match = np.multiply(current_weights, per_pixel_match)
 
-                #learning_rate = 0.1 * np.maximum(lowest_dist_mask, per_pixel_dist_row)  # * (1.0 - weighted_dist / max_dist)
-                learning_rate = 0.1 * lowest_dist_mask
-                # TODO lowest_dist_mask should only block INCREASING weight, not DECREASING it. such that if another row had a good match, it shouldn't block us decreasing our weight if we had bad match
+                # term_1 = per_pixel_match.copy()
+                term_1 = np.minimum(per_pixel_match, 1.0 - best_weighted_per_pixel_match)
+                # term_1 = np.multiply(per_pixel_match, 1.0 - best_weighted_per_pixel_match)
 
-                # independent
-                term_1 = (1.0 - per_pixel_dist_row)
                 term_1[term_1 < 0.9] = 0.0
+                term_1[term_1 > 0.9] = 1.0
 
-                # inter-dependent
-                # when should weights go towards zero?
-                #   error is high for this pixel AND weighted dist was low
-                #   OR
-                #   error was low for this pixel AND lowest_dist_mask is low for this pixel
-                #
-                # ??? term_1 = (1.0 - np.maximum(per_pixel_dist_row, 1.0 - lowest_dist_mask))
-                # eff_error_this_row = np.maximum(per_pixel_dist_row, 1.0 - lowest_dist_mask)
-                # term_1 = 1.0 - eff_error_this_row
+                learning_rate = 0.02 * np.ones(table_row.shape[0], np.float32)
+                # learning_rate = 0.04 * per_pixel_error.copy()
 
                 new_weights = np.multiply(learning_rate, term_1) + np.multiply((1.0 - learning_rate), current_weights)
 
-                # new_row = np.multiply(learning_rate, tile_input_vect) + np.multiply((1.0 - learning_rate), table_row)
+                best_weighted_per_pixel_match = np.maximum(best_weighted_per_pixel_match, weighted_per_pixel_match)
 
                 if k < 5:
-                    self.last_select_im_data.append((tile_input_vect.copy(), table_row.copy(), current_weights.copy(), new_weights.copy()))
+                    self.last_select_im_data.append((tile_input_vect.copy(), table_row.copy(), current_weights.copy(), per_pixel_match.copy()))
 
-                #cuda_table.set_matrix_row(row_index=row_index, row_weights=new_weights, row_input=new_row, fast_set_weight=True, override_disable_dists=True)
                 cuda_table.set_row_weights(row_index=row_index, weights=new_weights, row_values=tile_input_vect, fast_set_need_commit=True)
 
-                lowest_dist_mask = np.minimum(lowest_dist_mask, per_pixel_dist_row)
-
             cuda_table.commit_weights_changes()
+
+    def _OLD_code(self):
+        pass
+
+        # learning_rate = 0.02 * (1.0 - best_weighted_per_pixel_match)
+
+        # for k in range(argsort_dists.shape[0] - 1, -1, -1):
+
+        # ranks = np.zeros(dists.shape[0], np.int)
+        # ranks[argsort_dists] = np.arange(dists.shape[0])
+
+        # for k in range(2):
+
+        # cuda_table.set_matrix_row(row_index=row_index, row_weights=new_weights, row_input=new_row, fast_set_weight=True, override_disable_dists=True)
+
+        # new_row = np.multiply(learning_rate, tile_input_vect) + np.multiply((1.0 - learning_rate), table_row)
+
+        # inter-dependent
+        # when should weights go towards zero?
+        #   error is high for this pixel AND weighted dist was low
+        #   OR
+        #   error was low for this pixel AND lowest_dist_mask is low for this pixel
+        #
+        # ??? term_1 = (1.0 - np.maximum(per_pixel_dist_row, 1.0 - lowest_dist_mask))
+        # eff_error_this_row = np.maximum(per_pixel_dist_row, 1.0 - lowest_dist_mask)
+        # term_1 = 1.0 - eff_error_this_row
 
     def _get_tile_inputs_for_image(self, image):
         '''
@@ -469,7 +480,8 @@ class SimpleWeightTiles(object):
         cuda_table = self.table
 
         rows = cuda_table.table_i
-        weights = cuda_table.get_all_weights()
+        weights_orig = cuda_table.get_all_weights()
+        weights = np.multiply(weights_orig, 1.0 / np.amax(weights_orig, axis=1)[:, np.newaxis])
 
         tile_r_c = int(sqrt(rows.shape[1]))
 
@@ -518,9 +530,6 @@ class SimpleWeightTiles(object):
                 r0 = r * tile_r_c + r
                 r1 = (r + 1) * tile_r_c + r
 
-                current_weights = current_weights * 1.0 / np.amax(current_weights)
-                new_weights = new_weights * 1.0 / np.amax(new_weights)
-
                 select_im[r0:r1, 0:tile_r_c] = tile_input_vect.reshape((tile_r_c, tile_r_c))
                 select_im[r0:r1, tile_r_c+1:2*tile_r_c + 1] = table_row.reshape((tile_r_c, tile_r_c))
                 select_im[r0:r1, 2*tile_r_c+2:3*tile_r_c + 2] = current_weights.reshape((tile_r_c, tile_r_c))
@@ -547,7 +556,7 @@ class SimpleWeightTiles(object):
             select_im = cv2.resize(select_im, dsize=(0, 0), fx=imscale, fy=imscale, interpolation=cv2.INTER_NEAREST)
 
             ims_list.append(select_im)
-            ims_names_list.append('input, row, current weights, new weights')
+            ims_names_list.append('input, row, weights, per pixel match')
 
         return ims_list, ims_names_list
 
