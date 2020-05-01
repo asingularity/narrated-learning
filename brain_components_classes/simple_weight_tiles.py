@@ -104,6 +104,8 @@ class SimpleWeightTiles(object):
                                disable_row_row_dist=False,  # TODO depending on learning rule, may need to re-enable!
                                enable_weight_bias=self.enable_weight_bias)  # TODO set correctly; for now disable, only learn weight, don't apply
 
+        self.temp_mem = 0.5 * np.ones((self.num_entries, self.input_dim), np.float32)
+
         print()
         print('Done Initializing NewSharedTiles.')
         print()
@@ -363,18 +365,33 @@ class SimpleWeightTiles(object):
                 weighted_per_pixel_match = np.multiply(current_weights, per_pixel_match)
 
                 # term_1 = per_pixel_match.copy()
-                term_1 = np.minimum(per_pixel_match, 1.0 - best_weighted_per_pixel_match)
+                # term_1 = np.minimum(per_pixel_match, 1.0 - best_weighted_per_pixel_match)
                 # term_1 = np.multiply(per_pixel_match, 1.0 - best_weighted_per_pixel_match)
+                # term_1[term_1 < 0.9] = 0.0
+                # term_1[term_1 > 0.9] = 1.0
 
-                term_1[term_1 < 0.9] = 0.0
-                term_1[term_1 > 0.9] = 1.0
+                # lower per pixel match, higher temp mem (neighbor match) -> higher value
+                # "better pixel" -> lower value
 
-                learning_rate = 0.02 * np.ones(table_row.shape[0], np.float32)
+                #inv_eligibility_map = np.multiply(1.0 - per_pixel_match, self.temp_mem[row_index, :])
+                #prop_pixels_high = 0.1
+                #num_pixels = int(prop_pixels_high * table_row.shape[0])
+                #sorted_pixels = np.argsort(inv_eligibility_map)
+                #term_1 = np.zeros(table_row.shape[0], np.float32)
+                #term_1[sorted_pixels[0:num_pixels]] = 1
+
+                eligibility_map = np.multiply(1.0 - per_pixel_match, self.temp_mem[row_index, :])
+                term_1 = eligibility_map.copy()
+                term_1 = (-np.amin(term_1) + term_1) * 1.0 / (np.amax(term_1) - np.amin(term_1))
+
+                learning_rate = 0.1 * np.ones(table_row.shape[0], np.float32)
                 # learning_rate = 0.04 * per_pixel_error.copy()
 
                 new_weights = np.multiply(learning_rate, term_1) + np.multiply((1.0 - learning_rate), current_weights)
 
                 best_weighted_per_pixel_match = np.maximum(best_weighted_per_pixel_match, weighted_per_pixel_match)
+
+                self.temp_mem[row_index, :] = 0.2 * best_weighted_per_pixel_match + 0.8 * self.temp_mem[row_index, :]
 
                 if k < 5:
                     self.last_select_im_data.append((tile_input_vect.copy(), table_row.copy(), current_weights.copy(), per_pixel_match.copy()))
@@ -481,7 +498,9 @@ class SimpleWeightTiles(object):
 
         rows = cuda_table.table_i
         weights_orig = cuda_table.get_all_weights()
-        weights = np.multiply(weights_orig, 1.0 / np.amax(weights_orig, axis=1)[:, np.newaxis])
+
+        weights = weights_orig
+        # weights = np.multiply(weights_orig, 1.0 / np.amax(weights_orig, axis=1)[:, np.newaxis])
 
         tile_r_c = int(sqrt(rows.shape[1]))
 
