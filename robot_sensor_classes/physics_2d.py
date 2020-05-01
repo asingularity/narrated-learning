@@ -21,6 +21,7 @@ class Physics2DSensor(object):
 
         im_size = self.image_dim
         circles_diameter_prop_im = [0.1, 0.2, 0.4]
+        #circles_diameter_prop_im = [0.2, 0.4, 0.8]
 
         im = 50 * np.ones((im_size, im_size), np.uint8)
         for circ_diam_prop in circles_diameter_prop_im:

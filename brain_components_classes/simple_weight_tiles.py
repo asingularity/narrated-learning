@@ -372,6 +372,7 @@ class SimpleWeightTiles(object):
 
                 # independent
                 term_1 = (1.0 - per_pixel_dist_row)
+                term_1[term_1 < 0.9] = 0.0
 
                 # inter-dependent
                 # when should weights go towards zero?
@@ -387,7 +388,7 @@ class SimpleWeightTiles(object):
 
                 # new_row = np.multiply(learning_rate, tile_input_vect) + np.multiply((1.0 - learning_rate), table_row)
 
-                if k == 0:
+                if k < 5:
                     self.last_select_im_data.append((tile_input_vect.copy(), table_row.copy(), current_weights.copy(), new_weights.copy()))
 
                 #cuda_table.set_matrix_row(row_index=row_index, row_weights=new_weights, row_input=new_row, fast_set_weight=True, override_disable_dists=True)
@@ -502,14 +503,15 @@ class SimpleWeightTiles(object):
         # selection image
 
         if self.last_select_im_data is not None:
-            num_select = 1
+            num_select = 5
 
             select_im = np.zeros((num_select * tile_r_c + num_select * 1, 4 * tile_r_c + 4 * 1)) + 0.5
 
             select_list = np.random.permutation(len(self.last_select_im_data))
 
             for r in range(num_select):
-                thing = self.last_select_im_data[select_list[r]]
+                #thing = self.last_select_im_data[select_list[r]]
+                thing = self.last_select_im_data[r]
 
                 # self.last_select_im_data.append((tile_input_vect, table_row, current_weights))
                 tile_input_vect, table_row, current_weights, new_weights = thing

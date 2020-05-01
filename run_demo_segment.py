@@ -16,17 +16,19 @@ from math import pi
 MAX_HISTORY_LENGTH = 10600000 + 1
 USERNAME = 'intec'
 
-IM_DIM = 128  # 128, # assume square image, this is width & height
+IM_DIM = 64  # 128, # assume square image, this is width & height
 TILES_LAYER_0 = 1  # N where tiled NxN
 IM_PIXELS = IM_DIM * IM_DIM  # assume grayscale
 
-TABLE_ENTRIES = 20 * 20  # 20 * 20
+TABLE_ENTRIES = 10 * 10  # 20 * 20
 TABLE_LEARN_TIME = 3000  # 3000; TABLE_ENTRIES
 PREDICTION_LEARN_TIME = TABLE_ENTRIES * 160
 
 COLOR_ENABLED = False
 
 ENABLE_WEIGHT_BIAS = True
+
+USE_VIDEO_IN = False
 
 
 def get_sensors_params():
@@ -46,7 +48,10 @@ def get_sensors_params():
         'return_type': np.float32  # 32 or 64
     }
 
-    params = params_physics_2d
+    if USE_VIDEO_IN:
+        params = params_video_playback
+    else:
+        params = params_physics_2d
 
     return params
 
@@ -83,7 +88,7 @@ def get_brain_params():
         'prediction_learn_time_per_layer': [PREDICTION_LEARN_TIME],
         'tiles_per_layer_NxN': [TILES_LAYER_0],  # N where tiled NxN
         'input_dim': input_dim,
-        'table_ims_scale_pixels': 1600  # 2000 for 4k monitor, 1600 for laptop
+        'table_ims_scale_pixels': 1200  # 2000 for 4k monitor, 1600 for laptop
             }
 
     return params
@@ -92,7 +97,7 @@ def get_brain_params():
 def get_visualizer_params():
     params = {
         'color_enabled': COLOR_ENABLED,
-        'fps_display_interval': 3,
+        'fps_display_interval': 6,
         'image_display_secs_fast': 3,
         'waitKey_time_fast': 1,  # 1, 100, 5000
         'image_display_secs_slow': 0,  # 0: every frame
@@ -105,10 +110,15 @@ def get_visualizer_params():
 
 
 def init_demo():
+
+    if USE_VIDEO_IN:
+        robot_sensors = VideoPlaybackSensor(get_sensors_params())
+    else:
+        robot_sensors = Physics2DSensor(get_sensors_params())
+
     return {
         'robot_brain': SegmentBrain(get_brain_params()),
-        #'robot_sensors': VideoPlaybackSensor(get_sensors_params()),
-        'robot_sensors': Physics2DSensor(get_sensors_params()),
+        'robot_sensors': robot_sensors,
         'visualizer': SegmentVisualizer(get_visualizer_params()),
         'sim_folder_manager': SimFolderManager(get_sim_folder_manager_params())
     }
