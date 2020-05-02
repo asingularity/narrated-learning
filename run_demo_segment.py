@@ -28,7 +28,7 @@ COLOR_ENABLED = False
 
 ENABLE_WEIGHT_BIAS = True
 
-USE_VIDEO_IN = False
+USE_VIDEO_IN = True
 
 
 def get_sensors_params():

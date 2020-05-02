@@ -380,7 +380,11 @@ class SimpleWeightTiles(object):
                 #term_1 = np.zeros(table_row.shape[0], np.float32)
                 #term_1[sorted_pixels[0:num_pixels]] = 1
 
-                eligibility_map = np.multiply(1.0 - per_pixel_match, self.temp_mem[row_index, :])
+                # eligibility_map = np.multiply(1.0 - per_pixel_match, best_weighted_per_pixel_match)
+                # eligibility_map = np.multiply(1.0 - per_pixel_match, self.temp_mem[row_index, :])
+
+                eligibility_map = np.multiply(1.0 - weighted_per_pixel_match, self.temp_mem[row_index, :])
+
                 term_1 = eligibility_map.copy()
                 term_1 = (-np.amin(term_1) + term_1) * 1.0 / (np.amax(term_1) - np.amin(term_1))
 
@@ -391,7 +395,7 @@ class SimpleWeightTiles(object):
 
                 best_weighted_per_pixel_match = np.maximum(best_weighted_per_pixel_match, weighted_per_pixel_match)
 
-                self.temp_mem[row_index, :] = 0.2 * best_weighted_per_pixel_match + 0.8 * self.temp_mem[row_index, :]
+                self.temp_mem[row_index, :] = 0.02 * best_weighted_per_pixel_match + 0.98 * self.temp_mem[row_index, :]
 
                 if k < 5:
                     self.last_select_im_data.append((tile_input_vect.copy(), table_row.copy(), current_weights.copy(), per_pixel_match.copy()))
