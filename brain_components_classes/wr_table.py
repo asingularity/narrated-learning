@@ -31,6 +31,8 @@ class WRTableLimitOneIn(object):
         self.table_i = table_i
         self.all_diffs = np.zeros_like(self.table_i)
 
+        self.tmp_i = 0
+
     def _init_num_query_inputs(self, num_query_inputs):
         '''
 
@@ -55,7 +57,18 @@ class WRTableLimitOneIn(object):
         # (1200, 256, 1024)
 
     # @profile
+
     def query_multiple_rows(self, query_inputs):
+        assert query_inputs.shape[0] == 1, 'only one input row supported currently'
+        input_row = query_inputs.flatten()  # one input row only
+
+        self.table_i[self.tmp_i, :] = input_row[:]
+        self.tmp_i += 1
+        if self.tmp_i == self.table_i.shape[0]:
+            self.tmp_i = 0
+
+
+    def query_multiple_rows_OLD(self, query_inputs):
         '''
 
         :param query_inputs:

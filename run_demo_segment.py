@@ -16,7 +16,7 @@ from math import pi
 MAX_HISTORY_LENGTH = 10600000 + 1
 USERNAME = 'intec'
 
-IM_DIM = 64  # 128, # assume square image, this is width & height
+IM_DIM = 64  #64  # 128, # assume square image, this is width & height
 TILES_LAYER_0 = 1  # N where tiled NxN
 IM_PIXELS = IM_DIM * IM_DIM  # assume grayscale
 
@@ -28,7 +28,7 @@ COLOR_ENABLED = False
 
 ENABLE_WEIGHT_BIAS = True
 
-USE_VIDEO_IN = True
+USE_VIDEO_IN = False
 
 
 def get_sensors_params():
@@ -101,8 +101,8 @@ def get_visualizer_params():
         'image_display_secs_fast': 3,
         'waitKey_time_fast': 1,  # 1, 100, 5000
         'image_display_secs_slow': 0,  # 0: every frame
-        'waitKey_time_slow': 1,  # 1, 100, 5000  #
-        'scale_camera_factor': 2,
+        'waitKey_time_slow': 10,  # 1, 100, 5000  #
+        'scale_camera_factor': 1,
         'auto_switch_to_slow_disp_time': None,
         'init_fast': True  # start with "fast" display
     }
@@ -123,8 +123,6 @@ def init_demo():
         'sim_folder_manager': SimFolderManager(get_sim_folder_manager_params())
     }
 
-
-# @profile
 def run_demo(demo_components):
     robot_brain = demo_components['robot_brain']
     robot_sensors = demo_components['robot_sensors']

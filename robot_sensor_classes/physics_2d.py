@@ -2,6 +2,12 @@ import random
 import cv2
 import numpy as np
 import pickle
+import numpy as np
+import cv2
+import pymunk
+import pymunk.util
+from pymunk import Vec2d
+import math, sys, random
 
 
 random.seed(0)
@@ -13,11 +19,78 @@ class Physics2DSensor(object):
         self.image_dim = params['image_dim']
         self.return_type = params['return_type']
 
+        print('image dim:', self.image_dim)
+
+        factor = self.image_dim  / 400.0
+
+        self.num_balls_max = 1
+        self.ball_radius = 50 * factor
+        self.init_velocity_scale = 5 * 30 * factor
+        self.min_steps_between_balls = 50
+        self.mass = 10  #* factor
+        self.gravity = -90 * 10
+
         assert params['return_type'] is np.float32 or params['return_type'] is np.float64
         self.return_type = params['return_type']
 
-    def read_input(self):
+        space = pymunk.Space()
+        space.gravity = (0.0, self.gravity)
 
+        static_body = space.static_body
+        static_lines = [pymunk.Segment(static_body, (0.0, 0.0), (self.image_dim, 0.0), 0.0)]  # ,
+        # pymunk.Segment(static_body, (0.0, 400.0), (0.0, 0.0), 0.0),
+        # pymunk.Segment(static_body, (400.0, 400.0), (400.0, 0.0), 0.0)]
+        for line in static_lines:
+            line.elasticity = 0.95
+            line.friction = 0.0
+        space.add(static_lines)
+
+        self.balls = []
+        self.space = space
+
+        self.steps_to_next_ball = 10
+
+    def read_input(self):
+        self.steps_to_next_ball -= 1
+        if len(self.balls) < self.num_balls_max and self.steps_to_next_ball <= 0:
+            self.steps_to_next_ball = self.min_steps_between_balls
+
+            mass = self.mass
+            radius = self.ball_radius
+            inertia = pymunk.moment_for_circle(mass, 0, radius, (0, 0))
+            body = pymunk.Body(mass, inertia)
+            x = random.randint(1, self.image_dim - 1)
+            body.position = x, self.image_dim - 1
+
+            rand_vel = 1.0 + random.random()
+            if random.random() < 0.5:
+                rand_vel = -rand_vel
+
+            body.velocity = self.init_velocity_scale * rand_vel, 0
+            shape = pymunk.Circle(body, radius, Vec2d(0, 0))
+            shape.elasticity = 0.95
+            self.space.add(body, shape)
+            self.balls.append(shape)
+
+        balls_to_remove = []
+
+        im = 0.1 * np.ones((self.image_dim, self.image_dim), self.return_type)
+
+        for ball in self.balls:
+            if ball.body.position.y < 0:
+                balls_to_remove.append(ball)
+            else:
+                cv2.circle(img=im, center=(int(ball.body.position.x), self.image_dim - int(ball.body.position.y)), radius=int(ball.radius), color=0.7, thickness=-1)
+
+        for ball in balls_to_remove:
+            self.space.remove(ball, ball.body)
+            self.balls.remove(ball)
+
+        self.space.step(1 / 50.0)
+        return im
+
+
+    def read_input_old(self):
 
         im_size = self.image_dim
         circles_diameter_prop_im = [0.1, 0.2, 0.4]

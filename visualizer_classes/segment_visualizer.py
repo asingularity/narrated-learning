@@ -45,10 +45,12 @@ class SegmentVisualizer(object):
             self.toggle_viewer_slow = False
             self.image_display_secs = self.image_display_secs_fast
             self.waitKey_time = self.waitKey_time_fast
+            self.enable_hack_to_display_latest = True
         else:
             self.toggle_viewer_slow = True
             self.image_display_secs = self.image_display_secs_slow
             self.waitKey_time = self.waitKey_time_slow
+            self.enable_hack_to_display_latest = False
 
         self.last_image_display_time = time.time()
 
@@ -67,9 +69,11 @@ class SegmentVisualizer(object):
         cv2.imshow('raycast', resized_im)
 
         # without this, was not always displaying most up to date image
-        for k in range(100):
-            cv2.waitKey(1)
-
+        if self.enable_hack_to_display_latest:
+            for k in range(100):
+                cv2.waitKey(1)
+        else:
+            pass  # cv2.waitKey(1)
 
     def _toggle_with_key_press(self, last_key):
         k = last_key
