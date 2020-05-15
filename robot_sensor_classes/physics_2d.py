@@ -24,7 +24,8 @@ class Physics2DSensor(object):
         factor = self.image_dim  / 400.0
 
         self.num_balls_max = 1
-        self.ball_radius = 50 * factor
+        # TODO should work when ball smaller as well
+        self.ball_radius = 5 * 50 * factor
         self.init_velocity_scale = 5 * 30 * factor
         self.min_steps_between_balls = 50
         self.mass = 10  #* factor
@@ -74,13 +75,13 @@ class Physics2DSensor(object):
 
         balls_to_remove = []
 
-        im = 0.1 * np.ones((self.image_dim, self.image_dim), self.return_type)
+        im = 0.3 * np.ones((self.image_dim, self.image_dim), self.return_type)
 
         for ball in self.balls:
             if ball.body.position.y < 0:
                 balls_to_remove.append(ball)
             else:
-                cv2.circle(img=im, center=(int(ball.body.position.x), self.image_dim - int(ball.body.position.y)), radius=int(ball.radius), color=0.7, thickness=-1)
+                cv2.circle(img=im, center=(int(ball.body.position.x), self.image_dim - int(ball.body.position.y)), radius=int(ball.radius), color=0.8, thickness=-1)
 
         for ball in balls_to_remove:
             self.space.remove(ball, ball.body)

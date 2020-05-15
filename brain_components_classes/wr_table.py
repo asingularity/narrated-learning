@@ -25,13 +25,87 @@ class WRTableLimitOneIn(object):
         assert num_q == 1
         self.num_q = num_q  # number of query input rows
 
-        #table_i = np.random.random((num_entries, input_dim)).astype(np.float32)
-        table_i = 0.5 * np.ones((num_entries, input_dim), np.float32)
+        table_i = np.random.random((num_entries, input_dim)).astype(np.float32)
+        # table_i = 0.5 * np.ones((num_entries, input_dim), np.float32)
 
         self.table_i = table_i
         self.all_diffs = np.zeros_like(self.table_i)
 
         self.tmp_i = 0
+
+        # for now, hard-coded p_prob
+        p_sum_in_per_row = 1.0
+        p_num_per_row = 10
+        n_sum_in_per_row = -1.0
+        n_num_per_row = 10
+
+        self.context_mat = np.zeros((num_entries, num_entries), np.float32)
+
+        self.last_match_val = np.zeros(num_entries, np.float32)
+
+        for k in range(num_entries):
+            p_per_in = p_sum_in_per_row / p_num_per_row  # assume evenly distributed
+            n_per_in = n_sum_in_per_row / n_num_per_row  # assume evenly distributed
+
+            rand_indices = np.random.permutation(num_entries)
+            p_in_indices = rand_indices[0:p_num_per_row]
+            n_in_indces = rand_indices[p_num_per_row:p_num_per_row+n_num_per_row]
+            self.context_mat[k, p_in_indices] = p_per_in  # pre: column indices, post: row index
+            self.context_mat[k, n_in_indces] = n_per_in  # pre: column indices, post: row index
+        print(np.amin(self.context_mat), np.amax(self.context_mat))
+        # exit(1)
+
+    def query_multiple_rows(self, query_inputs):
+        assert query_inputs.shape[0] == 1, 'only one input row supported currently'
+        input_row = query_inputs.flatten()  # one input row only
+
+        # find match for all rows
+        self.all_diffs[:, :] = self.table_i - input_row  # half the time
+        self.all_diffs[:, :] = np.abs(self.all_diffs[:, :])  # half the time
+
+        # TODO not the right way to compute match; little variance amongst rows... already high match because ball is so small, they all match background
+        # TODO temporarily, can also make ball 5-10x bigger for test (currently 50 * factor)
+
+        match_val = 1.0 - np.mean(self.all_diffs, axis=1)  # num_entries
+        context_in = np.dot(self.context_mat, self.last_match_val)
+
+        # TODO why is this necessary?? blows up otherwise why?
+        # TODO some normalization of context or something else...
+        # TODO add in learning of prediction context as well
+
+        # print('///', np.amin(self.all_diffs), np.amax(self.all_diffs), np.amin(match_val), np.amax(match_val))
+        learning_rate = 0.1 * context_in
+        # print('****', np.amin(context_in), np.amax(context_in))
+        keep_rate = 1.0 - learning_rate
+
+        tmp1 = learning_rate[:, np.newaxis]
+        tmp2 = input_row[np.newaxis, :]
+        term_1 = np.dot(tmp1, tmp2)  # (1200, 16384)
+        term_2 = np.multiply(keep_rate[:, np.newaxis], self.table_i)  # (1200, 16384)
+
+        self.table_i = term_1 + term_2
+
+        tmp3 = np.sum(self.table_i, 1)[:, np.newaxis] + 1e-9
+        #print(tmp3.shape)
+
+        self.table_i = self.table_i * 1.0 / tmp3
+
+        #self.table_i[self.tmp_i, :] = input_row[:]
+        #self.tmp_i += 1
+        #if self.tmp_i == self.table_i.shape[0]:
+        #    self.tmp_i = 0
+
+        self.last_match_val[:] = match_val[:]
+
+
+    def query_mulitple_rows_test(self, query_inputs):
+        assert query_inputs.shape[0] == 1, 'only one input row supported currently'
+        input_row = query_inputs.flatten()  # one input row only
+
+        self.table_i[self.tmp_i, :] = input_row[:]
+        self.tmp_i += 1
+        if self.tmp_i == self.table_i.shape[0]:
+            self.tmp_i = 0
 
     def _init_num_query_inputs(self, num_query_inputs):
         '''
@@ -55,18 +129,6 @@ class WRTableLimitOneIn(object):
 
         self.all_diffs = np.zeros((self.num_entries, self.input_dim), np.float32)
         # (1200, 256, 1024)
-
-    # @profile
-
-    def query_multiple_rows(self, query_inputs):
-        assert query_inputs.shape[0] == 1, 'only one input row supported currently'
-        input_row = query_inputs.flatten()  # one input row only
-
-        self.table_i[self.tmp_i, :] = input_row[:]
-        self.tmp_i += 1
-        if self.tmp_i == self.table_i.shape[0]:
-            self.tmp_i = 0
-
 
     def query_multiple_rows_OLD(self, query_inputs):
         '''
@@ -173,7 +235,6 @@ class WRTableLimitOneIn(object):
                 term_2 = np.multiply(keep_rate[:, np.newaxis], self.table_i)  # (1200, 16384)
 
                 self.table_i = term_1 + term_2
-
 
     def post_init(self):
         pass

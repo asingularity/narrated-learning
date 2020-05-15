@@ -98,10 +98,10 @@ def get_visualizer_params():
     params = {
         'color_enabled': COLOR_ENABLED,
         'fps_display_interval': 6,
-        'image_display_secs_fast': 3,
+        'image_display_secs_fast': 1,
         'waitKey_time_fast': 1,  # 1, 100, 5000
         'image_display_secs_slow': 0,  # 0: every frame
-        'waitKey_time_slow': 10,  # 1, 100, 5000  #
+        'waitKey_time_slow': 100,  # 1, 100, 5000  #
         'scale_camera_factor': 1,
         'auto_switch_to_slow_disp_time': None,
         'init_fast': True  # start with "fast" display

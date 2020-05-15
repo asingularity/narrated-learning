@@ -316,8 +316,8 @@ class SimplePredictionTiles(object):
         cuda_table = self.table
 
         rows = self._collapse_binned_columns_to_pixels(cuda_table.table_i, num_bins_per_pixel=self.num_bins_per_pixel)
-        print('***', np.amin(rows), np.amax(rows))
-        print('---', np.amin(cuda_table.table_i), np.amax(cuda_table.table_i))
+        #print('***', np.amin(rows), np.amax(rows))
+        #print('---', np.amin(cuda_table.table_i), np.amax(cuda_table.table_i))
         tile_r_c = int(sqrt(rows.shape[1]))
 
         table_im = np.zeros((N * tile_r_c + N * 1, N * tile_r_c + N * 1)) + 0.5
