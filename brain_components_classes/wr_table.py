@@ -35,9 +35,9 @@ class WRTableLimitOneIn(object):
 
         # for now, hard-coded p_prob
         p_sum_in_per_row = 1.0
-        p_num_per_row = 5
+        p_num_per_row = 10
         n_sum_in_per_row = -1.0
-        n_num_per_row = 5
+        n_num_per_row = 10
 
         self.context_mat = np.zeros((num_entries, num_entries), np.float32)
 
