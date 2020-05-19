@@ -127,6 +127,19 @@ class SimplePredictionTiles(object):
         self.printed_init_step = False
         self.last_select_im_data = None
 
+        # priming idea variables
+        # self.last_raycast_image = None
+        # self.offset_r_c_range = np.array([[0.1, 0.1],
+        #                                  [0.1, 0.2],
+        #                                  [0.1, 0.4],
+        #                                  [0.2, 0.1],
+        #                                  [0.2, 0.2],
+        #                                  [0.2, 0.4],
+        #                                  [0.4, 0.1],
+        #                                  [0.4, 0.2],
+        #                                  [0.4, 0.4]])  # in unit: proportion of image
+
+
     def step(self, raycast_image, input_state, input_x_y_theta, goal_context_state_learning, goal_context_state_task, last_motor_command):
         '''
 
@@ -173,6 +186,9 @@ class SimplePredictionTiles(object):
 
         if self.t > 3:
             self.printed_init_step = True
+
+
+        self.last_raycast_image = raycast_image.copy()
 
         self.t += 1
         return None

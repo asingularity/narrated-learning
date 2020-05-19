@@ -20,7 +20,7 @@ IM_DIM = 64  #64  # 128, # assume square image, this is width & height
 TILES_LAYER_0 = 1  # N where tiled NxN
 IM_PIXELS = IM_DIM * IM_DIM  # assume grayscale
 
-TABLE_ENTRIES = 10 * 10  # 20 * 20
+TABLE_ENTRIES = 4 * 4  # 10 * 10  # 20 * 20
 TABLE_LEARN_TIME = 3000  # 3000; TABLE_ENTRIES
 PREDICTION_LEARN_TIME = TABLE_ENTRIES * 160
 
