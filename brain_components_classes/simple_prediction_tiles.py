@@ -269,9 +269,15 @@ class SimplePredictionTiles(object):
 
         bins = np.linspace(0, 1 + 1e-9, self.num_bins_per_pixel + 1)
 
+        # max val for display:
         max_index = np.argmax(tmp, axis=1)
         max_vals = bins[max_index]
-        # for now, take max value for display
+
+        # weighted mean val for display:
+        # tmp1 = np.multiply(tmp, bins[np.newaxis, 0:num_bins_per_pixel])
+        # tmp2 = np.sum(tmp1, axis=1)  # 65536
+        # tmp3 = np.divide(tmp2, np.sum(tmp, axis=1))
+        # max_vals = tmp3
 
         arr = max_vals.reshape(num_rows, num_pixels)
 

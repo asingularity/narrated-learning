@@ -1,6 +1,7 @@
 
 import time
 import cv2
+from math import sqrt
 import random
 import numpy as np
 import pycuda.driver as cuda
@@ -12,6 +13,9 @@ import skcuda.linalg as linalg
 import skcuda.misc as misc
 from cuda_dist_query import CudaTable
 from utils.fps_counter import FPSCounter
+import SimpSOM as sps
+
+
 np.set_printoptions(threshold=np.inf, linewidth=400)
 
 
@@ -47,7 +51,67 @@ class WRTableLimitOneIn(object):
         self.t = 0
         self.active_last = None
 
+        self.tmp_i = 0  # for _simple_add_to_table
+
+
     def query_multiple_rows(self, query_inputs):
+        assert query_inputs.shape[0] == 1, 'only one input row supported currently'
+        input_row = query_inputs.flatten()  # one input row only
+
+        self._simple_add_to_table(input_row=input_row)
+
+    def query_multiple_rows_SOM(self, query_inputs):
+        # try implementing a SOM directly
+        assert query_inputs.shape[0] == 1, 'only one input row supported currently'
+        input_row = query_inputs.flatten()  # one input row only
+
+
+        if 1:
+            # PUT THIS STUFF IN INIT!!!!!!
+            # som training
+            self.som_train_frames = 2000
+            self.som_dataset = np.zeros((self.som_train_frames, self.input_dim))
+            self.som_data_t = 0  # how many frames we have collected
+
+            self.som_learn_rate = 0.01
+            self.som_epochs = 5000
+
+        if 0:
+            if self.som_data_t < self.som_train_frames:
+                self.som_dataset[self.som_data_t, :] = input_row[:]
+                if self.som_data_t < self.num_entries:
+                    self.table_i[self.som_data_t, :] = input_row[:]  # just for info debug
+            elif self.som_data_t == self.som_train_frames:
+                self.som_net = sps.somNet(int(sqrt(self.num_entries)), int(sqrt(self.num_entries)), self.som_dataset, PBC=True, n_jobs=4)
+                self.som_net.train(self.som_learn_rate, self.som_epochs)
+                self.som_net.save()
+        else:
+            self.table_i = np.load('somNet_trained.npy')
+
+        self.som_data_t += 1
+
+        # first use table to collect sample data to train som
+
+        # then train som, save weights
+
+        # then, load weights into table
+
+
+    def _save_som_to_file(self):
+        '''
+
+        :return:
+        '''
+        pass
+
+    def _load_som_from_file(self):
+        '''
+
+        :return:
+        '''
+        pass
+
+    def query_multiple_rows_342(self, query_inputs):
         assert query_inputs.shape[0] == 1, 'only one input row supported currently'
         input_row = query_inputs.flatten()  # one input row only
 
@@ -68,8 +132,8 @@ class WRTableLimitOneIn(object):
         # if input was 1 for an element:
         #   largest row learns per element, all other unlearn
 
-        input_zero_ind = np.nonzero(input_row<0.5)[0]
-        input_one_ind = np.nonzero(input_row>0.5)[0]
+        input_zero_ind = np.nonzero(input_row < 0.5)[0]
+        input_one_ind = np.nonzero(input_row > 0.5)[0]
 
         assert len(input_zero_ind) + len(input_one_ind) == len(input_row)
 
@@ -77,23 +141,29 @@ class WRTableLimitOneIn(object):
         input_zero_ind = input_zero_ind[np.newaxis, :]
         input_one_ind = input_one_ind[np.newaxis, :]
 
-        lr = 0.01
+        lr = 0.1 # 0.01
 
-        self.table_i[ind_top_k, input_zero_ind] = self.table_i[ind_top_k, input_zero_ind] - lr * self.table_i[ind_top_k, input_zero_ind]
+        #inv_match = 1.0 - match_val
+        inv_match = np.ones(self.num_entries)
+        #inv_match = match_val
+
+        self.table_i[ind_top_k, input_zero_ind] = self.table_i[ind_top_k, input_zero_ind] - lr * np.multiply(self.table_i[ind_top_k, input_zero_ind], inv_match[ind_top_k])
 
         top_k_rows_one_in = self.table_i[ind_top_k, input_one_ind]
         max_row_per_element_of_one_in = ind_top_k[np.argmax(top_k_rows_one_in, axis=0)].flatten()  # column vector
 
-        #debug_print({'top_k_rows_one_in': top_k_rows_one_in.shape,  # (4, 4096)
-        #             'max_row_per_element_of_one_in': max_row_per_element_of_one_in.shape})  # (4096,)
+        self.table_i[ind_top_k, input_one_ind] = self.table_i[ind_top_k, input_one_ind] - lr * np.multiply(self.table_i[ind_top_k, input_one_ind], inv_match[ind_top_k])
 
-        self.table_i[ind_top_k, input_one_ind] = self.table_i[ind_top_k, input_one_ind] - lr * self.table_i[ind_top_k, input_one_ind]
+        # BELOW WOULD NEED UPDATE TO USE inv_match correctly! print(self.table_i[max_row_per_element_of_one_in, input_one_ind].shape)
+
         self.table_i[max_row_per_element_of_one_in, input_one_ind] = self.table_i[max_row_per_element_of_one_in, input_one_ind] + 2 * lr * self.table_i[max_row_per_element_of_one_in, input_one_ind]
+
+        self.table_i[self.table_i < 0] = 0
+        self.table_i[self.table_i > 1] = 1
 
         #drift = 0.0000001 * np.random.random((self.table_i.shape[0], self.table_i.shape[1]))
         #self.table_i = self.table_i + drift
-        self.table_i[self.table_i < 0] = 0
-        self.table_i[self.table_i > 1] = 1
+
 
     def query_multiple_rows_asd(self, query_inputs):
         # sum_appr = np.sum(self.table_i[ind_by_match[0:top_k], :], axis=0)
