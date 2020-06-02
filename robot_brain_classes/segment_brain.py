@@ -1,7 +1,7 @@
 
 
 import numpy as np
-from brain_components import WinRegionTiles, SimpleWeightTiles, SimplePredictionTiles
+from brain_components import WinRegionTiles, SimpleWeightTiles, SimplePredictionTiles, DynamicPredictor
 
 
 class SegmentBrain(object):
@@ -17,19 +17,11 @@ class SegmentBrain(object):
 
         dim = params['input_dim']
 
-        self.predictor_ensemble = SimplePredictionTiles(params={
-            'color_enabled': params['color_enabled'],
-            'enable_weight_bias': params['enable_weight_bias'],
+        self.predictor_ensemble = DynamicPredictor(params={
             'input_dim': dim,
-            'goal_context_dim': None,
-            'enable_learning': params['enable_learning'],
-            'tile_entries_per_layer': params['tile_entries_per_layer'],
-            'table_learn_time_per_layer': params['table_learn_time_per_layer'],
-            'prediction_learn_time_per_layer': params['prediction_learn_time_per_layer'],
-            'tiles_per_layer_NxN': params['tiles_per_layer_NxN'],
-            'pre_init_goal_contexts': None,  # this matches _get_context_for_goal_state
+            'color_enabled': params['color_enabled'],
+            'ims_scale_pixels': params['table_ims_scale_pixels'],
             'max_history_length': params['max_history_length'],  # so it can check that learn time ranges are within!
-            'table_ims_scale_pixels': params['table_ims_scale_pixels']
         })
 
     # @profile
@@ -59,3 +51,20 @@ class SegmentBrain(object):
     def get_table_ims(self):
         ims_lists = self.predictor_ensemble.get_table_ims()
         return ims_lists
+
+    def _archived_code(self):
+        if False:
+            self.predictor_ensemble = SimplePredictionTiles(params={
+                'color_enabled': params['color_enabled'],
+                'enable_weight_bias': params['enable_weight_bias'],
+                'input_dim': dim,
+                'goal_context_dim': None,
+                'enable_learning': params['enable_learning'],
+                'tile_entries_per_layer': params['tile_entries_per_layer'],
+                'table_learn_time_per_layer': params['table_learn_time_per_layer'],
+                'prediction_learn_time_per_layer': params['prediction_learn_time_per_layer'],
+                'tiles_per_layer_NxN': params['tiles_per_layer_NxN'],
+                'pre_init_goal_contexts': None,  # this matches _get_context_for_goal_state
+                'max_history_length': params['max_history_length'],  # so it can check that learn time ranges are within!
+                'table_ims_scale_pixels': params['table_ims_scale_pixels']
+            })

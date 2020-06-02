@@ -9,3 +9,4 @@ from brain_components_classes.new_shared_tiles import NewSharedTiles
 from brain_components_classes.simple_weight_tiles import SimpleWeightTiles
 from brain_components_classes.win_region_tiles import WinRegionTiles
 from brain_components_classes.simple_prediction_tiles import SimplePredictionTiles
+from brain_components_classes.dynamic import DynamicPredictor
