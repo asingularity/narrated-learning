@@ -16,13 +16,13 @@ from math import pi
 MAX_HISTORY_LENGTH = 10600000 + 1
 USERNAME = 'intec'
 
-IM_DIM = 32  #64  # 128, # assume square image, this is width & height
-TILES_LAYER_0 = 1  # N where tiled NxN
-IM_PIXELS = IM_DIM * IM_DIM  # assume grayscale
-
-TABLE_ENTRIES = 10 * 10  # 4 * 4  # 10 * 10  # 20 * 20
-TABLE_LEARN_TIME = 3000  # 3000; TABLE_ENTRIES
-PREDICTION_LEARN_TIME = TABLE_ENTRIES * 160
+IM_DIM = 32  # pixels, width & height
+TILE_DIM = 5  # pixels, width & height
+TILES_OFFSET = 2  # pixels
+PREDICT_RADIUS = 5  # pixels
+ROWS_PER_TILE = 100
+TABLE_LEARN_TIME = 10000
+PREDICTION_LEARN_TIME = 10000
 
 COLOR_ENABLED = False
 
@@ -31,6 +31,7 @@ ENABLE_WEIGHT_BIAS = True
 USE_VIDEO_IN = False
 
 
+# uses: IM_DIM
 def get_sensors_params():
     params_video_playback = {
         'image_dim': IM_DIM,  # sensor class has to figure out subset & scale to achieve this dim
@@ -67,28 +68,19 @@ def get_sim_folder_manager_params():
 
 def get_brain_params():
 
-    if COLOR_ENABLED:
-        input_dim = IM_PIXELS * 3 / (TILES_LAYER_0 * TILES_LAYER_0)  # (32 * 32 * 3.) / (4 * 4.) = 192.0
-    else:
-        input_dim = IM_PIXELS / (TILES_LAYER_0 * TILES_LAYER_0)
-
-    input_dim = int(input_dim)
-
     params = {
         # ************ general ************
         'max_history_length': MAX_HISTORY_LENGTH,
-        'enable_learning': True,
+        'ims_scale_pixels': 1200,  # 2000 for 4k monitor, 1600 for laptop
 
-        # ************ SimpleWeightTiles ************
-        'color_enabled': COLOR_ENABLED,
-        'enable_weight_bias': ENABLE_WEIGHT_BIAS,
-        'use_multi_layer': True,
-        'tile_entries_per_layer': [TABLE_ENTRIES],
-        'table_learn_time_per_layer': [TABLE_LEARN_TIME],
-        'prediction_learn_time_per_layer': [PREDICTION_LEARN_TIME],
-        'tiles_per_layer_NxN': [TILES_LAYER_0],  # N where tiled NxN
-        'input_dim': input_dim,
-        'table_ims_scale_pixels': 1200  # 2000 for 4k monitor, 1600 for laptop
+        # ************ DynamicTiles ************
+        'image_dim_NxN_pixels': IM_DIM,
+        'tile_dim_NxN_pixels': TILE_DIM,
+        'tiles_offset_N_pixels': TILES_OFFSET,
+        'prediction_radius_N_pixels': PREDICT_RADIUS,
+        'rows_per_tile': ROWS_PER_TILE,
+        'table_learn_time': TABLE_LEARN_TIME,
+        'prediction_learn_time': PREDICTION_LEARN_TIME,
             }
 
     return params

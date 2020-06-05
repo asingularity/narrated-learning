@@ -2,6 +2,7 @@
 
 import numpy as np
 from brain_components import WinRegionTiles, SimpleWeightTiles, SimplePredictionTiles, DynamicPredictor
+from brain_components_classes.dynamic_tiles import DynamicTiles
 
 
 class SegmentBrain(object):
@@ -15,13 +16,16 @@ class SegmentBrain(object):
         :param params:
         '''
 
-        dim = params['input_dim']
-
-        self.predictor_ensemble = DynamicPredictor(params={
-            'input_dim': dim,
-            'color_enabled': params['color_enabled'],
-            'ims_scale_pixels': params['table_ims_scale_pixels'],
-            'max_history_length': params['max_history_length'],  # so it can check that learn time ranges are within!
+        self.predictor_ensemble = DynamicTiles(params={
+            'max_history_length': params['max_history_length'],
+            'ims_scale_pixels': params['ims_scale_pixels'],
+            'image_dim_NxN_pixels': params['image_dim_NxN_pixels'],  # 32,
+            'tile_dim_NxN_pixels': params['tile_dim_NxN_pixels'],
+            'tiles_offset_N_pixels': params['tiles_offset_N_pixels'],
+            'prediction_radius_N_pixels': params['prediction_radius_N_pixels'],
+            'rows_per_tile': params['rows_per_tile'],
+            'table_learn_time': params['table_learn_time'],
+            'prediction_learn_time': params['prediction_learn_time']
         })
 
     # @profile
@@ -54,6 +58,13 @@ class SegmentBrain(object):
 
     def _archived_code(self):
         if False:
+            self.predictor_ensemble = DynamicPredictor(params={
+                'input_dim': dim,
+                'color_enabled': params['color_enabled'],
+                'ims_scale_pixels': params['table_ims_scale_pixels'],
+                'max_history_length': params['max_history_length'],  # so it can check that learn time ranges are within!
+            })
+
             self.predictor_ensemble = SimplePredictionTiles(params={
                 'color_enabled': params['color_enabled'],
                 'enable_weight_bias': params['enable_weight_bias'],
