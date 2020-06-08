@@ -20,9 +20,10 @@ IM_DIM = 32  # pixels, width & height
 TILE_DIM = 5  # pixels, width & height
 TILES_OFFSET = 2  # pixels
 PREDICT_RADIUS = 5  # pixels
-ROWS_PER_TILE = 100
-TABLE_LEARN_TIME = 10000
-PREDICTION_LEARN_TIME = 10000
+PREDICT_TAU_LIST = [1, 2]  # time steps
+ROWS_PER_TILE = 1000
+TABLE_LEARN_TIME = 2000
+PREDICTION_LEARN_TIME = 20000
 
 COLOR_ENABLED = False
 
@@ -78,6 +79,7 @@ def get_brain_params():
         'tile_dim_NxN_pixels': TILE_DIM,
         'tiles_offset_N_pixels': TILES_OFFSET,
         'prediction_radius_N_pixels': PREDICT_RADIUS,
+        'prediction_tau_list': PREDICT_TAU_LIST,
         'rows_per_tile': ROWS_PER_TILE,
         'table_learn_time': TABLE_LEARN_TIME,
         'prediction_learn_time': PREDICTION_LEARN_TIME,

@@ -39,6 +39,7 @@ class DynamicTiles(object):
         self.table_learn_time = params['table_learn_time']  # seq-nn-table learn time
         self.prediction_learn_time = params['prediction_learn_time']
         self.prediction_radius_N_pixels = params['prediction_radius_N_pixels']  # farthest that a tile should predict another tile, spatially
+        self.prediction_tau_list = params['prediction_tau_list']
 
         # self.num_bins_per_pixel = 10
         # self.tile_input_dim = self.tile_dim_NxN_pixels * self.tile_dim_NxN_pixels * self.num_bins_per_pixel
@@ -172,9 +173,59 @@ class DynamicTiles(object):
         print()
 
         # there is a more efficient way to store
-        # TODO prediction weights storage should be optimized, as it is sparse, as computed above; within a radius
+        # prediction weights storage should be optimized, as it is sparse, as computed above; within a radius
         # otherwise this matrix is huge
         # self.predict_weights = np.zeros((num_tiles * self.rows_per_tile, num_tiles * self.rows_per_tile), np.float)
+
+        # tile_indices_within_radius: [num_tiles, num_tiles]: [from, to]
+
+        self.win_row_history = StatesLimitedHistory(params={'max_delay': np.amax(np.array(self.prediction_tau_list)),
+                                                            'states_dim_list': [self.num_tiles]})
+
+
+        return
+
+        num_tile_projections_per_tile = np.sum(tiles_indices_within_radius, axis=1).astype(np.int)  # tiles, not rows
+        max_num_tile_projections = np.amax(num_tile_projections_per_tile) + 1  # tiles, not rows
+        # why +1 above? we are designating a throwaway tile projection 0 for all to-indices that don't exist for a tile (i.e. from-tiles that are on the edges)
+
+        self.max_num_tile_projections = max_num_tile_projections
+
+        for tile_from in range(num_tiles):
+            nt = 0
+            for tile_to in range(num_tiles):
+                # this is not gonna work; we've lost the geometric information here
+                if tiles_indices_within_radius[tile_from, tile_to] > 0.5:
+                    projection_indices[tile_from, nt] = tile_to
+                    projection_weights[tile_from, nt] = 0.0
+                    nt += 1
+
+        # for tau in self.prediction_tau_list:
+
+        projection_indices = np.zeros((num_tiles, max_num_projections), np.int)  # from, to (or zero/nan) - per tile
+
+        if False:
+            # NOT RIGHT below -> predictions are from all rows of from-tile to all rows of to-tiles
+            projection_weights = np.zeros((num_tiles * self.rows_per_tile, max_num_projections * self.rows_per_tile), np.float)  # from, to (or zero/nan) - per tile - row
+
+            for tile_from in range(num_tiles):
+                nt = 0
+                for tile_to in range(num_tiles):
+                    if tiles_indices_within_radius[tile_from, tile_to] > 0.5:
+                        projection_indices[tile_from, nt] = tile_to
+                        projection_weights[tile_from, nt] = 0.0
+                        nt += 1
+
+                assert nt == num_projections_per_tile[tile_from]  # consistency check
+
+            # self.max_num_projections = max_num_projections  # N, int
+            self.projection_indices = projection_indices  # (num_tiles, N), int
+            # projection weights tables: one per tau value
+            self.projection_weights = {}  # dict of: tau -> (num_tiles, N), float
+            for tau in self.prediction_tau_list:
+                self.projection_weights[tau] = projection_weights.copy()
+
+            self.num_projections_per_tile = num_projections_per_tile  # (num_tiles), int
 
     def _verify_tiling(self):
         '''
@@ -288,6 +339,8 @@ class DynamicTiles(object):
         dists, argmin_dists = self.table.query_multiple_rows(query_inputs=tile_input_states_mat)
         I_indices = argmin_dists
 
+        self.win_row_history.process_new_states(newest_states_list=[argmin_dists], extra_data_list=[None])
+
         if not self.printed_init_step:
             print('    dists.shape: ', dists.shape)
             print('    dists.dtype: ', dists.dtype)
@@ -304,7 +357,10 @@ class DynamicTiles(object):
                               input_x_y_theta=None)
 
         elif self.table_learn_time < self.t < self.prediction_learn_time:
-            pass
+            self._learn_prediction(cuda_table=self.table,
+                                   dists=dists,
+                                   argmin_dists=argmin_dists,
+                                   tile_input_states_mat=tile_input_states_mat)
         else:
             pass
 
@@ -403,6 +459,94 @@ class DynamicTiles(object):
                 print('    num row swaps:', self.num_row_swaps)
                 self.num_row_swaps  = 0
                 self.last_row_swap_disp = time.time()
+
+    def _learn_prediction(self, cuda_table, dists, argmin_dists, tile_input_states_mat):
+        '''
+
+        num_tiles: 196
+        rows_per_tile: 1000
+
+        :param cuda_table:
+        :param dists: (num_tiles, rows_per_tile)
+        :param argmin_dists: (num_tiles)
+        :param tile_input_states_mat: (num_tiles, tile_input_dim)
+        :return:
+        '''
+
+        # increment / apply learning to all active weights (past -> (tau) -> present)
+
+        # tiles_indices_within_radius  # binary matrix, [num_tiles, num_tiles]: (from, to)
+
+        # weight matrix is something like:
+        #   a = np.random.random((rows_per_tile, max_num_projections, rows_per_tile))
+        #   (1000, 21, 1000)
+        #       or
+        #   a = np.random.random((rows_per_tile, max_num_projections * rows_per_tile))
+        #   (1000, 21 * 1000)
+
+        return
+
+        learn_rate_0 = 0.01
+        keep_rate_0 = 1.0 - learn_rate_0
+
+        learn_rate_1 = 0.02
+        keep_rate_1 = 1.0 - learn_rate_1
+
+        for tau in self.prediction_tau_list:
+
+            win_row_per_tile_now = argmin_dists  # (num_tiles)
+            win_row_per_tile_past = self.win_row_history.get_state(state_index=0, delay=tau)  # (num_tiles)  # todo use states history
+            W = self.predict_weights[tau]  # rows_per_tile, max_num_projections * rows_per_tile
+
+            # parallelize this loop in cython
+            for from_tile in range(1, self.num_tiles):  # throwaway tile 0
+
+                # to tiles is list of tiles this one projects to
+                # each index is a specific geometric location
+                # 0 index: we define to be: no tile exists for it on the grid
+                #   meaning: max num projections is actually 22 (N+1), given the throwaway 0
+
+                to_tiles = self.predict_tile_indices[from_tile, :]
+
+                W = learn_rate_0 * 0.0 + keep_rate_0 * W
+                # all rows unlearn
+
+                # winning rows learn double
+                #   indexing: [0 + (win), 1000 + (win), 2000 + (win), ...]
+                tmp_to = self.rows_per_tile * np.arange(self.max_num_tile_projections) + win_row_per_tile_now[to_tiles]
+                W[win_row_per_tile_past[from_tile], tmp_to] = learn_rate_1 * 1.0 + keep_rate_1 * W[win_row_per_tile_past[from_tile], tmp_to]
+                # assumption for this to work with throwaway 0:
+                # win_row_per_tile_past[0, :], win_row_per_tile_now[0] = 0 always, so W[0, :] and W[:, 0] is throwaway
+                # set max_num_projections to N+1;
+
+
+        return
+
+        # self.max_num_projections  # int
+        # self.projection_indices   # (num_tiles, max_num_projections), int
+        # self.projection_weights   # { tau : (num_tiles, max_num_projections), float }
+        # self.num_projections_per_tile   # (num_tiles), int
+
+        print(self.max_num_projections)
+
+        learn_rate = 0.001
+        keep_rate = 1.0 - learn_rate
+
+        for tau in self.prediction_tau_list:
+            # adjust projection weights
+            W = self.projection_weights[tau]
+
+            # tile_active_or_not_past: [0, 0, 0, 0, 1, 1, 0, 0, 0, ...]
+            # tile_indices_active_past: [4, 5, 19, 22, ...]
+            #   (tau ago)
+            # tile_active_or_not_now: [0, 0, 0, 1, 0, 0, 0, 1, 0, 0, ...]
+            # tile_indices_active_now: [3, 7, 34, ...]
+            #   (current time step)
+
+            # tmp_indices_active_now =
+
+            # W[tile_indices_active_past, tmp_indices_active_now] = learn_rate * 1.0 + keep_rate * W[tile_indices_active_past, tmp_indices_active_now]
+
 
     def get_table_ims(self):
         '''
