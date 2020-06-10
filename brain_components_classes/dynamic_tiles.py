@@ -99,7 +99,53 @@ class DynamicTiles(object):
         tiles_c_start = np.zeros(num_tiles, np.int)
         tiles_c_end = np.zeros(num_tiles, np.int)
 
-        tiles_indices_within_radius = np.zeros((num_tiles, num_tiles), np.int)  # binary matrix: [from, to], is there a predictive projection?
+        # instead of tiles_indices_within_radius, construct an x-y relative index map of neighbor indices that a tile will predict
+
+        ref_r = (num_tiles_NxN / 2)
+        ref_c = (num_tiles_NxN / 2)
+
+        ref_r_start = ref_r * self.tiles_offset_N_pixels
+        ref_r_end = ref_r_start + self.tile_dim_NxN_pixels
+
+        ref_c_start = ref_c * self.tiles_offset_N_pixels
+        ref_c_end = ref_c_start + self.tile_dim_NxN_pixels
+
+        ref_r_mid = (ref_r_start + ref_r_end) * 0.5
+        ref_c_mid = (ref_c_start + ref_c_end) * 0.5
+        print()
+        print('computing prediction map...')
+
+        rel_r_list = []
+        rel_c_list = []
+
+        for tile_r in range(num_tiles_NxN):
+            for tile_c in range(num_tiles_NxN):
+                r_start = tile_r * self.tiles_offset_N_pixels
+                r_end = r_start + self.tile_dim_NxN_pixels
+
+                c_start = tile_c * self.tiles_offset_N_pixels
+                c_end = c_start + self.tile_dim_NxN_pixels
+
+                r0 = (r_start + r_end) * 0.5
+                c0 = (c_start + c_end) * 0.5
+
+                dst = sqrt(pow(r0 - ref_r_mid, 2) + pow(c0 - ref_c_mid, 2))
+
+                rel_r = int(ref_r - tile_r)
+                rel_c = int(ref_c - tile_c)
+
+                if dst <= self.prediction_radius_N_pixels:
+                    print('    ', rel_r, rel_c)
+                    rel_r_list.append(rel_r)
+                    rel_c_list.append(rel_c)
+
+        print()
+
+        rel_r = np.array(rel_r_list)
+        rel_c = np.array(rel_c_list)
+
+        tile_ind_by_r_c = np.zeros((num_tiles_NxN, num_tiles_NxN), np.int)
+        r_c_by_tile_ind = np.zeros((num_tiles, 2), np.int)
 
         for tile_r in range(num_tiles_NxN):
             for tile_c in range(num_tiles_NxN):
@@ -127,32 +173,15 @@ class DynamicTiles(object):
                 im_c_indices[tile_index, :] = np.array(c_indices)
 
                 # predictive connections
-                for tile_r_to in range(num_tiles_NxN):
-                    for tile_c_to in range(num_tiles_NxN):
 
-                        r0 = (r_start + r_end) * 0.5
-                        c0 = (c_start + c_end) * 0.5
+                r_c_by_tile_ind[tile_index, 0] = tile_r
+                r_c_by_tile_ind[tile_index, 1] = tile_c
 
-                        r_start_1 = tile_r_to * self.tiles_offset_N_pixels
-                        r_end_1 = r_start_1 + self.tile_dim_NxN_pixels
-
-                        c_start_1 = tile_c_to * self.tiles_offset_N_pixels
-                        c_end_1 = c_start_1 + self.tile_dim_NxN_pixels
-
-                        r1 = (r_start_1 + r_end_1) * 0.5
-                        c1 = (c_start_1 + c_end_1) * 0.5
-
-                        dst = sqrt(pow(r0 - r1, 2) + pow(c0 - c1 , 2))
-
-                        if dst <= self.prediction_radius_N_pixels:
-                            tile_index_to = tile_r_to * num_tiles_NxN + tile_c_to
-                            tiles_indices_within_radius[tile_index, tile_index_to] = 1
+                tile_ind_by_r_c[tile_r, tile_c] = tile_index
 
         self.num_tiles_NxN = num_tiles_NxN
         self.num_tiles = num_tiles
         self.num_pixels_per_tile = num_pixels_per_tile
-
-        self.tiles_indices_within_radius = tiles_indices_within_radius
 
         self.tiles_r_start = tiles_r_start
         self.tiles_r_end = tiles_r_end
@@ -161,7 +190,6 @@ class DynamicTiles(object):
 
         self.im_r_indices = im_r_indices
         self.im_c_indices = im_c_indices
-
 
         print()
         print('*** _compute_tiling: ***')
@@ -172,60 +200,59 @@ class DynamicTiles(object):
         print('    ', 'num_tiles:', self.num_tiles)
         print()
 
+        # r_c_by_tile_ind: (num_tiles, 2): [tile_index][0:r, 1:c]
+        # tile_ind_by_r_c: (num_tiles_NxN, num_tiles_NxN): tile index
+        # rel_r: length-k of relative r indices
+        # rel_c: length-k of relative c indices
+
+        self.num_predicted_tiles = rel_r.shape[0]  # number of predicted tiles per tile
+        self.predict_tile_indices = np.zeros((num_tiles, self.num_predicted_tiles), np.int)
+
+        from_tile_list = []  # only tiles with "complete" projections are "from"-tiles, to avoid complexity later (for now); so i.e.
+        #                      tiles on edges cannot be "from" tiles since they can't make predictions off-image
+
+        for tile_index in range(num_tiles):
+            tile_r = r_c_by_tile_ind[tile_index, 0]
+            tile_c = r_c_by_tile_ind[tile_index, 1]
+
+            valid = True
+            for k in range(rel_r.shape[0]):
+                rel_r_n = rel_r[k]
+                rel_c_n = rel_c[k]
+
+                neighbor_r = tile_r - rel_r_n
+                neighbor_c = tile_c - rel_c_n
+
+                if 0 <= neighbor_r <= num_tiles_NxN - 1 and 0 <= neighbor_c <= num_tiles_NxN - 1:
+                    self.predict_tile_indices[tile_index, k] = tile_ind_by_r_c[neighbor_r, neighbor_c]
+                else:
+                    # instead of this, this tile should not be a "from" tile for prediction (since it has an incomplete set of "to" tiles) - as simple solution
+                    # self.predict_tile_indices[tile_index, k] = num_tiles  # index for "non-existing neigbor for this geometric position" i.e. beyond edge of image
+
+                    valid = False
+
+            if valid:
+                from_tile_list.append(tile_index)
+
+        self.valid_from_tiles = np.array(from_tile_list)
+
         # there is a more efficient way to store
         # prediction weights storage should be optimized, as it is sparse, as computed above; within a radius
         # otherwise this matrix is huge
         # self.predict_weights = np.zeros((num_tiles * self.rows_per_tile, num_tiles * self.rows_per_tile), np.float)
+        # projection_weights = np.zeros((num_tiles * self.rows_per_tile, max_num_projections * self.rows_per_tile), np.float)  # from, to (or zero/nan) - per tile - row
+        # later we will have to deal with this for non-tiled predictions, necessary for perspective projection input
 
-        # tile_indices_within_radius: [num_tiles, num_tiles]: [from, to]
+        # for now we use one tile of prediction over whole image
+
+        # init prediction weights matrix here for all tau
+        self.predict_w = {}
+        for tau in self.prediction_tau_list:
+            w = np.zeros((self.rows_per_tile, self.num_predicted_tiles * self.rows_per_tile))  # from_row, to_tile * to_row
+            self.predict_w[tau] = w.copy()
 
         self.win_row_history = StatesLimitedHistory(params={'max_delay': np.amax(np.array(self.prediction_tau_list)),
                                                             'states_dim_list': [self.num_tiles]})
-
-
-        return
-
-        num_tile_projections_per_tile = np.sum(tiles_indices_within_radius, axis=1).astype(np.int)  # tiles, not rows
-        max_num_tile_projections = np.amax(num_tile_projections_per_tile) + 1  # tiles, not rows
-        # why +1 above? we are designating a throwaway tile projection 0 for all to-indices that don't exist for a tile (i.e. from-tiles that are on the edges)
-
-        self.max_num_tile_projections = max_num_tile_projections
-
-        for tile_from in range(num_tiles):
-            nt = 0
-            for tile_to in range(num_tiles):
-                # this is not gonna work; we've lost the geometric information here
-                if tiles_indices_within_radius[tile_from, tile_to] > 0.5:
-                    projection_indices[tile_from, nt] = tile_to
-                    projection_weights[tile_from, nt] = 0.0
-                    nt += 1
-
-        # for tau in self.prediction_tau_list:
-
-        projection_indices = np.zeros((num_tiles, max_num_projections), np.int)  # from, to (or zero/nan) - per tile
-
-        if False:
-            # NOT RIGHT below -> predictions are from all rows of from-tile to all rows of to-tiles
-            projection_weights = np.zeros((num_tiles * self.rows_per_tile, max_num_projections * self.rows_per_tile), np.float)  # from, to (or zero/nan) - per tile - row
-
-            for tile_from in range(num_tiles):
-                nt = 0
-                for tile_to in range(num_tiles):
-                    if tiles_indices_within_radius[tile_from, tile_to] > 0.5:
-                        projection_indices[tile_from, nt] = tile_to
-                        projection_weights[tile_from, nt] = 0.0
-                        nt += 1
-
-                assert nt == num_projections_per_tile[tile_from]  # consistency check
-
-            # self.max_num_projections = max_num_projections  # N, int
-            self.projection_indices = projection_indices  # (num_tiles, N), int
-            # projection weights tables: one per tau value
-            self.projection_weights = {}  # dict of: tau -> (num_tiles, N), float
-            for tau in self.prediction_tau_list:
-                self.projection_weights[tau] = projection_weights.copy()
-
-            self.num_projections_per_tile = num_projections_per_tile  # (num_tiles), int
 
     def _verify_tiling(self):
         '''
@@ -242,51 +269,57 @@ class DynamicTiles(object):
         f_scale = float(self.ims_scale_pixels) / float(self.image_dim_NxN_pixels)
 
         num_pairs_to_show = 1  # self.num_tiles
+        #for p_tmp in range(num_pairs_to_show):
+
+        im_to_show = np.zeros((int(self.image_dim_NxN_pixels * f_scale), int(self.image_dim_NxN_pixels * f_scale)), np.float)
+
+        tile_indices = list(np.arange(self.num_tiles))
+
+        for ind in tile_indices:
+            r0 = self.tiles_r_start[ind]
+            r1 = self.tiles_r_end[ind]
+            c0 = self.tiles_c_start[ind]
+            c1 = self.tiles_c_end[ind]
+
+            color_to_use = 0.2  #  + random.random() * 0.2
+            jt = 0  # random.randint(-4, 4)
+            cv2.rectangle(img=im_to_show, pt1=(int(c0 * f_scale) + jt, int(r0 * f_scale) + jt), pt2=(int(c1 * f_scale) + jt, int(r1 * f_scale) + jt), color=color_to_use, thickness=1)
+
+        # tile_index_1 = random.randint(0, self.num_tiles - 1)
+        # tile_index_2 = random.randint(0, self.num_tiles - 1)
+
+        # for ind in [tile_index_1]: #, tile_index_2]:
+
         tile_index_1 = 47
+        ind = tile_index_1
 
-        for p_tmp in range(num_pairs_to_show):
-            im_to_show = np.zeros((int(self.image_dim_NxN_pixels * f_scale), int(self.image_dim_NxN_pixels * f_scale)), np.float)
+        r0 = self.tiles_r_start[ind]
+        r1 = self.tiles_r_end[ind]
+        c0 = self.tiles_c_start[ind]
+        c1 = self.tiles_c_end[ind]
 
-            tile_indices = list(np.arange(self.num_tiles))
+        color_to_use = 0.8
 
-            for ind in tile_indices:
-                r0 = self.tiles_r_start[ind]
-                r1 = self.tiles_r_end[ind]
-                c0 = self.tiles_c_start[ind]
-                c1 = self.tiles_c_end[ind]
+        cv2.rectangle(img=im_to_show, pt1=(int(c0 * f_scale), int(r0 * f_scale)), pt2=(int(c1 * f_scale), int(r1 * f_scale)), color=color_to_use, thickness=2)
 
-                color_to_use = 0.1  #  + random.random() * 0.2
-                jt = 0  # random.randint(-4, 4)
-                cv2.rectangle(img=im_to_show, pt1=(int(c0 * f_scale) + jt, int(r0 * f_scale) + jt), pt2=(int(c1 * f_scale) + jt, int(r1 * f_scale) + jt), color=color_to_use, thickness=1)
+        cv2.circle(img=im_to_show, center=(int((c0+c1) * 0.5 * f_scale), int((r0+ r1) * 0.5 * f_scale)), radius=int(self.prediction_radius_N_pixels * f_scale), color=0.5, thickness=2)
 
-            # tile_index_1 = random.randint(0, self.num_tiles - 1)
-            # tile_index_2 = random.randint(0, self.num_tiles - 1)
+        list_predict = list(self.predict_tile_indices[ind, :].flatten())
 
-            for ind in [tile_index_1]: #, tile_index_2]:
-                r0 = self.tiles_r_start[ind]
-                r1 = self.tiles_r_end[ind]
-                c0 = self.tiles_c_start[ind]
-                c1 = self.tiles_c_end[ind]
+        for ind2 in tile_indices:
+            #if self.tiles_indices_within_radius[ind, ind2] > 0:
+            if ind2 in list_predict:
+                r = (self.tiles_r_start[ind2] + self.tiles_r_end[ind2]) * 0.5 * f_scale
+                c = (self.tiles_c_start[ind2] + self.tiles_c_end[ind2]) * 0.5 * f_scale
 
-                color_to_use = 0.8
+                cv2.circle(img=im_to_show, center=(int(c), int(r)), radius=2, color=0.5, thickness=2)
 
-                cv2.rectangle(img=im_to_show, pt1=(int(c0 * f_scale), int(r0 * f_scale)), pt2=(int(c1 * f_scale), int(r1 * f_scale)), color=color_to_use, thickness=2)
+        #t0 = time.time()
+        #while time.time() - t0 < 0.2 * 1:
+        cv2.imshow('tiling', im_to_show)
+        cv2.waitKey(1)
 
-                cv2.circle(img=im_to_show, center=(int((c0+c1) * 0.5 * f_scale), int((r0+ r1) * 0.5 * f_scale)), radius=int(self.prediction_radius_N_pixels * f_scale), color=0.5, thickness=2)
-
-                for ind2 in tile_indices:
-                    if self.tiles_indices_within_radius[ind, ind2] > 0:
-                        r = (self.tiles_r_start[ind2] + self.tiles_r_end[ind2]) * 0.5 * f_scale
-                        c = (self.tiles_c_start[ind2] + self.tiles_c_end[ind2]) * 0.5 * f_scale
-
-                        cv2.circle(img=im_to_show, center=(int(c), int(r)), radius=3, color=0.5, thickness=2)
-
-            #t0 = time.time()
-            #while time.time() - t0 < 0.2 * 1:
-            cv2.imshow('tiling', im_to_show)
-            cv2.waitKey(1)
-
-            tile_index_1 += 1
+        tile_index_1 += 1
 
     def step(self, raycast_image, input_state, input_x_y_theta, goal_context_state_learning, goal_context_state_task, last_motor_command):
         '''
@@ -460,6 +493,7 @@ class DynamicTiles(object):
                 self.num_row_swaps  = 0
                 self.last_row_swap_disp = time.time()
 
+    # @profile
     def _learn_prediction(self, cuda_table, dists, argmin_dists, tile_input_states_mat):
         '''
 
@@ -475,7 +509,40 @@ class DynamicTiles(object):
 
         # increment / apply learning to all active weights (past -> (tau) -> present)
 
-        # tiles_indices_within_radius  # binary matrix, [num_tiles, num_tiles]: (from, to)
+        # self.r_c_by_tile_ind: (num_tiles, 2): [tile_index][0:r, 1:c]
+        # self.rel_r: length-k of relative r indices
+        # self.rel_c: length-k of relative c indices
+
+        learn_rate = 0.01
+        learn_rate_half = learn_rate * 0.5
+
+        for tau in self.prediction_tau_list:
+            W = self.predict_w[tau]
+            win_row_per_tile_now = argmin_dists  # (num_tiles)
+            win_row_per_tile_past = self.win_row_history.get_state(state_index=0, delay=tau)[0].astype(np.int)  # (num_tiles)
+
+            # unlearn all as a first step
+            # this is wrong (and was unworkably slow): for each from_tile, this should ONLY be decremented from the winning row
+            # W = learn_rate_half * 0.0 + (1.0 - learn_rate_half) * W
+
+            # TODO make sure that when we do prediction, we also properly use self.valid_from_tiles to avoid using invalid weights in w
+
+            # this could be parallelized in python if ends up slow
+            for from_tile in list(self.valid_from_tiles):  # valid_from_tiles: tiles where predict_tile_indices are all guaranteed valid, since the from-tile is not on image edge for example
+                to_tiles = self.predict_tile_indices[from_tile, :]
+
+                # W: rows_per_tile, num_predicted_tiles * rows_per_tile
+
+                learn_row_from = win_row_per_tile_past[from_tile]  # which row won for this tile, in the past
+
+                learn_tile_rows_to = self.rows_per_tile * np.arange(self.num_predicted_tiles) + win_row_per_tile_now[to_tiles]  # which generalized-geometry rows should learn to be predicted
+
+                #print(learn_row_from)
+                #print(learn_tile_rows_to)
+                W[learn_row_from, :] = learn_rate_half * 0.0 + (1.0 - learn_rate_half) * W[learn_row_from, :]
+                W[learn_row_from, learn_tile_rows_to] = learn_rate * 1.0 + (1.0 - learn_rate) * W[learn_row_from, learn_tile_rows_to]
+
+        return
 
         # weight matrix is something like:
         #   a = np.random.random((rows_per_tile, max_num_projections, rows_per_tile))
@@ -483,8 +550,6 @@ class DynamicTiles(object):
         #       or
         #   a = np.random.random((rows_per_tile, max_num_projections * rows_per_tile))
         #   (1000, 21 * 1000)
-
-        return
 
         learn_rate_0 = 0.01
         keep_rate_0 = 1.0 - learn_rate_0
@@ -495,7 +560,7 @@ class DynamicTiles(object):
         for tau in self.prediction_tau_list:
 
             win_row_per_tile_now = argmin_dists  # (num_tiles)
-            win_row_per_tile_past = self.win_row_history.get_state(state_index=0, delay=tau)  # (num_tiles)  # todo use states history
+            win_row_per_tile_past = self.win_row_history.get_state(state_index=0, delay=tau)  # (num_tiles)
             W = self.predict_weights[tau]  # rows_per_tile, max_num_projections * rows_per_tile
 
             # parallelize this loop in cython
