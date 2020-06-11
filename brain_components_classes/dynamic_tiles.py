@@ -516,8 +516,16 @@ class DynamicTiles(object):
                 self.num_row_swaps  = 0
                 self.last_row_swap_disp = time.time()
 
-    # @profile
     def _learn_prediction(self, cuda_table, dists, argmin_dists, tile_input_states_mat):
+        self._learn_prediction_prob(cuda_table, dists, argmin_dists, tile_input_states_mat)
+
+    def _make_prediction(self, cuda_table, dists, argmin_dists, tile_input_states_mat):
+
+        predict_im = self._make_prediction_prob(cuda_table, dists, argmin_dists, tile_input_states_mat)
+
+        return predict_im
+
+    def _learn_prediction_prob(self, cuda_table, dists, argmin_dists, tile_input_states_mat):
         '''
 
         num_tiles: 196
@@ -564,7 +572,7 @@ class DynamicTiles(object):
                 W[learn_row_from, :] = learn_rate_half * 0.0 + (1.0 - learn_rate_half) * W[learn_row_from, :]
                 W[learn_row_from, learn_tile_rows_to] = learn_rate * 1.0 + (1.0 - learn_rate) * W[learn_row_from, learn_tile_rows_to]
 
-    def _make_prediction(self, cuda_table, dists, argmin_dists, tile_input_states_mat):
+    def _make_prediction_prob(self, cuda_table, dists, argmin_dists, tile_input_states_mat):
         '''
 
         :param cuda_table:
