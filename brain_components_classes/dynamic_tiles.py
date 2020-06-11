@@ -55,6 +55,8 @@ class DynamicTiles(object):
                                disable_row_row_dist=False,
                                enable_weight_bias=False)
 
+        self.predict_steps_ahead = 1  # if changing this, would need to update how we display predicted image vs. current image etc. for debugging
+
         self.t = 0
         self.printed_init_step = False
         self.init_I_row_num = 0
@@ -62,6 +64,11 @@ class DynamicTiles(object):
         self.num_row_swaps = 0
         self.last_row_swap_disp = time.time()
         self.row_swap_disp_time = 1  # every K seconds
+
+        self.predict_im = None
+        self.current_im = None
+        self.last_current_im = None
+        self.last_predict_im = None  # ! assumes predict_tau = 1 !
 
     def _compute_tiling(self):
         '''
@@ -399,10 +406,19 @@ class DynamicTiles(object):
 
         if self.t > self.table_learn_time:
             # start making predictions even while still learning prediction matrices
-            self._make_prediction(cuda_table=self.table,
-                                  dists=dists,
-                                  argmin_dists=argmin_dists,
-                                  tile_input_states_mat=tile_input_states_mat)
+            predict_im = self._make_prediction(cuda_table=self.table,
+                                               dists=dists,
+                                               argmin_dists=argmin_dists,
+                                               tile_input_states_mat=tile_input_states_mat)
+
+            # This logic below assumes we are predicting 1 step ahead! If it was more, we would need to change this to a states history!
+
+            if self.predict_im is not None:
+                self.last_current_im = self.current_im.copy()
+                self.last_predict_im = self.predict_im.copy()
+
+            self.current_im = input_image.copy()
+            self.predict_im = predict_im.copy()
 
         if not self.printed_init_step:
             print()
@@ -576,7 +592,7 @@ class DynamicTiles(object):
 
             # which input to apply prediction to?
             # assume predicting 1 step ahead
-            predict_steps_ahead = 1
+            predict_steps_ahead = self.predict_steps_ahead
             assert tau >= predict_steps_ahead
 
             # for tau=1, this is going to use input of current time step for prediction so it predicts one ahead of now
@@ -608,7 +624,37 @@ class DynamicTiles(object):
         # for each tile: which of its rows wins? based on max row over rows of: [max or mean of predicted p inputs for the row (?mean? because sum is not comparable; some on edge are predicted by less)]
 
         predicted_row_per_tile_max = np.argmax(max_p_per_tile_row, axis=1)
+        prediction_p_max = np.amax(max_p_per_tile_row, axis=1)
+
         predicted_row_per_tile_sum = np.argmax(sum_p_per_tile_row, axis=1)
+        prediction_p_sum = np.amax(sum_p_per_tile_row)
+
+        # make prediction image
+        predicted_row_per_tile = predicted_row_per_tile_sum
+        prediction_p = prediction_p_sum
+
+        sum_im = np.zeros((self.image_dim_NxN_pixels, self.image_dim_NxN_pixels))
+        num_im = np.zeros((self.image_dim_NxN_pixels, self.image_dim_NxN_pixels))
+
+        max_im = np.zeros((self.image_dim_NxN_pixels, self.image_dim_NxN_pixels))
+
+        for tile_n in range(self.num_tiles):
+            r0 = self.tiles_r_start[tile_n]
+            r1 = self.tiles_r_end[tile_n]
+            c0 = self.tiles_c_start[tile_n]
+            c1 = self.tiles_c_end[tile_n]
+
+            tile_row_im = cuda_table.get_matrix_row(row_index=predicted_row_per_tile[tile_n])[0].reshape((self.tile_dim_NxN_pixels, self.tile_dim_NxN_pixels))
+
+            # TODO this is an invalid hack! can't assume anything about image values!
+            # max_im[r0:r1, c0:c1] = np.maximum(max_im[r0:r1, c0:c1], tile_row_im)
+
+            sum_im[r0:r1, c0:c1] = sum_im[r0:r1, c0:c1] + tile_row_im  # [0] because still returns I, O, C
+            num_im[r0:r1, c0:c1] = num_im[r0:r1, c0:c1] + 1
+
+        mean_im = np.divide(sum_im, num_im + 1e-12)
+
+        # self.predict_im = max_im.copy()
 
         if False:
             print()
@@ -618,6 +664,9 @@ class DynamicTiles(object):
             print()
             print(predicted_row_per_tile_sum)
             print()
+
+        predict_im = mean_im
+        return predict_im
 
     def get_table_ims(self):
         '''
@@ -680,6 +729,36 @@ class DynamicTiles(object):
 
             ims_list.append(select_im)
             ims_names_list.append('select')
+
+        if self.last_predict_im is not None:
+
+            # this assumes we are predicting 1 step ahead! if was more, we would need to change to rolling buffer i.e. states history for this debug display!
+            assert self.predict_steps_ahead == 1
+
+            #max_dim = max(self.predict_im.shape[0], self.predict_im.shape[1])
+            #imscale = self.ims_scale_pixels / max_dim  # 0.2: full table, 2.0
+            #p_im = cv2.resize(self.predict_im, dsize=(0, 0), fx=imscale, fy=imscale, interpolation=cv2.INTER_NEAREST)
+
+
+            # append in order: current (t), prediction (t'+1), future (t+1)
+
+            current_im = self.last_current_im  # "current" input (from past for display)
+            predict_im = self.last_predict_im  # "current" prediction based on that input (from past for display)
+            future_im = self.current_im  # "future" input (from present for display)
+
+            error_to_current = np.fabs(np.sum(current_im - predict_im))
+            error_to_future = np.fabs(np.sum(future_im - predict_im))
+
+            print('err to input:', error_to_current, ', err to future:', error_to_future)
+
+            spacer = 0.0 * np.ones((current_im.shape[0], 5))
+
+            p_im = np.hstack((current_im, spacer, predict_im, spacer, future_im))
+
+            # print(current_im.shape, predict_im.shape, future_im.shape)
+
+            ims_list.append(p_im)
+            ims_names_list.append('current, predict, future')
 
         return ims_list, ims_names_list
 
