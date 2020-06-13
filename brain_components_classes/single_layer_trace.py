@@ -200,6 +200,7 @@ class SingleLayerTrace(object):
 
     def _learn_predictions_and_motor(self):
         current_goal_context, _ = self.goal_context_history.get_state(state_index=0, delay=0)
+        current_goal_context = current_goal_context.astype(np.int)
         assert len(current_goal_context) == 1
         assert current_goal_context.shape[0] == 1
 
