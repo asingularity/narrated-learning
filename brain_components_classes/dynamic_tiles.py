@@ -909,6 +909,8 @@ class DynamicTiles(object):
 
             k += 1
 
+        self.prediction_made_indices = np.nonzero(num_im > 0)  # for computing prediction error in get_table_ims, only in proper areas
+
         mean_im = np.divide(sum_im, num_im + 1e-12)
         predict_im = mean_im
 
@@ -1096,10 +1098,17 @@ class DynamicTiles(object):
             predict_im = self.last_predict_im  # "current" prediction based on that input (from past for display)
             future_im = self.current_im  # "future" input (from present for display)
 
-            error_to_current = np.fabs(np.sum(current_im - predict_im))
-            error_to_future = np.fabs(np.sum(future_im - predict_im))
+            # TODO this needs to take into account non-prediction border!
+            error_to_current = np.fabs(np.sum(current_im[self.prediction_made_indices] - predict_im[self.prediction_made_indices]))
+            error_to_future = np.fabs(np.sum(future_im[self.prediction_made_indices] - predict_im[self.prediction_made_indices]))
 
-            print('err to input:', error_to_current, ', err to future:', error_to_future)
+            good = error_to_future < error_to_current
+            if good:
+                good = 'Y'
+            else:
+                good = ' '
+
+            print(good, 'err to input:', error_to_current, error_to_future, ': err to future')
 
             spacer = 0.0 * np.ones((current_im.shape[0], 5))
 

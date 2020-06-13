@@ -20,7 +20,7 @@ IM_DIM = 32  # pixels, width & height
 TILE_DIM = 5  # pixels, width & height
 TILES_OFFSET = 2  # pixels
 PREDICT_RADIUS = 5  # pixels
-PREDICT_TAU_LIST = [1]  # time steps: [1, 2]
+PREDICT_TAU_LIST = [1, 2, 4]  # time steps: [1, 2]
 ROWS_PER_TILE = 1000
 TABLE_LEARN_TIME = 3000
 PREDICTION_LEARN_TIME = 20000
@@ -92,7 +92,7 @@ def get_visualizer_params():
     params = {
         'color_enabled': COLOR_ENABLED,
         'fps_display_interval': 6,
-        'image_display_secs_fast': 1,
+        'image_display_secs_fast': 5,
         'waitKey_time_fast': 1,  # 1, 100, 5000
         'image_display_secs_slow': 0,  # 0: every frame
         'waitKey_time_slow': 100,  # 1, 100, 5000  #
