@@ -67,7 +67,7 @@ class Visualizer(object):
         robot_theta = topdown_info['robot_theta']
 
         ray_radians = rays['ray_radians']
-        ray_colors = rays['ray_colors'].reshape((len(rays['ray_colors']) / 3, 3))
+        ray_colors = rays['ray_colors'].reshape((int(len(rays['ray_colors']) / 3), 3))
         ray_lengths = rays['ray_lengths']
 
         # display white rectangle for agent:
@@ -178,7 +178,7 @@ class Visualizer(object):
             current_visual_input = ray_colors.copy()
         '''
 
-        ray_colors = rays['ray_colors'].reshape((len(rays['ray_colors']) / 3, 3))
+        ray_colors = rays['ray_colors'].reshape((int(len(rays['ray_colors']) / 3), 3))
         resized_image = self._get_topdown_map(rays, topdown_info, goal_regions, plan_I_seq, entries_x_y_theta_input, current_task_goal_index)
 
         cv2.imshow('env_map', resized_image)

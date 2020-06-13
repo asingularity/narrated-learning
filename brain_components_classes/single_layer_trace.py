@@ -382,7 +382,7 @@ class SingleLayerTrace(object):
             A = im_input
             C = A
 
-            im = np.reshape(C, (C.shape[0], C.shape[1] / 3, 3))
+            im = np.reshape(C, (C.shape[0], int(C.shape[1] / 3), 3))
 
             im = cv2.resize(im, dsize=(0,0), fx=6, fy=6, interpolation=cv2.INTER_NEAREST)
         else:

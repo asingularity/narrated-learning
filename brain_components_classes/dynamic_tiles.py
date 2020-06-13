@@ -11,6 +11,7 @@ from math import sqrt, sin, cos
 from utils.load_sim_history import load_states_history, load_td_info_history
 from utils.fps_counter import FPSCounter
 from brain_components_classes.states_history import StatesLimitedHistory
+from brain_components_classes.sparse_binary_knn import SparseBinaryKNN
 
 
 class DynamicTiles(object):
@@ -71,6 +72,10 @@ class DynamicTiles(object):
         self.last_predict_im = None  # ! assumes predict_tau = 1 !
 
     def _compute_tiling(self):
+        #self._compute_tiling_prob()
+        self._compute_tiling_knn()
+
+    def _compute_tiling_prob(self):
         '''
 
         computes index matrices, once (slowly) to be able to get tile input states matrix from a single index operation from the input image
@@ -261,7 +266,195 @@ class DynamicTiles(object):
         self.win_row_history = StatesLimitedHistory(params={'max_delay': np.amax(np.array(self.prediction_tau_list)),
                                                             'states_dim_list': [self.num_tiles]})
 
+    def _compute_tiling_knn(self):
+        '''
+
+        should initialize:
+            self.valid_post_tiles
+            self.predictor_tile_indices
+            self.knn
+
+            self.im_r_indices
+            self.im_c_indices
+
+            self.tiles_r_start
+            self.tiles_r_end
+            self.tiles_c_start
+            self.tiles_c_end
+
+        :return:
+        '''
+
+        num_tiles_NxN = int(self.image_dim_NxN_pixels / self.tiles_offset_N_pixels)
+
+        # adjust so no incomplete tiles at end
+        for tile_r_ in range(num_tiles_NxN):
+            r_start = tile_r_ * self.tiles_offset_N_pixels
+            r_end = r_start + self.tile_dim_NxN_pixels
+
+            if r_end > self.image_dim_NxN_pixels - 1:
+                num_tiles_NxN -= 1
+
+        num_tiles = num_tiles_NxN * num_tiles_NxN
+        num_pixels_per_tile = self.tile_dim_NxN_pixels * self.tile_dim_NxN_pixels
+
+        # ************
+        # (0) declare arrays
+        # ************
+
+        im_r_indices = np.zeros((num_tiles, num_pixels_per_tile), np.int)
+        im_c_indices = np.zeros((num_tiles, num_pixels_per_tile), np.int)
+
+        tiles_r_start = np.zeros(num_tiles, np.int)
+        tiles_r_end = np.zeros(num_tiles, np.int)
+        tiles_c_start = np.zeros(num_tiles, np.int)
+        tiles_c_end = np.zeros(num_tiles, np.int)
+
+        # ************
+        # (1) initialize relative neighborhood indices
+        # ************
+
+        ref_r = (num_tiles_NxN / 2)
+        ref_c = (num_tiles_NxN / 2)
+
+        ref_r_start = ref_r * self.tiles_offset_N_pixels
+        ref_r_end = ref_r_start + self.tile_dim_NxN_pixels
+
+        ref_c_start = ref_c * self.tiles_offset_N_pixels
+        ref_c_end = ref_c_start + self.tile_dim_NxN_pixels
+
+        ref_r_mid = (ref_r_start + ref_r_end) * 0.5
+        ref_c_mid = (ref_c_start + ref_c_end) * 0.5
+
+        print()
+        print('computing prediction map...')
+        print()
+        rel_r_list = []
+        rel_c_list = []
+
+        for tile_r in range(num_tiles_NxN):
+            for tile_c in range(num_tiles_NxN):
+                r_start = tile_r * self.tiles_offset_N_pixels
+                r_end = r_start + self.tile_dim_NxN_pixels
+
+                c_start = tile_c * self.tiles_offset_N_pixels
+                c_end = c_start + self.tile_dim_NxN_pixels
+
+                r0 = (r_start + r_end) * 0.5
+                c0 = (c_start + c_end) * 0.5
+
+                dst = sqrt(pow(r0 - ref_r_mid, 2) + pow(c0 - ref_c_mid, 2))
+
+                rel_r = int(ref_r - tile_r)
+                rel_c = int(ref_c - tile_c)
+
+                if dst <= self.prediction_radius_N_pixels:
+                    print('    ', rel_r, rel_c)
+                    rel_r_list.append(rel_r)
+                    rel_c_list.append(rel_c)
+
+        rel_r = np.array(rel_r_list)
+        rel_c = np.array(rel_c_list)
+
+        print()
+
+        # ************
+        # (2) compute pre-post prediction map
+        # ************
+        valid_post_tile_list = []
+        num_predictor_tiles = rel_r.shape[0]
+        predictor_tile_indices = np.zeros((num_tiles, num_predictor_tiles), np.int)
+
+        for tile_r_ind in range(num_tiles_NxN):
+            for tile_c_ind in range(num_tiles_NxN):
+                tile_index = tile_r_ind * num_tiles_NxN + tile_c_ind
+
+                # ************
+                # (3) initialize image coordinates for tile: im_r_indices, im_c_indices
+                # ************
+
+                r_start = tile_r_ind * self.tiles_offset_N_pixels
+                r_end = r_start + self.tile_dim_NxN_pixels
+
+                c_start = tile_c_ind * self.tiles_offset_N_pixels
+                c_end = c_start + self.tile_dim_NxN_pixels
+
+                tiles_r_start[tile_index] = r_start
+                tiles_r_end[tile_index] = r_end
+                tiles_c_start[tile_index] = c_start
+                tiles_c_end[tile_index] = c_end
+
+                r_indices = []
+                c_indices = []
+                for r in range(r_start, r_end):
+                    for c in range(c_start, c_end):
+                        r_indices.append(r)
+                        c_indices.append(c)
+
+                im_r_indices[tile_index, :] = np.array(r_indices)
+                im_c_indices[tile_index, :] = np.array(c_indices)
+
+                # ************
+                # (4) initialize neighborhood for predictive map
+                # ************
+
+                valid_post = True
+
+                # each pre tile
+                for k in range(rel_r.shape[0]):
+                    rel_r_ind = rel_r[k]
+                    rel_c_ind = rel_c[k]
+
+                    neighbor_r_ind = tile_r_ind - rel_r_ind
+                    neighbor_c_ind = tile_c_ind - rel_c_ind
+
+                    if 0 <= neighbor_r_ind <= num_tiles_NxN - 1 and 0 <= neighbor_c_ind <= num_tiles_NxN - 1:
+                        neighbor_tile_ind = neighbor_r_ind * num_tiles_NxN + neighbor_c_ind
+                        predictor_tile_indices[tile_index, k] = neighbor_tile_ind
+                    else:
+                        # this tile should not be a post tile for prediction (since it has an incomplete set of "pre" tiles)
+                        # self.predict_tile_indices[tile_index, k] = num_tiles  # index for "non-existing neigbor for this geometric position" i.e. beyond edge of image
+
+                        valid_post = False
+
+                if valid_post:
+                    valid_post_tile_list.append(tile_index)
+
+        # ************
+        # (5) initialize knn
+        # ************
+        knn = SparseBinaryKNN(params={
+            'sparse_io_dim': self.rows_per_tile,
+            'num_sparse_inputs': num_predictor_tiles * len(self.prediction_tau_list),
+            'num_sparse_outputs': 1
+        })
+
+        # ************
+        # (6) class variables set
+        # ************
+
+        self.valid_post_tiles = np.array(valid_post_tile_list, np.int)
+        self.predictor_tile_indices = predictor_tile_indices
+        self.knn = knn
+
+        self.im_r_indices = im_r_indices
+        self.im_c_indices = im_c_indices
+
+        self.tiles_r_start = tiles_r_start  # for verify tiles
+        self.tiles_r_end = tiles_r_end  # for verify tiles
+        self.tiles_c_start = tiles_c_start  # for verify tiles
+        self.tiles_c_end = tiles_c_end  # for verify tiles
+
+        self.num_tiles = num_tiles  # for verify tiles
+
+        self.win_row_history = StatesLimitedHistory(params={'max_delay': np.amax(np.array(self.prediction_tau_list)),
+                                                            'states_dim_list': [self.num_tiles]})
+
     def _verify_tiling(self):
+        #self._verify_tiling_prob()
+        self._verify_tiling_knn()
+
+    def _verify_tiling_prob(self):
         '''
 
         display an image of tiles,
@@ -327,6 +520,48 @@ class DynamicTiles(object):
         cv2.waitKey(1)
 
         tile_index_1 += 1
+
+    def _verify_tiling_knn(self):
+
+        f_scale = float(self.ims_scale_pixels) / float(self.image_dim_NxN_pixels)
+        im_to_show = np.zeros((int(self.image_dim_NxN_pixels * f_scale), int(self.image_dim_NxN_pixels * f_scale)), np.float)
+
+        tile_indices = list(np.arange(self.num_tiles))
+
+        for ind in tile_indices:
+            r0 = self.tiles_r_start[ind]
+            r1 = self.tiles_r_end[ind]
+            c0 = self.tiles_c_start[ind]
+            c1 = self.tiles_c_end[ind]
+
+            color_to_use = 0.2  #  + random.random() * 0.2
+            jt = 0  # random.randint(-4, 4)
+            cv2.rectangle(img=im_to_show, pt1=(int(c0 * f_scale) + jt, int(r0 * f_scale) + jt), pt2=(int(c1 * f_scale) + jt, int(r1 * f_scale) + jt), color=color_to_use, thickness=1)
+
+        ind = int(self.num_tiles / 2)  # choose an index to display; for simplicity, somewhere near the middle
+
+        r0 = self.tiles_r_start[ind]
+        r1 = self.tiles_r_end[ind]
+        c0 = self.tiles_c_start[ind]
+        c1 = self.tiles_c_end[ind]
+
+        color_to_use = 0.8
+
+        cv2.rectangle(img=im_to_show, pt1=(int(c0 * f_scale), int(r0 * f_scale)), pt2=(int(c1 * f_scale), int(r1 * f_scale)), color=color_to_use, thickness=2)
+
+        cv2.circle(img=im_to_show, center=(int((c0+c1) * 0.5 * f_scale), int((r0+ r1) * 0.5 * f_scale)), radius=int(self.prediction_radius_N_pixels * f_scale), color=0.5, thickness=2)
+
+        list_predictors = list(self.predictor_tile_indices[ind, :].flatten())
+
+        for ind2 in tile_indices:
+            if ind2 in list_predictors:
+                r = (self.tiles_r_start[ind2] + self.tiles_r_end[ind2]) * 0.5 * f_scale
+                c = (self.tiles_c_start[ind2] + self.tiles_c_end[ind2]) * 0.5 * f_scale
+
+                cv2.circle(img=im_to_show, center=(int(c), int(r)), radius=2, color=0.5, thickness=2)
+
+        cv2.imshow('tiling', im_to_show)
+        cv2.waitKey(1)
 
     def step(self, raycast_image, input_state, input_x_y_theta, goal_context_state_learning, goal_context_state_task, last_motor_command):
         '''
@@ -517,11 +752,13 @@ class DynamicTiles(object):
                 self.last_row_swap_disp = time.time()
 
     def _learn_prediction(self, cuda_table, dists, argmin_dists, tile_input_states_mat):
-        self._learn_prediction_prob(cuda_table, dists, argmin_dists, tile_input_states_mat)
+        # self._learn_prediction_prob(cuda_table, dists, argmin_dists, tile_input_states_mat)
+        self._learn_prediction_knn(cuda_table, dists, argmin_dists, tile_input_states_mat)
 
     def _make_prediction(self, cuda_table, dists, argmin_dists, tile_input_states_mat):
 
-        predict_im = self._make_prediction_prob(cuda_table, dists, argmin_dists, tile_input_states_mat)
+        #predict_im = self._make_prediction_prob(cuda_table, dists, argmin_dists, tile_input_states_mat)
+        predict_im = self._make_prediction_knn(cuda_table, dists, argmin_dists, tile_input_states_mat)
 
         return predict_im
 
@@ -571,6 +808,111 @@ class DynamicTiles(object):
                 #print(learn_tile_rows_to)
                 W[learn_row_from, :] = learn_rate_half * 0.0 + (1.0 - learn_rate_half) * W[learn_row_from, :]
                 W[learn_row_from, learn_tile_rows_to] = learn_rate * 1.0 + (1.0 - learn_rate) * W[learn_row_from, learn_tile_rows_to]
+
+    def _learn_prediction_knn(self, cuda_table, dists, argmin_dists, tile_input_states_mat ):
+        '''
+
+        :param cuda_table:
+        :param dists:
+        :param argmin_dists:
+        :param tile_input_states_mat:
+        :return:
+
+        def _expand_win_row(win_row_index):
+            tmp = np.zeros(self.rows_per_tile)
+            tmp[win_row_index] = 1.0
+            return tmp
+
+        def _expand_win_rows(win_row_indices):
+            # expand [3, 5, 9] to long binary array [0, 0, 0, 1, 0, 0, 0, ...]
+            return tmp
+
+        '''
+
+        # try to use similar logic from _make_prediction_prob
+        # i.e. starting from "from-tiles", build inputs to "to-tile" look up tables
+        # ... doesn't look straightforward at all
+        # might as well go from post-prediction tiles (what is being predicted)
+
+        for tile_n in list(self.valid_post_tiles):  # only tiles with full "predictive fields" are predicted, for ease of tiling; leaving out ones on edges
+            win_row_post_tile_now = self.win_row_history.get_state(state_index=0, delay=0)[0].astype(np.int)[tile_n]
+            pre_tile_indices = self.predictor_tile_indices[tile_n, :]  # [post, pre]: (num_tiles, num_predictor_tiles)
+
+            # this will be used for each timescale, but each timescale has its own pre activity to tie to it
+            # knn_outputs_per_post_row = _expand_win_row(win_row_index=win_row_post_tile_now)  # len: rows_per_tile
+
+            knn_input_all_tau = np.array([])
+
+            for tau in self.prediction_tau_list:
+                # get inputs from its from_tiles
+                win_rows_pre_tiles_past = self.win_row_history.get_state(state_index=0, delay=tau)[0].astype(np.int)[pre_tile_indices]
+
+                # all post rows for this post tile (tile_n) will have same input, which is:
+                # this is the set of inputs for this timescale, use for all rows of the post tile (of which's rows the win output is 1, rest are 0)
+                # knn_input = _expand_win_rows(win_row_indices=win_rows_pre_tiles_past)  # len: num_pre_tiles * rows_per_tile
+
+                # append so knn input is all timescales together
+                # is this correct way when we try to make predictions? yes, training to combine from past with now
+                knn_input_all_tau = np.concatenate((knn_input_all_tau, win_rows_pre_tiles_past))
+
+            # now, train knn for this tile's rows:
+            # should this be a seq-nn cuda table? probably too big; something else? store sparse? then we don't need expand statements above
+            # store sparse (indices), distance computed in how many indices matched (equal) vs. did not match
+            # SparseBinaryKNN class
+            # later, we should make this implement seq-nn in this space
+            # Also: currently this assumes one-hot encoding for input and output; later we may need to allow multiple rows selected for input here
+            #   to allow multi-predict input for prediction here
+            # Also, for now this is one knn (tiled and used for all post tiles), but later this will be knn[tile_n], along with cuda table
+
+            self.knn.train(knn_input_win_rows=knn_input_all_tau, knn_output_win_row=win_row_post_tile_now)
+
+    def _make_prediction_knn(self, cuda_table, dists, argmin_dists, tile_input_states_mat):
+
+        predicted_row_per_valid_post_tile = []
+
+        for tile_n in list(self.valid_post_tiles):
+            pre_tile_indices = self.predictor_tile_indices[tile_n, :]
+
+            knn_input_all_tau = np.array([])
+
+            for tau in self.prediction_tau_list:
+                predict_steps_ahead = self.predict_steps_ahead
+                assert tau >= predict_steps_ahead
+
+                win_rows_pre_tiles_past = self.win_row_history.get_state(state_index=0, delay=tau - predict_steps_ahead)[0].astype(np.int)[pre_tile_indices]
+                knn_input_all_tau = np.concatenate((knn_input_all_tau, win_rows_pre_tiles_past))
+
+            # this should return multiple win rows for multi-predict, so this might change soon:
+            # also, will at some point be self.knn[tile_n] for independent per tile, for perspective projection etc.
+            win_row = self.knn.predict(knn_input_win_rows=knn_input_all_tau)
+            predicted_row_per_valid_post_tile.append(win_row)
+
+        # make prediction image
+
+        sum_im = np.zeros((self.image_dim_NxN_pixels, self.image_dim_NxN_pixels))
+        num_im = np.zeros((self.image_dim_NxN_pixels, self.image_dim_NxN_pixels))
+
+        k = 0
+        for tile_n in list(self.valid_post_tiles):
+            r0 = self.tiles_r_start[tile_n]
+            r1 = self.tiles_r_end[tile_n]
+            c0 = self.tiles_c_start[tile_n]
+            c1 = self.tiles_c_end[tile_n]
+
+            tile_row_im = cuda_table.get_matrix_row(row_index=predicted_row_per_valid_post_tile[k])[0].reshape((self.tile_dim_NxN_pixels, self.tile_dim_NxN_pixels))
+
+            # this is an invalid hack! can't assume anything about image values!
+            # max_im[r0:r1, c0:c1] = np.maximum(max_im[r0:r1, c0:c1], tile_row_im)
+
+            sum_im[r0:r1, c0:c1] = sum_im[r0:r1, c0:c1] + tile_row_im  # [0] because still returns I, O, C
+            num_im[r0:r1, c0:c1] = num_im[r0:r1, c0:c1] + 1
+
+            k += 1
+
+        mean_im = np.divide(sum_im, num_im + 1e-12)
+        predict_im = mean_im
+
+        return predict_im
 
     def _make_prediction_prob(self, cuda_table, dists, argmin_dists, tile_input_states_mat):
         '''
@@ -654,7 +996,7 @@ class DynamicTiles(object):
 
             tile_row_im = cuda_table.get_matrix_row(row_index=predicted_row_per_tile[tile_n])[0].reshape((self.tile_dim_NxN_pixels, self.tile_dim_NxN_pixels))
 
-            # TODO this is an invalid hack! can't assume anything about image values!
+            # this is an invalid hack! can't assume anything about image values!
             # max_im[r0:r1, c0:c1] = np.maximum(max_im[r0:r1, c0:c1], tile_row_im)
 
             sum_im[r0:r1, c0:c1] = sum_im[r0:r1, c0:c1] + tile_row_im  # [0] because still returns I, O, C
