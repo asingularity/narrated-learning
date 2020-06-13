@@ -27,7 +27,7 @@ class Physics2DSensor(object):
         # TODO should work when ball smaller as well
         self.ball_radius = 1 * 50 * factor
         self.init_velocity_scale = 5 * 30 * factor
-        self.min_steps_between_balls = 20
+        self.min_steps_between_balls = 0  # 20
         self.mass = 10  #* factor
         self.gravity = -90 * 10
 

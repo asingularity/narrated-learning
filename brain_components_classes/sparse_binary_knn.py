@@ -28,10 +28,10 @@ class SparseBinaryKNN(object):
         # quick hack for now: just store first N rows as encountered
         self.learn_index = 0  # current index
 
-        self.learn_every_k = 4  # spread out learning to randomize
+        self.learn_every_k = 1  # spread out learning to randomize
         self.curr_k_step = self.learn_every_k  # spread out learning; track current index
 
-        self.N = 10000  # total number of rows learned
+        self.N = 2000  # total number of rows learned
 
         self.input_arr = np.zeros((self.N, self.num_sparse_inputs), np.int)  # int because this is just indices. dim=num_sparse_inputs since assuming one-hot for now on input
         self.output_arr = np.zeros(self.N, np.int)  # dim=1 since assuming one-hot for now on output

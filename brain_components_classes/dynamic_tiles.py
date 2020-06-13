@@ -423,11 +423,20 @@ class DynamicTiles(object):
         # ************
         # (5) initialize knn
         # ************
-        knn = SparseBinaryKNN(params={
-            'sparse_io_dim': self.rows_per_tile,
-            'num_sparse_inputs': num_predictor_tiles * len(self.prediction_tau_list),
-            'num_sparse_outputs': 1
-        })
+        knn_list = []
+        for tile_ind in range(num_tiles):
+            # not all used
+            if tile_ind in valid_post_tile_list:
+                knn = SparseBinaryKNN(params={
+                    'sparse_io_dim': self.rows_per_tile,
+                    'num_sparse_inputs': num_predictor_tiles * len(self.prediction_tau_list),
+                    'num_sparse_outputs': 1
+                })
+            else:
+                # save memory
+                knn = None
+
+            knn_list.append(knn)
 
         # ************
         # (6) class variables set
@@ -435,7 +444,7 @@ class DynamicTiles(object):
 
         self.valid_post_tiles = np.array(valid_post_tile_list, np.int)
         self.predictor_tile_indices = predictor_tile_indices
-        self.knn = knn
+        self.knn = knn_list
 
         self.im_r_indices = im_r_indices
         self.im_c_indices = im_c_indices
@@ -864,7 +873,7 @@ class DynamicTiles(object):
             #   to allow multi-predict input for prediction here
             # Also, for now this is one knn (tiled and used for all post tiles), but later this will be knn[tile_n], along with cuda table
 
-            self.knn.train(knn_input_win_rows=knn_input_all_tau, knn_output_win_row=win_row_post_tile_now)
+            self.knn[tile_n].train(knn_input_win_rows=knn_input_all_tau, knn_output_win_row=win_row_post_tile_now)
 
     def _make_prediction_knn(self, cuda_table, dists, argmin_dists, tile_input_states_mat):
 
@@ -884,7 +893,7 @@ class DynamicTiles(object):
 
             # this should return multiple win rows for multi-predict, so this might change soon:
             # also, will at some point be self.knn[tile_n] for independent per tile, for perspective projection etc.
-            win_row = self.knn.predict(knn_input_win_rows=knn_input_all_tau)
+            win_row = self.knn[tile_n].predict(knn_input_win_rows=knn_input_all_tau)
             predicted_row_per_valid_post_tile.append(win_row)
 
         # make prediction image
