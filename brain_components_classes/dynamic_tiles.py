@@ -1098,21 +1098,30 @@ class DynamicTiles(object):
             predict_im = self.last_predict_im  # "current" prediction based on that input (from past for display)
             future_im = self.current_im  # "future" input (from present for display)
 
-            # TODO this needs to take into account non-prediction border!
-            error_to_current = np.fabs(np.sum(current_im[self.prediction_made_indices] - predict_im[self.prediction_made_indices]))
-            error_to_future = np.fabs(np.sum(future_im[self.prediction_made_indices] - predict_im[self.prediction_made_indices]))
+            # this is comparing: [current - prediction] vs. [future - prediction]
+            # error_to_current = np.fabs(np.sum(current_im[self.prediction_made_indices] - predict_im[self.prediction_made_indices]))
+            # error_to_future = np.fabs(np.sum(future_im[self.prediction_made_indices] - predict_im[self.prediction_made_indices]))
 
-            good = error_to_future < error_to_current
+            # this is comparing: [future - current] vs. [future - prediction], to see if it does better than "use current image as prediction of future"
+            error_to_current = np.fabs(np.sum(future_im[self.prediction_made_indices] - current_im[self.prediction_made_indices]))
+            error_to_predict = np.fabs(np.sum(future_im[self.prediction_made_indices] - predict_im[self.prediction_made_indices]))
+
+            good = error_to_predict < error_to_current
             if good:
                 good = 'Y'
             else:
                 good = ' '
 
-            print(good, 'err to input:', error_to_current, error_to_future, ': err to future')
+            print(good, 'err to input:', error_to_current, error_to_predict, ': err to predict')
 
             spacer = 0.0 * np.ones((current_im.shape[0], 5))
 
-            p_im = np.hstack((current_im, spacer, predict_im, spacer, future_im))
+            c_tmp = np.zeros_like(current_im)
+            c_tmp[self.prediction_made_indices] = current_im[self.prediction_made_indices]
+            f_tmp = np.zeros_like(future_im)
+            f_tmp[self.prediction_made_indices] = future_im[self.prediction_made_indices]
+
+            p_im = np.hstack((c_tmp, spacer, predict_im, spacer, f_tmp))
 
             # print(current_im.shape, predict_im.shape, future_im.shape)
 
