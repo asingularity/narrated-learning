@@ -30,6 +30,9 @@ COLOR_ENABLED = False
 ENABLE_WEIGHT_BIAS = True
 
 USE_VIDEO_IN = False
+if USE_VIDEO_IN:
+    # for this, use 800 rows per tile instead!
+    ROWS_PER_TILE = 800
 
 
 # uses: IM_DIM
@@ -42,7 +45,8 @@ def get_sensors_params():
         'stop_preload_at_frames': None,  # None: use whole video
         'use_full_frame': False,  # use the whole image
         'partial_frame_factor': 4,  # from center, what factor to use - larger factor ~ smaller part of image
-        'return_type': np.float32  # 32 or 64
+        'return_type': np.float32,  # 32 or 64
+        'skip_frame_count': 4  # Normal is 1 (not 0!); += K frames from video on each step; so we can see prediction better for high frame rate videos
     }
 
     params_physics_2d = {

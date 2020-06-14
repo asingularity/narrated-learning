@@ -21,6 +21,8 @@ class VideoPlaybackSensor(object):
         self.use_full_frame = params['use_full_frame']
         self.partial_frame_factor = params['partial_frame_factor']
 
+        self.skip_frame_count = params['skip_frame_count']  # 1 is normal; using 4 for model
+
         assert params['return_type'] is np.float32 or params['return_type'] is np.float64
         self.return_type = params['return_type']
 
@@ -129,7 +131,7 @@ class VideoPlaybackSensor(object):
         if self.preload_file:
             sample_im = self._sample_frames[self._frame_index]
 
-            self._frame_index += 1
+            self._frame_index += self.skip_frame_count
             if self._frame_index >= len(self._sample_frames):
                 print('resetting video')
                 self._frame_index = 0
