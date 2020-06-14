@@ -1,4 +1,5 @@
 
+import time
 import numpy as np
 
 
@@ -41,6 +42,11 @@ class SparseBinaryKNN(object):
         self.messages = ['SparseBinaryKNN::train: learning is started!',
                          'SparseBinaryKNN::train: learning is completed!']
 
+        self.reset_stats_every_k_sec = 20
+        self.last_stat_reset = time.time()
+        self.match_ratio_sum = 0.0
+        self.match_ratio_num = 0
+
     def _print_message_once(self, index):
         if not self.printed_message[index]:
             print()
@@ -66,7 +72,21 @@ class SparseBinaryKNN(object):
 
         # from equal matches: for now since one-hot, just pick first one
         tmp = np.sum((self.input_arr - knn_input_win_rows) == 0, axis=1)
+
         win_row = self.output_arr[np.argmax(tmp)]
+
+        self.match_ratio_sum += np.amax(tmp) * 1.0 / len(knn_input_win_rows)
+        self.match_ratio_num += 1
+
+        if time.time() - self.last_stat_reset > self.reset_stats_every_k_sec:
+            print()
+            print('SparseBinaryKNN::predict: stats')
+            print('    ', 'average input match for best row:', self.match_ratio_sum / self.match_ratio_num)
+
+            self.match_ratio_sum = 0.0
+            self.match_ratio_num = 0
+
+            self.last_stat_reset = time.time()
 
         return win_row
 
