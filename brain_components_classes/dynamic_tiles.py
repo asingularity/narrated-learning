@@ -14,6 +14,11 @@ from brain_components_classes.states_history import StatesLimitedHistory
 from brain_components_classes.sparse_binary_knn import SparseBinaryKNN
 
 
+class OneTimeMessages(object):
+    def __init__(self):
+        pass
+
+
 class DynamicTiles(object):
     def __init__(self, params):
         '''
@@ -37,8 +42,14 @@ class DynamicTiles(object):
         # max density: only 1 pixel offset between spatially neighboring tiles; max overlap between tiles without being identical
         # min density: exactly size of tile offset; no overlap between tiles
 
-        self.table_learn_time = params['table_learn_time']  # seq-nn-table learn time
-        self.prediction_learn_time = params['prediction_learn_time']
+        # set, no longer from params dict, but from other params!
+        self.table_learn_time = 10 * self.rows_per_tile  # params['table_learn_time']  # seq-nn-table learn time
+
+        # todo these go to sparse binary knn
+        self.binary_knn_rows = 2000
+        self.binary_knn_learn_every_k = 1
+        # prediction_learn_time is no longer set here, but it will be: self.binary_knn_rows * self.binary_knn_learn_every_k
+
         self.prediction_radius_N_pixels = params['prediction_radius_N_pixels']  # farthest that a tile should predict another tile, spatially
         self.prediction_tau_list = params['prediction_tau_list']
 
@@ -430,7 +441,9 @@ class DynamicTiles(object):
                 knn = SparseBinaryKNN(params={
                     'sparse_io_dim': self.rows_per_tile,
                     'num_sparse_inputs': num_predictor_tiles * len(self.prediction_tau_list),
-                    'num_sparse_outputs': 1
+                    'num_sparse_outputs': 1,
+                    'num_rows': self.binary_knn_rows,
+                    'learn_row_every_k': self.binary_knn_learn_every_k
                 })
             else:
                 # save memory
@@ -640,15 +653,13 @@ class DynamicTiles(object):
                               tile_input_states_mat=tile_input_states_mat,
                               input_x_y_theta=None)
 
-        elif self.table_learn_time < self.t < self.prediction_learn_time:
+        if self.t > self.table_learn_time:
+            # internally, this will first learn knn rows, and then learn weights
             self._learn_prediction(cuda_table=self.table,
                                    dists=dists,
                                    argmin_dists=argmin_dists,
                                    tile_input_states_mat=tile_input_states_mat)
-        else:
-            pass
 
-        if self.t > self.table_learn_time:
             # start making predictions even while still learning prediction matrices
             predict_im = self._make_prediction(cuda_table=self.table,
                                                dists=dists,

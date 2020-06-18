@@ -22,8 +22,8 @@ TILES_OFFSET = 2  # pixels
 PREDICT_RADIUS = 5  # pixels
 PREDICT_TAU_LIST = [2, 3, 4]  # time steps: [1, 2]
 ROWS_PER_TILE = 400
-TABLE_LEARN_TIME = 3000
-PREDICTION_LEARN_TIME = 20000
+# TABLE_LEARN_TIME = 3000  # deprecated
+# PREDICTION_LEARN_TIME = 20000  # deprecated
 
 COLOR_ENABLED = False
 
@@ -85,8 +85,6 @@ def get_brain_params():
         'prediction_radius_N_pixels': PREDICT_RADIUS,
         'prediction_tau_list': PREDICT_TAU_LIST,
         'rows_per_tile': ROWS_PER_TILE,
-        'table_learn_time': TABLE_LEARN_TIME,
-        'prediction_learn_time': PREDICTION_LEARN_TIME,
             }
 
     return params
@@ -101,7 +99,7 @@ def get_visualizer_params():
         'image_display_secs_slow': 0,  # 0: every frame
         'waitKey_time_slow': 100,  # 1, 100, 5000  #
         'scale_camera_factor': 1,
-        'auto_switch_to_slow_disp_time': 5000,
+        'auto_switch_to_slow_disp_time': 6000,
         'init_fast': True  # start with "fast" display
     }
     return params

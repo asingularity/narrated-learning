@@ -25,8 +25,6 @@ class SegmentBrain(object):
             'prediction_radius_N_pixels': params['prediction_radius_N_pixels'],
             'prediction_tau_list': params['prediction_tau_list'],
             'rows_per_tile': params['rows_per_tile'],
-            'table_learn_time': params['table_learn_time'],
-            'prediction_learn_time': params['prediction_learn_time']
         })
 
     # @profile
