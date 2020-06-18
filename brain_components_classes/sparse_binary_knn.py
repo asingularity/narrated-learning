@@ -52,6 +52,9 @@ class SparseBinaryKNN(object):
         self.match_ratio_num = 0
         self.sum_tie_matches = 0.0
 
+        self.skipped_train_cnt = 0
+        self.done_train_cnt = 0
+
     def _print_message_once(self, index):
         if not self.printed_message[index]:
             print()
@@ -85,10 +88,10 @@ class SparseBinaryKNN(object):
         else:
             # old, non weighted method:
             # from equal matches: for now since one-hot, just pick first one
-            tmp = np.sum((self.input_arr - knn_input_win_rows) == 0, axis=1)
+            tmp = np.sum((self.input_arr[0:max(self.learn_index, 1), :] - knn_input_win_rows) == 0, axis=1)
 
         # tmp:
-        #   len(tmp) is self.N, num_rows (of knn)
+        #   len(tmp) is <= self.N, num_rows (of knn)
         #   tmp[i] is number of indices matched, in range [0, num_sparse_inputs]
 
         num_top_matches = np.count_nonzero(tmp == np.amax(tmp))
@@ -100,11 +103,19 @@ class SparseBinaryKNN(object):
         self.match_ratio_num += 1
 
         if time.time() - self.last_stat_reset > self.reset_stats_every_k_sec:
+
+            total_cnt = self.skipped_train_cnt + self.done_train_cnt
+            if total_cnt > 0:
+                train_accept_ratio = self.done_train_cnt / (self.skipped_train_cnt + self.done_train_cnt)
+            else:
+                train_accept_ratio = None
+
             print()
             print('SparseBinaryKNN::predict: stats')
             print('    ', 'average input match for best row:', self.match_ratio_sum / self.match_ratio_num)
             print('    ', 'training knn rows prop complete:', float(self.learn_index / self.N))
             print('    ', 'mean num_ties for max input match:', float(self.sum_tie_matches / self.match_ratio_num))
+            print('    ', 'train_accept_ratio:', train_accept_ratio)
             print()
             print('    ', 'sample')
             print('    ', 'num_top_matches', num_top_matches)
@@ -134,10 +145,18 @@ class SparseBinaryKNN(object):
         if self.curr_k_step == self.learn_every_k:
             if self.learn_index < self.N:
                 self._print_message_once(index=0)
-                self.input_arr[self.learn_index, :] = knn_input_win_rows[:]
-                self.output_arr[self.learn_index] = knn_output_win_row
+                # TODO don't learn if this input + output already in table
 
-                self.learn_index += 1
+                match = np.sum(((self.input_arr - knn_input_win_rows) == 0), axis=1)
+                if np.amax(match) < len(knn_input_win_rows):
+
+                    self.input_arr[self.learn_index, :] = knn_input_win_rows[:]
+                    self.output_arr[self.learn_index] = knn_output_win_row
+
+                    self.learn_index += 1
+                    self.done_train_cnt += 1
+                else:
+                    self.skipped_train_cnt += 1
 
                 self.curr_k_step = 1
             else:
