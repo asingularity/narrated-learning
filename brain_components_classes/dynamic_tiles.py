@@ -45,7 +45,9 @@ class DynamicTiles(object):
         # set, no longer from params dict, but from other params!
         self.table_learn_time = 10 * self.rows_per_tile  # params['table_learn_time']  # seq-nn-table learn time
 
-        # todo these go to sparse binary knn
+        # these go to sparse binary knn
+        # TODO these should be demo level params
+        # this was 2000... at 200, during training of weights there seem to be misses where no stored knn row has the winning row output index of the tile
         self.binary_knn_rows = 2000
         self.binary_knn_learn_every_k = 1
         # prediction_learn_time is no longer set here, but it will be: self.binary_knn_rows * self.binary_knn_learn_every_k

@@ -34,18 +34,23 @@ class SparseBinaryKNN(object):
 
         self.N = params['num_rows']  # total number of rows learned
 
+        self.train_weights = False
+        self.weight_arr = np.ones((self.N, self.num_sparse_inputs), np.float)  * 1.0 / self.num_sparse_inputs
+        self.weight_learn_rate = 0.001
+
         self.input_arr = np.zeros((self.N, self.num_sparse_inputs), np.int)  # int because this is just indices. dim=num_sparse_inputs since assuming one-hot for now on input
         self.output_arr = np.zeros(self.N, np.int)  # dim=1 since assuming one-hot for now on output
 
         # debug printing
         self.printed_message = [False, False]
         self.messages = ['SparseBinaryKNN::train: learning is started!',
-                         'SparseBinaryKNN::train: learning is completed!']
+                         'SparseBinaryKNN::train: learning is completed! Weight learning started!']
 
         self.reset_stats_every_k_sec = 20
         self.last_stat_reset = time.time()
         self.match_ratio_sum = 0.0
         self.match_ratio_num = 0
+        self.sum_tie_matches = 0.0
 
     def _print_message_once(self, index):
         if not self.printed_message[index]:
@@ -70,8 +75,24 @@ class SparseBinaryKNN(object):
 
         # "distance metric" is number of exact index matches
 
-        # from equal matches: for now since one-hot, just pick first one
-        tmp = np.sum((self.input_arr - knn_input_win_rows) == 0, axis=1)
+        # how to use weights here?
+
+        if self.train_weights:
+            # this is 1.0 (no match: error for this sparse index) or 0.0 (match for this sparse index):
+            match = ((self.input_arr - knn_input_win_rows) == 0).astype(np.float)
+            weighted_match = np.multiply(match, self.weight_arr)
+            tmp = np.sum(weighted_match, axis=1)
+        else:
+            # old, non weighted method:
+            # from equal matches: for now since one-hot, just pick first one
+            tmp = np.sum((self.input_arr - knn_input_win_rows) == 0, axis=1)
+
+        # tmp:
+        #   len(tmp) is self.N, num_rows (of knn)
+        #   tmp[i] is number of indices matched, in range [0, num_sparse_inputs]
+
+        num_top_matches = np.count_nonzero(tmp == np.amax(tmp))
+        self.sum_tie_matches += num_top_matches
 
         win_row = self.output_arr[np.argmax(tmp)]
 
@@ -83,10 +104,15 @@ class SparseBinaryKNN(object):
             print('SparseBinaryKNN::predict: stats')
             print('    ', 'average input match for best row:', self.match_ratio_sum / self.match_ratio_num)
             print('    ', 'training knn rows prop complete:', float(self.learn_index / self.N))
+            print('    ', 'mean num_ties for max input match:', float(self.sum_tie_matches / self.match_ratio_num))
             print()
-
+            print('    ', 'sample')
+            print('    ', 'num_top_matches', num_top_matches)
+            print('    ', 'argmax(tmp)', np.argmax(tmp), 'win_row', win_row)
+            print()
             self.match_ratio_sum = 0.0
             self.match_ratio_num = 0
+            self.sum_tie_matches = 0.0
 
             self.last_stat_reset = time.time()
 
@@ -116,5 +142,31 @@ class SparseBinaryKNN(object):
                 self.curr_k_step = 1
             else:
                 self._print_message_once(index=1)
+
+                if self.train_weights:
+                    # train weights!
+                    # find row in knn with closest input match, from the subset that have correct output win row
+                    # TODO what if tmp1 is empty set below? because none stored with this output?
+                    tmp1 = np.nonzero(self.output_arr==knn_output_win_row)[0]
+
+                    # todo how often does this happen? make variable to keep track and print in stats
+                    if len(tmp1) > 0:
+                        tmp2 = self.input_arr[tmp1, :]
+
+                        match = ((tmp2 - knn_input_win_rows) == 0).astype(np.float)
+                        weighted_match = np.multiply(match, self.weight_arr[tmp1, :])
+                        tmp3 = np.sum(weighted_match, axis=1)
+
+                        tmp4 = np.argmax(tmp3)
+                        knn_row = tmp1[tmp4]
+
+                        # train that row for current input match
+                        new_w_goal = weighted_match[tmp4, :]
+
+                        self.weight_arr[knn_row, :] = (1.0 - self.weight_learn_rate) * self.weight_arr[knn_row, :] + self.weight_learn_rate * new_w_goal
+
+                        # make sure weights per knn row stay normalized to 1.0!
+                        sum_tmp = np.sum(self.weight_arr[knn_row, :])
+                        self.weight_arr[knn_row, :] = self.weight_arr[knn_row, :] * 1.0 / sum_tmp
         else:
             self.curr_k_step += 1
