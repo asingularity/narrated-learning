@@ -13,7 +13,7 @@ import skcuda.linalg as linalg
 import skcuda.misc as misc
 from cuda_dist_query import CudaTable
 from utils.fps_counter import FPSCounter
-import SimpSOM as sps
+#import SimpSOM as sps
 
 
 np.set_printoptions(threshold=np.inf, linewidth=400)
