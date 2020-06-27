@@ -46,7 +46,7 @@ class SparseBinaryKNN(object):
         self.messages = ['SparseBinaryKNN::train: learning is started!',
                          'SparseBinaryKNN::train: learning is completed! Weight learning started!']
 
-        self.reset_stats_every_k_sec = 20
+        self.reset_stats_every_k_sec = 10
         self.last_stat_reset = time.time()
         self.match_ratio_sum = 0.0
         self.match_ratio_num = 0
@@ -121,6 +121,10 @@ class SparseBinaryKNN(object):
             print('    ', 'num_top_matches', num_top_matches)
             print('    ', 'argmax(tmp)', np.argmax(tmp), 'win_row', win_row)
             print()
+
+            self.done_train_cnt = 0
+            self.skipped_train_cnt = 0
+
             self.match_ratio_sum = 0.0
             self.match_ratio_num = 0
             self.sum_tie_matches = 0.0
