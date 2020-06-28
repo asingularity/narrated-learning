@@ -1,4 +1,3 @@
-
 import time
 import cv2
 import numpy as np
@@ -43,7 +42,7 @@ class DynamicTiles(object):
         # min density: exactly size of tile offset; no overlap between tiles
 
         # set, no longer from params dict, but from other params!
-        self.table_learn_time = 10 * self.rows_per_tile  # params['table_learn_time']  # seq-nn-table learn time
+        self.table_learn_time = 2 * self.rows_per_tile  # params['table_learn_time']  # seq-nn-table learn time
 
         # these go to sparse binary knn
         # TODO these should be demo level params
@@ -607,6 +606,7 @@ class DynamicTiles(object):
 
         return self._step_actual(input_image=raycast_image)
 
+    #@profile
     def _step_actual(self, input_image):
         '''
 
@@ -775,12 +775,12 @@ class DynamicTiles(object):
 
     def _learn_prediction(self, cuda_table, dists, argmin_dists, tile_input_states_mat):
         # self._learn_prediction_prob(cuda_table, dists, argmin_dists, tile_input_states_mat)
-        self._learn_prediction_knn(cuda_table, dists, argmin_dists, tile_input_states_mat)
+        self._learn_prediction_knn()
 
     def _make_prediction(self, cuda_table, dists, argmin_dists, tile_input_states_mat):
 
         #predict_im = self._make_prediction_prob(cuda_table, dists, argmin_dists, tile_input_states_mat)
-        predict_im = self._make_prediction_knn(cuda_table, dists, argmin_dists, tile_input_states_mat)
+        predict_im = self._make_prediction_knn(cuda_table)
 
         return predict_im
 
@@ -831,7 +831,8 @@ class DynamicTiles(object):
                 W[learn_row_from, :] = learn_rate_half * 0.0 + (1.0 - learn_rate_half) * W[learn_row_from, :]
                 W[learn_row_from, learn_tile_rows_to] = learn_rate * 1.0 + (1.0 - learn_rate) * W[learn_row_from, learn_tile_rows_to]
 
-    def _learn_prediction_knn(self, cuda_table, dists, argmin_dists, tile_input_states_mat ):
+    #@profile
+    def _learn_prediction_knn(self):
         '''
 
         :param cuda_table:
@@ -888,7 +889,8 @@ class DynamicTiles(object):
 
             self.knn[tile_n].train(knn_input_win_rows=knn_input_all_tau, knn_output_win_row=win_row_post_tile_now)
 
-    def _make_prediction_knn(self, cuda_table, dists, argmin_dists, tile_input_states_mat):
+    #@profile
+    def _make_prediction_knn(self, cuda_table):
 
         predicted_row_per_valid_post_tile = []
 
@@ -1149,6 +1151,21 @@ class DynamicTiles(object):
 
             ims_list.append(p_im)
             ims_names_list.append('current, predict, future')
+
+        tmp = None
+        rand_n = None
+        while tmp is None:
+            rand_n = random.randint(0, self.num_tiles - 1)
+            tmp = self.knn[rand_n]
+
+        output_prop_im = self.knn[rand_n].output_prop_arr.copy()
+
+        max_dim = max(output_prop_im.shape[0], output_prop_im.shape[1])
+        imscale = self.ims_scale_pixels / max_dim  # 0.2: full table, 2.0
+        output_prop_im = cv2.resize(output_prop_im, dsize=(0, 0), fx=imscale, fy=imscale, interpolation=cv2.INTER_NEAREST)
+
+        ims_list.append(output_prop_im)
+        ims_names_list.append('output prop over knn rows')
 
         return ims_list, ims_names_list
 

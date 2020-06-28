@@ -1,7 +1,7 @@
 
 import time
 import numpy as np
-
+import os
 
 class SparseBinaryKNN(object):
     def __init__(self, params):
@@ -41,6 +41,16 @@ class SparseBinaryKNN(object):
         self.input_arr = np.zeros((self.N, self.num_sparse_inputs), np.int)  # int because this is just indices. dim=num_sparse_inputs since assuming one-hot for now on input
         self.output_arr = np.zeros(self.N, np.int)  # dim=1 since assuming one-hot for now on output
 
+        self.output_prop_count = np.zeros((self.N, self.sparse_io_dim), np.float)
+        self.output_prop_arr = np.zeros((self.N, self.sparse_io_dim), np.float)
+        # above is: given this input pattern, what is the probability distribution of one-hot sparse outputs
+        # more detail:
+        #   given that this knn input row is the "winner", i.e. closest nearest neighbor in matches to input,
+        #   what is probability of each of the indices in the output to be the winning output?
+        #       (for artificial input: often, multiple are "equally close": they should all learn in this case)
+        #   in an ideal case with sufficient context: these probability distributions should collapse
+        #   worst case is that probability distribution is completely flat
+
         # debug printing
         self.printed_message = [False, False]
         self.messages = ['SparseBinaryKNN::train: learning is started!',
@@ -62,6 +72,7 @@ class SparseBinaryKNN(object):
             print()
             self.printed_message[index] = True
 
+    #@profile
     def predict(self, knn_input_win_rows):
         '''
 
@@ -97,7 +108,12 @@ class SparseBinaryKNN(object):
         num_top_matches = np.count_nonzero(tmp == np.amax(tmp))
         self.sum_tie_matches += num_top_matches
 
-        win_row = self.output_arr[np.argmax(tmp)]
+        # old way: one sample from initial learning of row
+        # win_row = self.output_arr[np.argmax(tmp)]
+
+        # new way: use prop
+        win_knn_row = np.argmax(tmp)
+        win_row = np.argmax(self.output_prop_arr[win_knn_row, :])
 
         self.match_ratio_sum += np.amax(tmp) * 1.0 / len(knn_input_win_rows)
         self.match_ratio_num += 1
@@ -121,6 +137,10 @@ class SparseBinaryKNN(object):
             print('    ', 'num_top_matches', num_top_matches)
             print('    ', 'argmax(tmp)', np.argmax(tmp), 'win_row', win_row)
             print()
+            print()
+            #print('    ', 'output_prop_arr', np.sum(self.output_prop_arr))
+            print()
+
 
             self.done_train_cnt = 0
             self.skipped_train_cnt = 0
@@ -133,6 +153,7 @@ class SparseBinaryKNN(object):
 
         return win_row
 
+    #@profile
     def train(self, knn_input_win_rows, knn_output_win_row):
         '''
 
@@ -147,15 +168,19 @@ class SparseBinaryKNN(object):
         '''
 
         if self.curr_k_step == self.learn_every_k:
+            match = np.sum((self.input_arr[0:max(self.learn_index, 1), :] - knn_input_win_rows) == 0, axis=1)
+
             if self.learn_index < self.N:
                 self._print_message_once(index=0)
                 # TODO don't learn if this input + output already in table
 
-                match = np.sum(((self.input_arr - knn_input_win_rows) == 0), axis=1)
                 if np.amax(match) < len(knn_input_win_rows):
 
                     self.input_arr[self.learn_index, :] = knn_input_win_rows[:]
                     self.output_arr[self.learn_index] = knn_output_win_row
+
+                    self.output_prop_count[self.learn_index, knn_output_win_row] = 1
+                    self.output_prop_arr[self.learn_index, knn_output_win_row] = 1.0
 
                     self.learn_index += 1
                     self.done_train_cnt += 1
@@ -165,6 +190,14 @@ class SparseBinaryKNN(object):
                 self.curr_k_step = 1
             else:
                 self._print_message_once(index=1)
+
+                win_knn_row = np.argmax(match)  # in range [0, 200]
+                self.output_prop_count[win_knn_row, knn_output_win_row] += 1
+                self.output_prop_arr[win_knn_row, :] = self.output_prop_count[win_knn_row, :] * 1.0 / np.sum(self.output_prop_count[win_knn_row, :])
+
+                #self.output_prop_arr[win_knn_row, knn_output_win_row] = (1.0 - self.weight_learn_rate) * self.output_prop_arr[win_knn_row, knn_output_win_row] + self.weight_learn_rate * 1.0
+
+                # also need to use output_prop_arr in predict() function
 
                 if self.train_weights:
                     # train weights!

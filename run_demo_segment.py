@@ -29,7 +29,7 @@ COLOR_ENABLED = False
 
 ENABLE_WEIGHT_BIAS = True
 
-USE_VIDEO_IN = False
+USE_VIDEO_IN = True
 if USE_VIDEO_IN:
     # for this, use 800 rows per tile instead!
     ROWS_PER_TILE = 800
