@@ -122,7 +122,9 @@ class MultiSparseBinaryKNN(object):
             tmp = tmp_gpu.get()
         elif self.use_cython:
             #print(self.input_arr.dtype, expand_input.dtype)
-            tmp = sum_match(self.input_arr, expand_input)
+            arr_out = np.zeros(self.input_arr.shape[0], DTYPE)
+            sum_match(self.input_arr, expand_input, arr_out, DTYPE(self.num_knn), DTYPE(self.N))
+            tmp = arr_out
         else:
             tmp = np.sum((self.input_arr - expand_input) == 0, axis=1)
             # tmp = np.zeros(self.input_arr.shape[0])
