@@ -1,0 +1,10 @@
+# Created by .ignore support plugin (hsz.mobi)
+*.c
+*.lprof
+*.prof
+*.txt
+*.so
+*.pyc
+*.png
+*.npy
+*.idea*
