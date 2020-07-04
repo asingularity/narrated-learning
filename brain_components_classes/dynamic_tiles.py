@@ -436,21 +436,29 @@ class DynamicTiles(object):
         # (5) initialize knn
         # ************
         knn_list = []
+        knn_params = None
         for tile_ind in range(num_tiles):
             # not all used
             if tile_ind in valid_post_tile_list:
-                knn = SparseBinaryKNN(params={
+                knn_params = {
                     'sparse_io_dim': self.rows_per_tile,
                     'num_sparse_inputs': num_predictor_tiles * len(self.prediction_tau_list),
                     'num_sparse_outputs': 1,
                     'num_rows': self.binary_knn_rows,
                     'learn_row_every_k': self.binary_knn_learn_every_k
-                })
+                }
+                knn = SparseBinaryKNN(params=knn_params)
             else:
                 # save memory
                 knn = None
 
             knn_list.append(knn)
+
+        print()
+        print('initialized ', len(knn_list), ' knns.')
+        print('sample knn params:')
+        print(knn_params)
+        print()
 
         # ************
         # (6) class variables set
