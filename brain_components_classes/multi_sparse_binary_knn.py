@@ -93,8 +93,9 @@ class MultiSparseBinaryKNN(object):
         if self.use_cython:
             self.input_arrs_list = []
             # try: one arr per knn instead of monolithic large array
-            for knn in range(self.num_knn):
-                input_arr_knn = self.input_arr[knn * self.N:(knn + 1) * self.N, :].copy()
+            # for knn in range(self.num_knn):
+            #     input_arr_knn = self.input_arr[knn * self.N:(knn + 1) * self.N, :].copy()
+            #     self.input_arrs_list.append(input_arr_knn)
 
         # cuda
         self.use_cuda = params['use_cuda']
@@ -126,8 +127,6 @@ class MultiSparseBinaryKNN(object):
         # knn_input_win_rows_2d_arr:  # (196, 63) : (num_knn, num_sparse_inputs)
         # self.input_arr:             # (392000, 63) : (num_knn * N, num_sparse_inputs)
 
-        expand_input = np.repeat(knn_input_win_rows_2d_arr, self.N, axis=0)
-
         # TODO incorporate learn_index, have to do it per block... or work around by appropriate initialization
 
         if self.use_cuda:
@@ -137,9 +136,11 @@ class MultiSparseBinaryKNN(object):
         elif self.use_cython:
             #print(self.input_arr.dtype, expand_input.dtype)
             arr_out = np.zeros(self.input_arr.shape[0], DTYPE)
-            sum_match(self.input_arr, expand_input, arr_out, DTYPE(self.num_knn), DTYPE(self.N))
+            sum_match(self.input_arr, knn_input_win_rows_2d_arr, arr_out, DTYPE(self.num_knn), DTYPE(self.N))
             tmp = arr_out
         else:
+            expand_input = np.repeat(knn_input_win_rows_2d_arr, self.N, axis=0)
+
             tmp = np.sum((self.input_arr - expand_input) == 0, axis=1)
             # tmp = np.zeros(self.input_arr.shape[0])
 
