@@ -90,6 +90,12 @@ class MultiSparseBinaryKNN(object):
         # cython
         self.use_cython = params['use_cython']
 
+        if self.use_cython:
+            self.input_arrs_list = []
+            # try: one arr per knn instead of monolithic large array
+            for knn in range(self.num_knn):
+                input_arr_knn = self.input_arr[knn * self.N:(knn + 1) * self.N, :].copy()
+
         # cuda
         self.use_cuda = params['use_cuda']
         if self.use_cuda:
