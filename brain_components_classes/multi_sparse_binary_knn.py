@@ -1,4 +1,5 @@
 
+import random
 from utils.fps_counter import FPSCounter
 import time
 import numpy as np
@@ -59,11 +60,18 @@ class MultiSparseBinaryKNN(object):
 
         # ************ knn **************
 
-        self.input_arr = np.zeros((self.num_knn * self.N, self.num_sparse_inputs), DTYPE)  # int because this is just indices. dim=num_sparse_inputs since assuming one-hot for now on input
-        self.output_arr = np.zeros(self.num_knn * self.N, DTYPE)  # dim=1 since assuming one-hot for now on output
+        if params['random_init']:
+            self.input_arr = np.random.randint(0, self.sparse_io_dim, (self.num_knn * self.N, self.num_sparse_inputs), DTYPE)  # int because this is just indices. dim=num_sparse_inputs since assuming one-hot for now on input
 
-        self.output_prop_count = np.zeros((self.num_knn * self.N, self.sparse_io_dim), np.float32)
-        self.output_prop_arr = np.zeros((self.num_knn * self.N, self.sparse_io_dim), np.float32)
+            self.output_prop_count = np.random.randint(1, 100, (self.num_knn * self.N, self.sparse_io_dim)).astype(np.float32)
+            self.output_prop_arr = np.zeros((self.num_knn * self.N, self.sparse_io_dim), dtype=np.float32)
+        else:
+            self.input_arr = np.zeros((self.num_knn * self.N, self.num_sparse_inputs), DTYPE)  # int because this is just indices. dim=num_sparse_inputs since assuming one-hot for now on input
+
+            self.output_prop_count = np.zeros((self.num_knn * self.N, self.sparse_io_dim), np.float32)
+            self.output_prop_arr = np.zeros((self.num_knn * self.N, self.sparse_io_dim), np.float32)
+
+
 
         # debug printing
         self.printed_message = [False, False]
@@ -162,6 +170,7 @@ class MultiSparseBinaryKNN(object):
 if __name__ == '__main__':
     # {'sparse_io_dim': 800, 'num_sparse_inputs': 63, 'num_sparse_outputs': 1, 'num_rows': 2000, 'learn_row_every_k': 1}
 
+    random.seed(1)
     np.random.seed(1)
 
     sparse_io_dim = 800
@@ -175,20 +184,19 @@ if __name__ == '__main__':
         'num_sparse_inputs': num_sparse_inputs,
         'num_sparse_outputs': 1,
         'num_rows': 2000,
-        'num_knn': num_knn
+        'num_knn': num_knn,
+        'random_init': True  # for debugging
     })
 
     fps = FPSCounter()
 
-    for k in range(1000):
+    for k in range(2000):
 
         tiles_inputs = np.random.randint(0, sparse_io_dim - 1, (num_knn, num_sparse_inputs)).astype(DTYPE)
         predict_win_rows = mp.predict(knn_input_win_rows_2d_arr=tiles_inputs)
-
-        # print(predict_win_rows)
-
         fps.update()
 
+    print(predict_win_rows)
 
 
 
