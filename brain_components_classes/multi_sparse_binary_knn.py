@@ -64,7 +64,7 @@ class MultiSparseBinaryKNN(object):
             self.input_arr = np.random.randint(0, self.sparse_io_dim, (self.num_knn * self.N, self.num_sparse_inputs), DTYPE)  # int because this is just indices. dim=num_sparse_inputs since assuming one-hot for now on input
 
             self.output_prop_count = np.random.randint(1, 100, (self.num_knn * self.N, self.sparse_io_dim)).astype(np.float32)
-            self.output_prop_arr = np.zeros((self.num_knn * self.N, self.sparse_io_dim), dtype=np.float32)
+            self.output_prop_arr = np.random.random((self.num_knn * self.N, self.sparse_io_dim)).astype(np.float32)
         else:
             self.input_arr = np.zeros((self.num_knn * self.N, self.num_sparse_inputs), DTYPE)  # int because this is just indices. dim=num_sparse_inputs since assuming one-hot for now on input
 
@@ -104,12 +104,15 @@ class MultiSparseBinaryKNN(object):
 
             self.input_arr_gpu = gpuarray.to_gpu(self.input_arr)
 
-    def _print_message_once(self, index):
-        if not self.printed_message[index]:
+        self.t = 0  # only used for debug / printing
+        self.printed_messages = []
+
+    def _print_message_once(self, message):
+        if not message in self.printed_messages:
             print()
-            print(self.messages[index])
+            print(self.t, ' ', message)
             print()
-            self.printed_message[index] = True
+            self.printed_messages.append(message)
 
     #@profile
     def predict(self, knn_input_win_rows_2d_arr):
@@ -164,6 +167,7 @@ class MultiSparseBinaryKNN(object):
         rel_knn_rows = np.arange(self.num_knn) * self.N + win_knn_rows_arr  # relative indices to output_prop_arr
         win_rows_arr = np.argmax(self.output_prop_arr[rel_knn_rows, :], axis=1)
 
+        self.t += 1
         assert win_rows_arr.shape[0] == self.num_knn
         return win_rows_arr
 
@@ -254,13 +258,14 @@ class MultiSparseBinaryKNN(object):
                 match = tmp[knn * self.N:(knn + 1) * self.N]
                 if self.learn_index[knn] < self.N:
                     if np.amax(match) < len_input:  # not perfect match
+                        self._print_message_once("--- at least one knn add a row")
                         self.input_arr[knn * self.N + self.learn_index[knn], :] = knn_input_win_rows_2d_arr[knn, :]
                         self.output_prop_count[knn * self.N + self.learn_index[knn], knn_output_win_row_arr[knn]] = 1
                         self.output_prop_arr[knn * self.N + self.learn_index[knn], knn_output_win_row_arr[knn]] = 1.0
 
                         self.learn_index[knn] += 1
                 else:
-
+                    self._print_message_once("--- at least one knn updated a row output")
                     self.output_prop_count[win_knn_rows_arr[knn], knn_output_win_row_arr[knn]] += 1
                     self.output_prop_arr[win_knn_rows_arr[knn], :] = self.output_prop_count[win_knn_rows_arr[knn], :] * 1.0 / np.sum(self.output_prop_count[win_knn_rows_arr[knn], :])
 
@@ -272,9 +277,18 @@ def main():
     random.seed(1)
     np.random.seed(1)
 
-    sparse_io_dim = 800
-    num_knn = 196
-    num_sparse_inputs = 63
+    test_large = True
+
+    if test_large:
+        sparse_io_dim = 800
+        num_knn = 196
+        num_sparse_inputs = 63
+        num_rows = 2000
+    else:
+        sparse_io_dim = 800
+        num_knn = 40
+        num_sparse_inputs = 63
+        num_rows = 200
 
     mp = MultiSparseBinaryKNN(params={
         'use_cuda': False,  # not implemented!
@@ -282,14 +296,14 @@ def main():
         'sparse_io_dim': sparse_io_dim,  # rows per tile of cuda tables
         'num_sparse_inputs': num_sparse_inputs,
         'num_sparse_outputs': 1,
-        'num_rows': 2000,
+        'num_rows': num_rows,
         'num_knn': num_knn,
-        'random_init': True  # for debugging
+        'random_init': False  # for debugging
     })
 
     fps = FPSCounter()
 
-    for k in range(2000):
+    for k in range(1000):
 
         tiles_inputs = np.random.randint(0, sparse_io_dim - 1, (num_knn, num_sparse_inputs)).astype(DTYPE)
         predict_win_rows = mp.predict(knn_input_win_rows_2d_arr=tiles_inputs)

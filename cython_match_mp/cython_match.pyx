@@ -149,7 +149,7 @@ def learn_update(np.int32_t num_knn,
             output_prop_count[win_knn_rows_arr[knn], knn_output_win_row_arr[knn]] += 1
 
             for k in range(r2):
-                output_prop_arr[win_knn_rows_arr[knn], r2] = output_prop_count[win_knn_rows_arr[knn], r2] / output_prop_sum_tmp_arr[knn]
+                output_prop_arr[win_knn_rows_arr[knn], k] = output_prop_count[win_knn_rows_arr[knn], k] / output_prop_sum_tmp_arr[knn]
 
 
 
