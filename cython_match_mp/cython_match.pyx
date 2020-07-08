@@ -76,3 +76,115 @@ def sum_match(np.ndarray[np.int32_t, ndim=2] arr1,
                  arr_out[r] += (arr1[r, c] - arr2[knn_ind, c]) == 0
 
     return 0
+
+
+def learn_update_DUMB(np.int32_t num_knn,
+                      np.int32_t N,
+                      np.ndarray[np.int32_t, ndim=1] tmp,
+                      np.ndarray[np.int32_t, ndim=1] learn_index,
+                      np.ndarray[np.int32_t, ndim=2] input_arr,
+                      np.int32_t len_input,
+                      np.ndarray[np.int32_t, ndim=2] knn_input_win_rows_2d_arr,
+                      np.ndarray[np.float32_t, ndim=2] output_prop_count,
+                      np.ndarray[np.float32_t, ndim=2] output_prop_arr,
+                      np.ndarray[np.int32_t, ndim=1] knn_output_win_row_arr,
+                      np.ndarray[np.int32_t, ndim=1] win_knn_rows_arr):
+
+    for knn in range(num_knn):
+        match = tmp[knn * N:(knn + 1) * N]
+
+        if learn_index[knn] < N:
+            if np.amax(match) < len_input:  # not perfect match
+                input_arr[knn * N + learn_index[knn], :] = knn_input_win_rows_2d_arr[knn, :]
+                output_prop_count[knn * N + learn_index[knn], knn_output_win_row_arr[knn]] = 1
+                output_prop_arr[knn * N + learn_index[knn], knn_output_win_row_arr[knn]] = 1.0
+
+                learn_index[knn] += 1
+        else:
+            output_prop_count[win_knn_rows_arr[knn], knn_output_win_row_arr[knn]] += 1
+            output_prop_arr[win_knn_rows_arr[knn], :] = output_prop_count[win_knn_rows_arr[knn], :] * 1.0 / np.sum(output_prop_count[win_knn_rows_arr[knn], :])
+
+
+
+def learn_update(np.int32_t num_knn,
+                 np.int32_t N,
+                 np.ndarray[np.int32_t, ndim=1] tmp,
+                 np.ndarray[np.int32_t, ndim=1] learn_index,
+                 np.ndarray[np.int32_t, ndim=2] input_arr,
+                 np.int32_t len_input,
+                 np.ndarray[np.int32_t, ndim=2] knn_input_win_rows_2d_arr,
+                 np.ndarray[np.float32_t, ndim=2] output_prop_count,
+                 np.ndarray[np.float32_t, ndim=2] output_prop_arr,
+                 np.ndarray[np.int32_t, ndim=1] knn_output_win_row_arr,
+                 np.ndarray[np.int32_t, ndim=1] win_knn_rows_arr,
+                 np.ndarray[np.float32_t, ndim=1] output_prop_sum_tmp_arr):
+
+    cdef np.int32_t r1
+    cdef np.int32_t r2
+    r1 = knn_input_win_rows_2d_arr.shape[1]
+    r2 = output_prop_arr.shape[1]
+    cdef np.int32_t max_match, knn, k, k2
+
+    for k in range(num_knn):
+        for k2 in range(output_prop_count.shape[1]):
+            output_prop_sum_tmp_arr[k] += output_prop_count[win_knn_rows_arr[knn], k2]
+
+    for knn in prange(num_knn,  nogil=True, schedule='dynamic', num_threads=20):
+        max_match = 0
+
+        for k in range(knn * N, (knn + 1) * N):
+            if tmp[k] > max_match:
+                max_match = tmp[k]
+
+        if learn_index[knn] < N:
+            if max_match < len_input:  # not perfect match
+                for k in range(r1):
+                    input_arr[knn * N + learn_index[knn], k] = knn_input_win_rows_2d_arr[knn, k]
+
+                output_prop_count[knn * N + learn_index[knn], knn_output_win_row_arr[knn]] = 1
+                output_prop_arr[knn * N + learn_index[knn], knn_output_win_row_arr[knn]] = 1.0
+
+                learn_index[knn] += 1
+        else:
+            output_prop_count[win_knn_rows_arr[knn], knn_output_win_row_arr[knn]] += 1
+
+            for k in range(r2):
+                output_prop_arr[win_knn_rows_arr[knn], r2] = output_prop_count[win_knn_rows_arr[knn], r2] / output_prop_sum_tmp_arr[knn]
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

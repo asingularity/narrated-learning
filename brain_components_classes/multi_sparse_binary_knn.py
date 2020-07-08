@@ -12,7 +12,7 @@ import pycuda.cumath as cumath
 import skcuda.linalg as linalg
 import skcuda.misc as misc
 
-from cython_match import sum_match
+from cython_match import sum_match, learn_update
 
 
 DTYPE = np.int32
@@ -111,6 +111,7 @@ class MultiSparseBinaryKNN(object):
             print()
             self.printed_message[index] = True
 
+    #@profile
     def predict(self, knn_input_win_rows_2d_arr):
         '''
 
@@ -128,21 +129,20 @@ class MultiSparseBinaryKNN(object):
         # self.input_arr:             # (392000, 63) : (num_knn * N, num_sparse_inputs)
 
         # TODO incorporate learn_index, have to do it per block... or work around by appropriate initialization
+        # we could pass learn_index array to cython, easy to incorporate this there in the loop
 
-        if self.use_cuda:
-            expand_input_gpu = gpuarray.to_gpu(expand_input)
-            tmp_gpu = misc.sum(misc.subtract(self.input_arr_gpu, expand_input_gpu)==0, axis=1)
-            tmp = tmp_gpu.get()
-        elif self.use_cython:
-            #print(self.input_arr.dtype, expand_input.dtype)
+        # if self.use_cuda:
+        #     expand_input_gpu = gpuarray.to_gpu(expand_input)
+        #     tmp_gpu = misc.sum(misc.subtract(self.input_arr_gpu, expand_input_gpu)==0, axis=1)
+        #     tmp = tmp_gpu.get()
+
+        if self.use_cython:
             arr_out = np.zeros(self.input_arr.shape[0], DTYPE)
             sum_match(self.input_arr, knn_input_win_rows_2d_arr, arr_out, DTYPE(self.num_knn), DTYPE(self.N))
             tmp = arr_out
         else:
             expand_input = np.repeat(knn_input_win_rows_2d_arr, self.N, axis=0)
-
             tmp = np.sum((self.input_arr - expand_input) == 0, axis=1)
-            # tmp = np.zeros(self.input_arr.shape[0])
 
         # tmp: (392000,)
 
@@ -152,17 +152,22 @@ class MultiSparseBinaryKNN(object):
         tmp2 = tmp.reshape((self.num_knn, self.N))
         win_knn_rows_arr = np.argmax(tmp2, axis=1)
 
-        # TODO this is wrong:
-        win_rows_arr = win_knn_rows_arr
+        # this is wrong but used for speed testing:
+        # win_rows_arr = win_knn_rows_arr  # len: num_knn: winning knn-row per knn
 
-        # TODO instead, missing a piece here: the lookup after win_knn_row
-        # new way: use prop
-        # win_knn_row = np.argmax(tmp)
+        # this was line from single knn:
         # win_row = np.argmax(self.output_prop_arr[win_knn_row, :])
+
+        # win_knn_rows_arr: (self.num_knn,)  -- values in range [0, self.N]
+        # self.output_prop_arr: (self.num_knn * self.N, self.sparse_io_dim)
+
+        rel_knn_rows = np.arange(self.num_knn) * self.N + win_knn_rows_arr  # relative indices to output_prop_arr
+        win_rows_arr = np.argmax(self.output_prop_arr[rel_knn_rows, :], axis=1)
 
         assert win_rows_arr.shape[0] == self.num_knn
         return win_rows_arr
 
+    #@profile
     def train(self, knn_input_win_rows_2d_arr, knn_output_win_row_arr):
         '''
 
@@ -172,9 +177,96 @@ class MultiSparseBinaryKNN(object):
         :return:
         '''
 
+        # possibly instead of passing in input rows:
+        #   !!! unclear if this works given how make_prediction_knn, learn_prediction_knn work in dynamic_tiles.py !!!
+        #   - tau_predict should be a class parameter, per knn
+        #   - input should be stored in states limited history
+        #
+        # we can do this, but not tau - tau is internal to dynamic_tiles, but it is implicit here one step (next step)
+        # other issue is what if between that tau, things changed?
+        # better to not change this and go by original logic for now from sparse_binary_knn.py
+
+        # (1) lookup based on input
+
+        # (2) for each knn:
+        #   if learn index < N
+        #       if exact input row not already in table:
+        #           learn this row, and set output with count 1
+        #   else
+        #       update output prop count and prop arr for winning row
+
+        if self.use_cython:
+            arr_out = np.zeros(self.input_arr.shape[0], DTYPE)
+            sum_match(self.input_arr, knn_input_win_rows_2d_arr, arr_out, DTYPE(self.num_knn), DTYPE(self.N))
+            tmp = arr_out
+        else:
+            expand_input = np.repeat(knn_input_win_rows_2d_arr, self.N, axis=0)
+            tmp = np.sum((self.input_arr - expand_input) == 0, axis=1)
+
+        tmp2 = tmp.reshape((self.num_knn, self.N))
+        win_knn_rows_arr = np.argmax(tmp2, axis=1).astype(DTYPE)
+
+        rel_knn_rows = np.arange(self.num_knn) * self.N + win_knn_rows_arr  # relative indices to output_prop_arr
+        win_rows_arr = np.argmax(self.output_prop_arr[rel_knn_rows, :], axis=1)
+
+        len_input = len(knn_input_win_rows_2d_arr[0, :])
+
+        # move the below into cython as well!
+        #   started learn_update function in cython_match.pyx
+
+        if self.use_cython:
+            '''
+            def learn_update(np.int32_t num_knn,
+                 np.int32_t N,
+                 np.ndarray[np.int32_t, ndim=1] tmp,
+                 np.ndarray[np.int32_t, ndim=1] learn_index,
+                 np.ndarray[np.int32_t, ndim=2] input_arr,
+                 np.int32_t len_input,
+                 np.ndarray[np.int32_t, ndim=2] knn_input_win_rows_2d_arr,
+                 np.ndarray[np.int32_t, ndim=2] output_prop_count,
+                 np.ndarray[np.int32_t, ndim=2] output_prop_arr,
+                 np.ndarray[np.int32_t, ndim=1] knn_output_win_row_arr,
+                 np.ndarray[np.int32_t, ndim=1] win_knn_rows_arr):
+            '''
+
+            output_prop_sum_tmp_arr = np.zeros(self.num_knn, np.float32)
+            # print(knn_input_win_rows_2d_arr.shape[1], knn_input_win_rows_2d_arr.shape, self.input_arr.shape)
+            learn_update(self.num_knn,
+                         np.int32(self.N),
+                         tmp,
+                         self.learn_index,
+                         self.input_arr,
+                         np.int32(len_input),
+                         knn_input_win_rows_2d_arr,
+                         self.output_prop_count,
+                         self.output_prop_arr,
+                         knn_output_win_row_arr,
+                         win_knn_rows_arr,
+                         output_prop_sum_tmp_arr)
+        else:
+
+            # print('')
+            # print(win_knn_rows_arr.shape)  # (196,)
+            # print(self.output_prop_count.shape)  # (392000, 800)
+            # print(self.output_prop_count[win_knn_rows_arr[0], :].shape)  # (800,)
+
+            for knn in range(self.num_knn):
+                match = tmp[knn * self.N:(knn + 1) * self.N]
+                if self.learn_index[knn] < self.N:
+                    if np.amax(match) < len_input:  # not perfect match
+                        self.input_arr[knn * self.N + self.learn_index[knn], :] = knn_input_win_rows_2d_arr[knn, :]
+                        self.output_prop_count[knn * self.N + self.learn_index[knn], knn_output_win_row_arr[knn]] = 1
+                        self.output_prop_arr[knn * self.N + self.learn_index[knn], knn_output_win_row_arr[knn]] = 1.0
+
+                        self.learn_index[knn] += 1
+                else:
+
+                    self.output_prop_count[win_knn_rows_arr[knn], knn_output_win_row_arr[knn]] += 1
+                    self.output_prop_arr[win_knn_rows_arr[knn], :] = self.output_prop_count[win_knn_rows_arr[knn], :] * 1.0 / np.sum(self.output_prop_count[win_knn_rows_arr[knn], :])
 
 
-if __name__ == '__main__':
+#@profile
+def main():
     # {'sparse_io_dim': 800, 'num_sparse_inputs': 63, 'num_sparse_outputs': 1, 'num_rows': 2000, 'learn_row_every_k': 1}
 
     random.seed(1)
@@ -185,7 +277,7 @@ if __name__ == '__main__':
     num_sparse_inputs = 63
 
     mp = MultiSparseBinaryKNN(params={
-        'use_cuda': False,
+        'use_cuda': False,  # not implemented!
         'use_cython': True,
         'sparse_io_dim': sparse_io_dim,  # rows per tile of cuda tables
         'num_sparse_inputs': num_sparse_inputs,
@@ -201,10 +293,16 @@ if __name__ == '__main__':
 
         tiles_inputs = np.random.randint(0, sparse_io_dim - 1, (num_knn, num_sparse_inputs)).astype(DTYPE)
         predict_win_rows = mp.predict(knn_input_win_rows_2d_arr=tiles_inputs)
+        mp.train(knn_input_win_rows_2d_arr=tiles_inputs, knn_output_win_row_arr=np.random.randint(0, sparse_io_dim - 1, num_knn).astype(DTYPE))
         fps.update()
+
+    # TODO need a check on training that makes sure to include filled knn tables as well!!! i.e. executes all code above
 
     print(predict_win_rows)
 
+
+if __name__ == '__main__':
+    main()
 
 
 
