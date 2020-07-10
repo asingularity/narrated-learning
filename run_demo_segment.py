@@ -16,7 +16,7 @@ from math import pi
 MAX_HISTORY_LENGTH = 10600000 + 1
 USERNAME = 'intec'
 
-IM_DIM = 32  # pixels, width & height
+IM_DIM = 64  # pixels, width & height
 TILE_DIM = 5  # pixels, width & height
 TILES_OFFSET = 2  # pixels
 PREDICT_RADIUS = 5  # pixels
@@ -97,7 +97,7 @@ def get_visualizer_params():
         'image_display_secs_fast': 2,
         'waitKey_time_fast': 1,  # 1, 100, 5000
         'image_display_secs_slow': 0,  # 0: every frame
-        'waitKey_time_slow': 100,  # 1, 100, 5000  #
+        'waitKey_time_slow': 1,  # 1, 100, 5000  #
         'scale_camera_factor': 1,
         'auto_switch_to_slow_disp_time': 10000,
         'init_fast': True  # start with "fast" display

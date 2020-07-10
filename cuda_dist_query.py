@@ -132,6 +132,7 @@ class CudaTable(object):
         :return: list of [dists] per each query input
         '''
 
+        # print('***', query_inputs.shape)
         X = query_inputs
 
         i_d_t_gpu = self.table_i_gpu

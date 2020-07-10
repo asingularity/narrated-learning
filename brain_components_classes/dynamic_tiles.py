@@ -11,6 +11,7 @@ from utils.load_sim_history import load_states_history, load_td_info_history
 from utils.fps_counter import FPSCounter
 from brain_components_classes.states_history import StatesLimitedHistory
 from brain_components_classes.sparse_binary_knn import SparseBinaryKNN
+from brain_components_classes.multi_sparse_binary_knn import MultiSparseBinaryKNN
 
 
 class OneTimeMessages(object):
@@ -27,6 +28,9 @@ class DynamicTiles(object):
 
         :param params:
         '''
+
+        self.use_old_knn = False
+        self.use_cython_if_new_knn = True
 
         self.max_history_length = params['max_history_length']
         self.ims_scale_pixels = float(params['ims_scale_pixels'])  # visualizer
@@ -435,30 +439,53 @@ class DynamicTiles(object):
         # ************
         # (5) initialize knn
         # ************
-        knn_list = []
-        knn_params = None
-        for tile_ind in range(num_tiles):
-            # not all used
-            if tile_ind in valid_post_tile_list:
-                knn_params = {
-                    'sparse_io_dim': self.rows_per_tile,
-                    'num_sparse_inputs': num_predictor_tiles * len(self.prediction_tau_list),
-                    'num_sparse_outputs': 1,
-                    'num_rows': self.binary_knn_rows,
-                    'learn_row_every_k': self.binary_knn_learn_every_k
-                }
-                knn = SparseBinaryKNN(params=knn_params)
-            else:
-                # save memory
-                knn = None
 
-            knn_list.append(knn)
+        if self.use_old_knn:  # old
+            knn_list = []
+            knn_params = None
+            for tile_ind in range(num_tiles):
+                # not all used
+                if tile_ind in valid_post_tile_list:
+                    knn_params = {
+                        'sparse_io_dim': self.rows_per_tile,
+                        'num_sparse_inputs': num_predictor_tiles * len(self.prediction_tau_list),
+                        'num_sparse_outputs': 1,
+                        'num_rows': self.binary_knn_rows,
+                        'learn_row_every_k': self.binary_knn_learn_every_k
+                    }
+                    knn = SparseBinaryKNN(params=knn_params)
+                else:
+                    # save memory
+                    knn = None
 
-        print()
-        print('initialized ', len(knn_list), ' knns.')
-        print('sample knn params:')
-        print(knn_params)
-        print()
+                knn_list.append(knn)
+
+            print()
+            print('initialized ', len(knn_list), ' knns.')
+            print('sample knn params:')
+            print(knn_params)
+            print()
+
+            self.knn = knn_list
+
+        else:
+            p = {
+                'use_cuda': False,  # not implemented!
+                'use_cython': self.use_cython_if_new_knn,
+                'sparse_io_dim': self.rows_per_tile,  # rows per tile of cuda tables
+                'num_sparse_inputs': num_predictor_tiles * len(self.prediction_tau_list),
+                'num_sparse_outputs': 1,
+                'num_rows': self.binary_knn_rows,
+                'num_knn': len(valid_post_tile_list),
+                'random_init': False  # for debugging
+            }
+            self.mknn = MultiSparseBinaryKNN(params=p)
+
+            print()
+            print('Initialized MultiSparseBinaryKNN')
+            print()
+            print(p)
+            print()
 
         # ************
         # (6) class variables set
@@ -466,7 +493,6 @@ class DynamicTiles(object):
 
         self.valid_post_tiles = np.array(valid_post_tile_list, np.int)
         self.predictor_tile_indices = predictor_tile_indices
-        self.knn = knn_list
 
         self.im_r_indices = im_r_indices
         self.im_c_indices = im_c_indices
@@ -865,61 +891,107 @@ class DynamicTiles(object):
         # ... doesn't look straightforward at all
         # might as well go from post-prediction tiles (what is being predicted)
 
-        for tile_n in list(self.valid_post_tiles):  # only tiles with full "predictive fields" are predicted, for ease of tiling; leaving out ones on edges
-            win_row_post_tile_now = self.win_row_history.get_state(state_index=0, delay=0)[0].astype(np.int)[tile_n]
-            pre_tile_indices = self.predictor_tile_indices[tile_n, :]  # [post, pre]: (num_tiles, num_predictor_tiles)
+        if self.use_old_knn:
 
-            # this will be used for each timescale, but each timescale has its own pre activity to tie to it
-            # knn_outputs_per_post_row = _expand_win_row(win_row_index=win_row_post_tile_now)  # len: rows_per_tile
+            for tile_n in list(self.valid_post_tiles):  # only tiles with full "predictive fields" are predicted, for ease of tiling; leaving out ones on edges
+                win_row_post_tile_now = self.win_row_history.get_state(state_index=0, delay=0)[0].astype(np.int)[tile_n]
+                pre_tile_indices = self.predictor_tile_indices[tile_n, :]  # [post, pre]: (num_tiles, num_predictor_tiles)
 
-            knn_input_all_tau = np.array([])
+                # this will be used for each timescale, but each timescale has its own pre activity to tie to it
+                # knn_outputs_per_post_row = _expand_win_row(win_row_index=win_row_post_tile_now)  # len: rows_per_tile
 
-            for tau in self.prediction_tau_list:
-                # get inputs from its from_tiles
-                win_rows_pre_tiles_past = self.win_row_history.get_state(state_index=0, delay=tau)[0].astype(np.int)[pre_tile_indices]
+                knn_input_all_tau = np.array([])
 
-                # all post rows for this post tile (tile_n) will have same input, which is:
-                # this is the set of inputs for this timescale, use for all rows of the post tile (of which's rows the win output is 1, rest are 0)
-                # knn_input = _expand_win_rows(win_row_indices=win_rows_pre_tiles_past)  # len: num_pre_tiles * rows_per_tile
+                for tau in self.prediction_tau_list:
+                    # get inputs from its from_tiles
+                    win_rows_pre_tiles_past = self.win_row_history.get_state(state_index=0, delay=tau)[0].astype(np.int)[pre_tile_indices]
 
-                # append so knn input is all timescales together
-                # is this correct way when we try to make predictions? yes, training to combine from past with now
-                knn_input_all_tau = np.concatenate((knn_input_all_tau, win_rows_pre_tiles_past))
+                    # all post rows for this post tile (tile_n) will have same input, which is:
+                    # this is the set of inputs for this timescale, use for all rows of the post tile (of which's rows the win output is 1, rest are 0)
+                    # knn_input = _expand_win_rows(win_row_indices=win_rows_pre_tiles_past)  # len: num_pre_tiles * rows_per_tile
 
-            # now, train knn for this tile's rows:
-            # should this be a seq-nn cuda table? probably too big; something else? store sparse? then we don't need expand statements above
-            # store sparse (indices), distance computed in how many indices matched (equal) vs. did not match
-            # SparseBinaryKNN class
-            # later, we should make this implement seq-nn in this space
-            # Also: currently this assumes one-hot encoding for input and output; later we may need to allow multiple rows selected for input here
-            #   to allow multi-predict input for prediction here
-            # Also, for now this is one knn (tiled and used for all post tiles), but later this will be knn[tile_n], along with cuda table
+                    # append so knn input is all timescales together
+                    # is this correct way when we try to make predictions? yes, training to combine from past with now
+                    knn_input_all_tau = np.concatenate((knn_input_all_tau, win_rows_pre_tiles_past))
 
-            self.knn[tile_n].train(knn_input_win_rows=knn_input_all_tau, knn_output_win_row=win_row_post_tile_now)
+                # now, train knn for this tile's rows:
+                # should this be a seq-nn cuda table? probably too big; something else? store sparse? then we don't need expand statements above
+                # store sparse (indices), distance computed in how many indices matched (equal) vs. did not match
+                # SparseBinaryKNN class
+                # later, we should make this implement seq-nn in this space
+                # Also: currently this assumes one-hot encoding for input and output; later we may need to allow multiple rows selected for input here
+                #   to allow multi-predict input for prediction here
+                # Also, for now this is one knn (tiled and used for all post tiles), but later this will be knn[tile_n], along with cuda table
+
+                self.knn[tile_n].train(knn_input_win_rows=knn_input_all_tau, knn_output_win_row=win_row_post_tile_now)
+
+        else:
+            # *** new ***
+
+            knn_input_win_rows_list = []
+            knn_output_win_tile_list = []
+            for tile_n in list(self.valid_post_tiles):
+
+                win_row_post_tile_now = self.win_row_history.get_state(state_index=0, delay=0)[0].astype(np.int)[tile_n]
+                pre_tile_indices = self.predictor_tile_indices[tile_n, :]  # [post, pre]: (num_tiles, num_predictor_tiles)
+                knn_input_all_tau = np.array([])
+
+                for tau in self.prediction_tau_list:
+                    # get inputs from its from_tiles
+                    win_rows_pre_tiles_past = self.win_row_history.get_state(state_index=0, delay=tau)[0].astype(np.int)[pre_tile_indices]
+                    knn_input_all_tau = np.concatenate((knn_input_all_tau, win_rows_pre_tiles_past))
+
+                knn_input_win_rows_list.append(knn_input_all_tau)
+                knn_output_win_tile_list.append(win_row_post_tile_now)
+
+            self.mknn.train(knn_input_win_rows_2d_arr=np.array(knn_input_win_rows_list, np.int32), knn_output_win_row_arr=np.array(knn_output_win_tile_list, np.int32))
 
     #@profile
     def _make_prediction_knn(self, cuda_table):
 
-        predicted_row_per_valid_post_tile = []
+        if self.use_old_knn:  # OLD
+            predicted_row_per_valid_post_tile = []
 
-        for tile_n in list(self.valid_post_tiles):
-            pre_tile_indices = self.predictor_tile_indices[tile_n, :]
+            for tile_n in list(self.valid_post_tiles):
+                pre_tile_indices = self.predictor_tile_indices[tile_n, :]
 
-            knn_input_all_tau = np.array([])
+                knn_input_all_tau = np.array([])
 
-            for tau in self.prediction_tau_list:
-                predict_steps_ahead = self.predict_steps_ahead
-                assert tau >= predict_steps_ahead
+                for tau in self.prediction_tau_list:
+                    predict_steps_ahead = self.predict_steps_ahead
+                    assert tau >= predict_steps_ahead
 
-                win_rows_pre_tiles_past = self.win_row_history.get_state(state_index=0, delay=tau - predict_steps_ahead)[0].astype(np.int)[pre_tile_indices]
-                knn_input_all_tau = np.concatenate((knn_input_all_tau, win_rows_pre_tiles_past))
+                    win_rows_pre_tiles_past = self.win_row_history.get_state(state_index=0, delay=tau - predict_steps_ahead)[0].astype(np.int)[pre_tile_indices]
+                    knn_input_all_tau = np.concatenate((knn_input_all_tau, win_rows_pre_tiles_past))
 
-            # this should return multiple win rows for multi-predict, so this might change soon:
-            # also, will at some point be self.knn[tile_n] for independent per tile, for perspective projection etc.
-            win_row = self.knn[tile_n].predict(knn_input_win_rows=knn_input_all_tau)
-            predicted_row_per_valid_post_tile.append(win_row)
+                # this should return multiple win rows for multi-predict, so this might change soon:
+                # also, will at some point be self.knn[tile_n] for independent per tile, for perspective projection etc.
+                win_row = self.knn[tile_n].predict(knn_input_win_rows=knn_input_all_tau)
+                predicted_row_per_valid_post_tile.append(win_row)
+        else:
 
-        # make prediction image
+            # *************** new ***************
+
+            knn_input_win_rows_list = []
+            for tile_n in list(self.valid_post_tiles):
+                pre_tile_indices = self.predictor_tile_indices[tile_n, :]
+
+                knn_input_all_tau = np.array([])
+
+                for tau in self.prediction_tau_list:
+                    predict_steps_ahead = self.predict_steps_ahead
+                    assert tau >= predict_steps_ahead
+
+                    win_rows_pre_tiles_past = self.win_row_history.get_state(state_index=0, delay=tau - predict_steps_ahead)[0].astype(np.int)[pre_tile_indices]
+                    knn_input_all_tau = np.concatenate((knn_input_all_tau, win_rows_pre_tiles_past))
+
+                knn_input_win_rows_list.append(knn_input_all_tau)
+
+            knn_input_win_rows_2d_arr = np.array(knn_input_win_rows_list, np.int32)
+
+            predicted_row_per_valid_post_tile = self.mknn.predict(knn_input_win_rows_2d_arr=knn_input_win_rows_2d_arr)
+
+        # *************** make prediction image ***************
 
         sum_im = np.zeros((self.image_dim_NxN_pixels, self.image_dim_NxN_pixels))
         num_im = np.zeros((self.image_dim_NxN_pixels, self.image_dim_NxN_pixels))
@@ -1160,20 +1232,12 @@ class DynamicTiles(object):
             ims_list.append(p_im)
             ims_names_list.append('current, predict, future')
 
-        tmp = None
-        rand_n = None
-        while tmp is None:
-            rand_n = random.randint(0, self.num_tiles - 1)
-            tmp = self.knn[rand_n]
-
-        output_prop_im = self.knn[rand_n].output_prop_arr.copy()
-
-        max_dim = max(output_prop_im.shape[0], output_prop_im.shape[1])
-        imscale = self.ims_scale_pixels / max_dim  # 0.2: full table, 2.0
-        output_prop_im = cv2.resize(output_prop_im, dsize=(0, 0), fx=imscale, fy=imscale, interpolation=cv2.INTER_NEAREST)
-
-        ims_list.append(output_prop_im)
-        ims_names_list.append('output prop over knn rows')
+        #output_prop_im = self.mknn.output_prop_arr.copy()
+        #max_dim = max(output_prop_im.shape[0], output_prop_im.shape[1])
+        #imscale = self.ims_scale_pixels / max_dim  # 0.2: full table, 2.0
+        #output_prop_im = cv2.resize(output_prop_im, dsize=(0, 0), fx=imscale, fy=imscale, interpolation=cv2.INTER_NEAREST)
+        #ims_list.append(output_prop_im)
+        #ims_names_list.append('output prop over knn rows')
 
         return ims_list, ims_names_list
 

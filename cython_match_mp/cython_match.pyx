@@ -37,7 +37,7 @@ def test(list list_of_2darrays):
 #     cdef np.ndarray[np.int32_t, ndim=2] buff2d_2
 #     cdef np.int32_t tmp
 
-#     for knn_ind in prange(num_knn,  nogil=True, schedule='static', num_threads=20):
+#     for knn_ind in prange(num_knn,  nogil=True, schedule='static', num_threads=4):
 
 #         buff2d_1 = list_of_input_arr1[knn_ind]
 #         buff2d_2 = list_of_input_arr2[knn_ind]
