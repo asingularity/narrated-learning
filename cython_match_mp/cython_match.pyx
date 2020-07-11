@@ -83,6 +83,9 @@ def sum_match(np.ndarray[np.int32_t, ndim=2] arr1,
     return 0
 
 
+@cython.boundscheck(False) # turn off bounds-checking for entire function
+@cython.wraparound(False)  # turn off negative index wrapping for entire function
+
 def learn_update_DUMB(np.int32_t num_knn,
                       np.int32_t N,
                       np.ndarray[np.int32_t, ndim=1] tmp,
@@ -93,7 +96,8 @@ def learn_update_DUMB(np.int32_t num_knn,
                       np.ndarray[np.float32_t, ndim=2] output_prop_count,
                       np.ndarray[np.float32_t, ndim=2] output_prop_arr,
                       np.ndarray[np.int32_t, ndim=1] knn_output_win_row_arr,
-                      np.ndarray[np.int32_t, ndim=1] win_knn_rows_arr):
+                      np.ndarray[np.int32_t, ndim=1] win_knn_rows_arr,
+                      np.ndarray[np.float32_t, ndim=1] unused_ignore):
 
     for knn in range(num_knn):
         match = tmp[knn * N:(knn + 1) * N]
@@ -134,12 +138,12 @@ def learn_update(np.int32_t num_knn,
 
     for k in range(num_knn):
         for k2 in range(output_prop_count.shape[1]):
-            output_prop_sum_tmp_arr[k] += output_prop_count[win_knn_rows_arr[k], k2]
+            output_prop_sum_tmp_arr[k] += output_prop_count[k * N + win_knn_rows_arr[k], k2]
 
     for knn in prange(num_knn,  nogil=True, schedule='dynamic', num_threads=6):
         max_match = 0
 
-        for k in range(knn * N, (knn + 1) * N):
+        for k in range(knn * N, knn * N + learn_index[knn]):
             if tmp[k] > max_match:
                 max_match = tmp[k]
 
@@ -153,10 +157,10 @@ def learn_update(np.int32_t num_knn,
 
                 learn_index[knn] += 1
         else:
-            output_prop_count[win_knn_rows_arr[knn], knn_output_win_row_arr[knn]] += 1
+            output_prop_count[knn * N + win_knn_rows_arr[knn], knn_output_win_row_arr[knn]] += 1
 
             for k in range(r2):
-                output_prop_arr[win_knn_rows_arr[knn], k] = output_prop_count[win_knn_rows_arr[knn], k] / output_prop_sum_tmp_arr[knn]
+                output_prop_arr[knn * N + win_knn_rows_arr[knn], k] = output_prop_count[knn * N + win_knn_rows_arr[knn], k] / output_prop_sum_tmp_arr[knn]
 
 
 
