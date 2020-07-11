@@ -99,8 +99,8 @@ class SparseBinaryKNN(object):
         else:
             # old, non weighted method:
             # from equal matches: for now since one-hot, just pick first one
-            #tmp = np.sum((self.input_arr[0:max(self.learn_index, 1), :] - knn_input_win_rows) == 0, axis=1)
-            tmp = np.sum((self.input_arr - knn_input_win_rows) == 0, axis=1)
+            tmp = np.sum((self.input_arr[0:max(self.learn_index, 1), :] - knn_input_win_rows) == 0, axis=1)
+            #tmp = np.sum((self.input_arr - knn_input_win_rows) == 0, axis=1)
 
         # tmp:
         #   len(tmp) is <= self.N, num_rows (of knn)
@@ -169,8 +169,8 @@ class SparseBinaryKNN(object):
         '''
 
         if self.curr_k_step == self.learn_every_k:
-            #match = np.sum((self.input_arr[0:max(self.learn_index, 1), :] - knn_input_win_rows) == 0, axis=1)
-            match = np.sum((self.input_arr - knn_input_win_rows) == 0, axis=1)
+            match = np.sum((self.input_arr[0:max(self.learn_index, 1), :] - knn_input_win_rows) == 0, axis=1)
+            #match = np.sum((self.input_arr - knn_input_win_rows) == 0, axis=1)
 
             if self.learn_index < self.N:
                 self._print_message_once(index=0)

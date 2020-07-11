@@ -141,7 +141,7 @@ class MultiSparseBinaryKNN(object):
 
         if self.use_cython:
             arr_out = np.zeros(self.input_arr.shape[0], DTYPE)
-            sum_match(self.input_arr, knn_input_win_rows_2d_arr, arr_out, DTYPE(self.num_knn), DTYPE(self.N))
+            sum_match(self.input_arr, knn_input_win_rows_2d_arr, arr_out, DTYPE(self.num_knn), DTYPE(self.N), self.learn_index)
             tmp = arr_out
         else:
             expand_input = np.repeat(knn_input_win_rows_2d_arr, self.N, axis=0)
@@ -201,7 +201,7 @@ class MultiSparseBinaryKNN(object):
 
         if self.use_cython:
             arr_out = np.zeros(self.input_arr.shape[0], DTYPE)
-            sum_match(self.input_arr, knn_input_win_rows_2d_arr, arr_out, DTYPE(self.num_knn), DTYPE(self.N))
+            sum_match(self.input_arr, knn_input_win_rows_2d_arr, arr_out, DTYPE(self.num_knn), DTYPE(self.N), self.learn_index)
             tmp = arr_out
         else:
             expand_input = np.repeat(knn_input_win_rows_2d_arr, self.N, axis=0)

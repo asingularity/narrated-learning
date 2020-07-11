@@ -12,10 +12,10 @@ from cython.parallel import prange
 cimport cython
 
 
+# https://stackoverflow.com/questions/21851985/difference-between-np-int-np-int-int-and-np-int-t-in-cython
+
 @cython.boundscheck(False) # turn off bounds-checking for entire function
 @cython.wraparound(False)  # turn off negative index wrapping for entire function
-
-# https://stackoverflow.com/questions/21851985/difference-between-np-int-np-int-int-and-np-int-t-in-cython
 
 def test(list list_of_2darrays):
     cdef np.ndarray[ndim=2, dtype=np.float64_t] buff2d # check your dtype
@@ -49,11 +49,15 @@ def test(list list_of_2darrays):
 
   #   return 0
 
+@cython.boundscheck(False) # turn off bounds-checking for entire function
+@cython.wraparound(False)  # turn off negative index wrapping for entire function
+
 def sum_match(np.ndarray[np.int32_t, ndim=2] arr1,
               np.ndarray[np.int32_t, ndim=2] arr2,
               np.ndarray[np.int32_t, ndim=1] arr_out,
               np.int32_t num_knn,
-              np.int32_t N):
+              np.int32_t N,
+              np.ndarray[np.int32_t, ndim=1] learn_index):
 
     #tmp = np.sum((arr1 - arr2) == 0, axis=1)
     #return tmp
@@ -62,17 +66,18 @@ def sum_match(np.ndarray[np.int32_t, ndim=2] arr1,
 
     cdef np.int32_t n_start, n_end, r, knn_ind, c
 
-    for knn_ind in prange(num_knn,  nogil=True, schedule='dynamic', num_threads=20):
-        n_start = knn_ind * N;
-        n_end = (knn_ind + 1) * N;
+    for knn_ind in prange(num_knn,  nogil=True, schedule='dynamic', num_threads=6):
+        n_start = knn_ind * N
+        n_end = knn_ind * N + learn_index[knn_ind]
+        # n_end = (knn_ind + 1) * N
 
         # can't do this without gil:
+        # also, this is outdated: we no longer send in an expanded (tiled) arr2
         # arr_out[n_start:n_end] = np.sum((arr1[n_start:n_end, :] - arr2[n_start:n_end, :]) == 0, axis=1)
 
         for r in range(n_start, n_end):
              arr_out[r] = 0
              for c in range(cols):
-                 # TODO optimize here: arr2 doesn't longer need to be expanded!
                  arr_out[r] += (arr1[r, c] - arr2[knn_ind, c]) == 0
 
     return 0
@@ -105,6 +110,8 @@ def learn_update_DUMB(np.int32_t num_knn,
             output_prop_arr[win_knn_rows_arr[knn], :] = output_prop_count[win_knn_rows_arr[knn], :] * 1.0 / np.sum(output_prop_count[win_knn_rows_arr[knn], :])
 
 
+@cython.boundscheck(False) # turn off bounds-checking for entire function
+@cython.wraparound(False)  # turn off negative index wrapping for entire function
 
 def learn_update(np.int32_t num_knn,
                  np.int32_t N,
@@ -127,9 +134,9 @@ def learn_update(np.int32_t num_knn,
 
     for k in range(num_knn):
         for k2 in range(output_prop_count.shape[1]):
-            output_prop_sum_tmp_arr[k] += output_prop_count[win_knn_rows_arr[knn], k2]
+            output_prop_sum_tmp_arr[k] += output_prop_count[win_knn_rows_arr[k], k2]
 
-    for knn in prange(num_knn,  nogil=True, schedule='dynamic', num_threads=20):
+    for knn in prange(num_knn,  nogil=True, schedule='dynamic', num_threads=6):
         max_match = 0
 
         for k in range(knn * N, (knn + 1) * N):
