@@ -16,7 +16,7 @@ from math import pi
 MAX_HISTORY_LENGTH = 10600000 + 1
 USERNAME = 'intec'
 
-IM_DIM = 64  # pixels, width & height
+IM_DIM = 128  # pixels, width & height
 TILE_DIM = 5  # pixels, width & height
 TILES_OFFSET = 2  # pixels
 PREDICT_RADIUS = 5  # pixels

@@ -12,10 +12,32 @@ import pycuda.cumath as cumath
 import skcuda.linalg as linalg
 import skcuda.misc as misc
 
+from scipy.sparse import lil_matrix
+
 from cython_match import sum_match, learn_update
+
+#import h5py
+#import bcolz
 
 
 DTYPE = np.int32
+
+
+def arr_size_gb(arr):
+    '''
+
+    :param arr: two-dimensional array, of a 32-bit type
+    :return:
+    '''
+
+    r = arr.shape[0]
+    c = arr.shape[1]
+
+    # assume 32 bits
+    bits = r * c * 32
+    bytes = bits / 8
+    gb = bytes / (1e9)
+    return gb
 
 
 class MultiSparseBinaryKNN(object):
@@ -34,8 +56,7 @@ class MultiSparseBinaryKNN(object):
             'num_rows': 2000
         '''
 
-
-        # for now, we could use cython parallelization before full cuda implementation
+        # for now, we use cython parallelization before full cuda implementation
 
         # ************ global vars ************
 
@@ -50,10 +71,6 @@ class MultiSparseBinaryKNN(object):
 
         self.num_knn = params['num_knn']
 
-        # deprecated (unused) from SparseBinaryKNN:
-        #   self.learn_every_k
-        #   self.curr_k_step
-
         # ************ per knn vars ************
 
         self.learn_index = np.zeros(self.num_knn, DTYPE)  # how many rows have we learned so far
@@ -61,17 +78,25 @@ class MultiSparseBinaryKNN(object):
         # ************ knn **************
 
         if params['random_init']:
+            assert False, 'needs implement!'
             self.input_arr = np.random.randint(0, self.sparse_io_dim, (self.num_knn * self.N, self.num_sparse_inputs), DTYPE)  # int because this is just indices. dim=num_sparse_inputs since assuming one-hot for now on input
-
             self.output_prop_count = np.random.randint(1, 100, (self.num_knn * self.N, self.sparse_io_dim)).astype(np.float32)
             self.output_prop_arr = np.random.random((self.num_knn * self.N, self.sparse_io_dim)).astype(np.float32)
         else:
             self.input_arr = np.zeros((self.num_knn * self.N, self.num_sparse_inputs), DTYPE)  # int because this is just indices. dim=num_sparse_inputs since assuming one-hot for now on input
 
-            self.output_prop_count = np.zeros((self.num_knn * self.N, self.sparse_io_dim), np.float32)
-            self.output_prop_arr = np.zeros((self.num_knn * self.N, self.sparse_io_dim), np.float32)
+            print('starting sparse init...')
+            self.output_prop_count = lil_matrix((self.num_knn * self.N, self.sparse_io_dim), dtype=np.float32)
+            self.output_prop_count.tocsr()
 
+            print('done sparse init.')
 
+        print()
+        print('Init of multi sparse binary knn')
+        print('    input_arr.shape:', self.input_arr.shape, ', size in GB:', arr_size_gb(self.input_arr))
+        print('    output_prop_count.shape:', self.input_arr.shape, ', size in GB:', arr_size_gb(self.output_prop_count))
+        # print('    output_prop_arr.shape:', self.input_arr.shape, ', size in GB:', arr_size_gb(self.output_prop_arr))
+        print()
 
         # debug printing
         self.printed_message = [False, False]
@@ -89,17 +114,12 @@ class MultiSparseBinaryKNN(object):
 
         # cython
         self.use_cython = params['use_cython']
-
-        if self.use_cython:
-            self.input_arrs_list = []
-            # try: one arr per knn instead of monolithic large array
-            # for knn in range(self.num_knn):
-            #     input_arr_knn = self.input_arr[knn * self.N:(knn + 1) * self.N, :].copy()
-            #     self.input_arrs_list.append(input_arr_knn)
+        assert self.use_cython, "no longer supporting non-cython"
 
         # cuda
         self.use_cuda = params['use_cuda']
         if self.use_cuda:
+            assert False, "cuda implementation not implemented yet!"
             linalg.init()
 
             self.input_arr_gpu = gpuarray.to_gpu(self.input_arr)
@@ -114,7 +134,7 @@ class MultiSparseBinaryKNN(object):
             print()
             self.printed_messages.append(message)
 
-    #@profile
+    # @profile
     def predict(self, knn_input_win_rows_2d_arr):
         '''
 
@@ -131,22 +151,14 @@ class MultiSparseBinaryKNN(object):
         # knn_input_win_rows_2d_arr:  # (196, 63) : (num_knn, num_sparse_inputs)
         # self.input_arr:             # (392000, 63) : (num_knn * N, num_sparse_inputs)
 
-        # TODO incorporate learn_index, have to do it per block... or work around by appropriate initialization
-        # we could pass learn_index array to cython, easy to incorporate this there in the loop
-
         # if self.use_cuda:
         #     expand_input_gpu = gpuarray.to_gpu(expand_input)
         #     tmp_gpu = misc.sum(misc.subtract(self.input_arr_gpu, expand_input_gpu)==0, axis=1)
         #     tmp = tmp_gpu.get()
 
-        if self.use_cython:
-            arr_out = np.zeros(self.input_arr.shape[0], DTYPE)
-            sum_match(self.input_arr, knn_input_win_rows_2d_arr, arr_out, DTYPE(self.num_knn), DTYPE(self.N), self.learn_index)
-            tmp = arr_out
-        else:
-            expand_input = np.repeat(knn_input_win_rows_2d_arr, self.N, axis=0)
-            tmp = np.sum((self.input_arr - expand_input) == 0, axis=1)
-
+        arr_out = np.zeros(self.input_arr.shape[0], DTYPE)
+        sum_match(self.input_arr, knn_input_win_rows_2d_arr, arr_out, DTYPE(self.num_knn), DTYPE(self.N), self.learn_index)
+        tmp = arr_out
         # tmp: (392000,)
 
         # now calc win rows: argmax per block of N
@@ -155,23 +167,17 @@ class MultiSparseBinaryKNN(object):
         tmp2 = tmp.reshape((self.num_knn, self.N))
         win_knn_rows_arr = np.argmax(tmp2, axis=1)
 
-        # this is wrong but used for speed testing:
-        # win_rows_arr = win_knn_rows_arr  # len: num_knn: winning knn-row per knn
-
-        # this was line from single knn:
-        # win_row = np.argmax(self.output_prop_arr[win_knn_row, :])
-
         # win_knn_rows_arr: (self.num_knn,)  -- values in range [0, self.N]
         # self.output_prop_arr: (self.num_knn * self.N, self.sparse_io_dim)
 
         rel_knn_rows = np.arange(self.num_knn) * self.N + win_knn_rows_arr  # relative indices to output_prop_arr
-        win_rows_arr = np.argmax(self.output_prop_arr[rel_knn_rows, :], axis=1)
+        win_rows_arr = np.argmax(self.output_prop_count[rel_knn_rows, :].toarray(), axis=1)
 
         self.t += 1
         assert win_rows_arr.shape[0] == self.num_knn
         return win_rows_arr
 
-    #@profile
+    # @profile
     def train(self, knn_input_win_rows_2d_arr, knn_output_win_row_arr):
         '''
 
@@ -181,11 +187,6 @@ class MultiSparseBinaryKNN(object):
         :return:
         '''
 
-        # possibly instead of passing in input rows:
-        #   !!! unclear if this works given how make_prediction_knn, learn_prediction_knn work in dynamic_tiles.py !!!
-        #   - tau_predict should be a class parameter, per knn
-        #   - input should be stored in states limited history
-        #
         # we can do this, but not tau - tau is internal to dynamic_tiles, but it is implicit here one step (next step)
         # other issue is what if between that tau, things changed?
         # better to not change this and go by original logic for now from sparse_binary_knn.py
@@ -199,81 +200,46 @@ class MultiSparseBinaryKNN(object):
         #   else
         #       update output prop count and prop arr for winning row
 
-        if self.use_cython:
-            arr_out = np.zeros(self.input_arr.shape[0], DTYPE)
-            sum_match(self.input_arr, knn_input_win_rows_2d_arr, arr_out, DTYPE(self.num_knn), DTYPE(self.N), self.learn_index)
-            tmp = arr_out
-        else:
-            expand_input = np.repeat(knn_input_win_rows_2d_arr, self.N, axis=0)
-            tmp = np.sum((self.input_arr - expand_input) == 0, axis=1)
+        arr_out = np.zeros(self.input_arr.shape[0], DTYPE)
+        sum_match(self.input_arr, knn_input_win_rows_2d_arr, arr_out, DTYPE(self.num_knn), DTYPE(self.N), self.learn_index)
+        tmp = arr_out
 
         tmp2 = tmp.reshape((self.num_knn, self.N))
         win_knn_rows_arr = np.argmax(tmp2, axis=1).astype(DTYPE)
 
-        rel_knn_rows = np.arange(self.num_knn) * self.N + win_knn_rows_arr  # relative indices to output_prop_arr
-        win_rows_arr = np.argmax(self.output_prop_arr[rel_knn_rows, :], axis=1)
+        # why did we have this here?
+        # rel_knn_rows = np.arange(self.num_knn) * self.N + win_knn_rows_arr  # relative indices to output_prop_arr
+        # win_rows_arr = np.argmax(self.output_prop_arr[rel_knn_rows, :].toarray(), axis=1)
 
         len_input = len(knn_input_win_rows_2d_arr[0, :])
 
-        # move the below into cython as well!
-        #   started learn_update function in cython_match.pyx
+        output_prop_count_incr_rows = np.zeros(self.num_knn, np.int32)
+        output_prop_count_incr_cols = np.zeros(self.num_knn, np.int32)
+        output_prop_count_incr_vals = np.zeros(self.num_knn, np.int32)
 
-        if self.use_cython:
-            '''
-            def learn_update(np.int32_t num_knn,
-                 np.int32_t N,
-                 np.ndarray[np.int32_t, ndim=1] tmp,
-                 np.ndarray[np.int32_t, ndim=1] learn_index,
-                 np.ndarray[np.int32_t, ndim=2] input_arr,
-                 np.int32_t len_input,
-                 np.ndarray[np.int32_t, ndim=2] knn_input_win_rows_2d_arr,
-                 np.ndarray[np.int32_t, ndim=2] output_prop_count,
-                 np.ndarray[np.int32_t, ndim=2] output_prop_arr,
-                 np.ndarray[np.int32_t, ndim=1] knn_output_win_row_arr,
-                 np.ndarray[np.int32_t, ndim=1] win_knn_rows_arr):
-            '''
+        learn_update(self.num_knn,
+                     np.int32(self.N),
+                     tmp,
+                     self.learn_index,
+                     self.input_arr,
+                     np.int32(len_input),
+                     knn_input_win_rows_2d_arr,
+                     knn_output_win_row_arr,
+                     win_knn_rows_arr,
+                     output_prop_count_incr_rows,
+                     output_prop_count_incr_cols,
+                     output_prop_count_incr_vals)
 
-            output_prop_sum_tmp_arr = np.zeros(self.num_knn, np.float32)
-            # print(knn_input_win_rows_2d_arr.shape[1], knn_input_win_rows_2d_arr.shape, self.input_arr.shape)
-            learn_update(self.num_knn,
-                         np.int32(self.N),
-                         tmp,
-                         self.learn_index,
-                         self.input_arr,
-                         np.int32(len_input),
-                         knn_input_win_rows_2d_arr,
-                         self.output_prop_count,
-                         self.output_prop_arr,
-                         knn_output_win_row_arr,
-                         win_knn_rows_arr,
-                         output_prop_sum_tmp_arr)
-        else:
+        # now update sparse prop_count, recompute prop_arr for changed rows
+        #   this probably needs the arrays to be in csr form to be fast computing
 
-            # print('')
-            # print(win_knn_rows_arr.shape)  # (196,)
-            # print(self.output_prop_count.shape)  # (392000, 800)
-            # print(self.output_prop_count[win_knn_rows_arr[0], :].shape)  # (800,)
+        self.output_prop_count[output_prop_count_incr_rows, output_prop_count_incr_cols] += output_prop_count_incr_vals
 
-            for knn in range(self.num_knn):
-                match = tmp[knn * self.N:(knn + 1) * self.N]
-                if self.learn_index[knn] < self.N:
-                    if np.amax(match) < len_input:  # not perfect match
-                        self._print_message_once("--- at least one knn add a row")
-                        self.input_arr[knn * self.N + self.learn_index[knn], :] = knn_input_win_rows_2d_arr[knn, :]
-                        self.output_prop_count[knn * self.N + self.learn_index[knn], knn_output_win_row_arr[knn]] = 1
-                        self.output_prop_arr[knn * self.N + self.learn_index[knn], knn_output_win_row_arr[knn]] = 1.0
-
-                        self.learn_index[knn] += 1
-                else:
-                    self._print_message_once("--- at least one knn updated a row output")
-                    self.output_prop_count[win_knn_rows_arr[knn], knn_output_win_row_arr[knn]] += 1
-                    self.output_prop_arr[win_knn_rows_arr[knn], :] = self.output_prop_count[win_knn_rows_arr[knn], :] * 1.0 / np.sum(self.output_prop_count[win_knn_rows_arr[knn], :])
+        # realization: don't even need output_prop_arr at all, count is sufficient
 
 
-#@profile
+# @profile
 def main():
-    # {'sparse_io_dim': 800, 'num_sparse_inputs': 63, 'num_sparse_outputs': 1, 'num_rows': 2000, 'learn_row_every_k': 1}
-
     random.seed(1)
     np.random.seed(1)
 
@@ -281,7 +247,7 @@ def main():
 
     if test_large:
         sparse_io_dim = 800
-        num_knn = 196
+        num_knn = 3364
         num_sparse_inputs = 63
         num_rows = 2000
     else:
@@ -292,7 +258,7 @@ def main():
 
     mp = MultiSparseBinaryKNN(params={
         'use_cuda': False,  # not implemented!
-        'use_cython': True,
+        'use_cython': True,  # must be True
         'sparse_io_dim': sparse_io_dim,  # rows per tile of cuda tables
         'num_sparse_inputs': num_sparse_inputs,
         'num_sparse_outputs': 1,
@@ -309,8 +275,6 @@ def main():
         predict_win_rows = mp.predict(knn_input_win_rows_2d_arr=tiles_inputs)
         mp.train(knn_input_win_rows_2d_arr=tiles_inputs, knn_output_win_row_arr=np.random.randint(0, sparse_io_dim - 1, num_knn).astype(DTYPE))
         fps.update()
-
-    # TODO need a check on training that makes sure to include filled knn tables as well!!! i.e. executes all code above
 
     print(predict_win_rows)
 

@@ -26,28 +26,6 @@ def test(list list_of_2darrays):
             for j in range(buff2d.shape[1]):
                 buff2d[i, j] += i + j
 
-# def sum_match_exp_no_work(list list_of_input_arr1,
-#               list list_of_input_arr2,
-#               np.ndarray[np.int32_t, ndim=1] arr_out,
-#               np.int32_t num_knn,
-#               np.int32_t N,
-#               np.int32_t cols):
-
-#     cdef np.ndarray[np.int32_t, ndim=2] buff2d_1
-#     cdef np.ndarray[np.int32_t, ndim=2] buff2d_2
-#     cdef np.int32_t tmp
-
-#     for knn_ind in prange(num_knn,  nogil=True, schedule='static', num_threads=4):
-
-#         buff2d_1 = list_of_input_arr1[knn_ind]
-#         buff2d_2 = list_of_input_arr2[knn_ind]
-
- #        for r in range(0, N):
- #             arr_out[knn_ind * N + r] = 0
- #             for c in range(cols):
- #                 arr_out[knn_ind * N + r] += (buff2d_1[r, c] - buff2d_2[r, c]) == 0
-
-  #   return 0
 
 @cython.boundscheck(False) # turn off bounds-checking for entire function
 @cython.wraparound(False)  # turn off negative index wrapping for entire function
@@ -66,7 +44,7 @@ def sum_match(np.ndarray[np.int32_t, ndim=2] arr1,
 
     cdef np.int32_t n_start, n_end, r, knn_ind, c
 
-    for knn_ind in prange(num_knn,  nogil=True, schedule='dynamic', num_threads=6):
+    for knn_ind in prange(num_knn,  nogil=True, schedule='dynamic', num_threads=20):
         n_start = knn_ind * N
         n_end = knn_ind * N + learn_index[knn_ind]
         # n_end = (knn_ind + 1) * N
@@ -124,44 +102,53 @@ def learn_update(np.int32_t num_knn,
                  np.ndarray[np.int32_t, ndim=2] input_arr,
                  np.int32_t len_input,
                  np.ndarray[np.int32_t, ndim=2] knn_input_win_rows_2d_arr,
-                 np.ndarray[np.float32_t, ndim=2] output_prop_count,
-                 np.ndarray[np.float32_t, ndim=2] output_prop_arr,
                  np.ndarray[np.int32_t, ndim=1] knn_output_win_row_arr,
                  np.ndarray[np.int32_t, ndim=1] win_knn_rows_arr,
-                 np.ndarray[np.float32_t, ndim=1] output_prop_sum_tmp_arr):
+                 np.ndarray[np.int32_t, ndim=1] output_prop_count_incr_rows,
+                 np.ndarray[np.int32_t, ndim=1] output_prop_count_incr_cols,
+                 np.ndarray[np.int32_t, ndim=1] output_prop_count_incr_vals):
 
     cdef np.int32_t r1
-    cdef np.int32_t r2
     r1 = knn_input_win_rows_2d_arr.shape[1]
-    r2 = output_prop_arr.shape[1]
     cdef np.int32_t max_match, knn, k, k2
 
-    for k in range(num_knn):
-        for k2 in range(output_prop_count.shape[1]):
-            output_prop_sum_tmp_arr[k] += output_prop_count[k * N + win_knn_rows_arr[k], k2]
-
-    for knn in prange(num_knn,  nogil=True, schedule='dynamic', num_threads=6):
+    for knn in prange(num_knn,  nogil=True, schedule='dynamic', num_threads=20):
         max_match = 0
+
+        # for this knn, find best matching input row
 
         for k in range(knn * N, knn * N + learn_index[knn]):
             if tmp[k] > max_match:
                 max_match = tmp[k]
 
         if learn_index[knn] < N:
-            if max_match < len_input:  # not perfect match
+
+            # if not perfect match, store this row and update output prop count and arr for this row
+            if max_match < len_input:
                 for k in range(r1):
                     input_arr[knn * N + learn_index[knn], k] = knn_input_win_rows_2d_arr[knn, k]
 
-                output_prop_count[knn * N + learn_index[knn], knn_output_win_row_arr[knn]] = 1
-                output_prop_arr[knn * N + learn_index[knn], knn_output_win_row_arr[knn]] = 1.0
+                # output_prop_count[knn * N + learn_index[knn], knn_output_win_row_arr[knn]] = 1
+
+                output_prop_count_incr_rows[knn] = knn * N + learn_index[knn]   # NOTE: absolute indexing for ease of assignment later
+                output_prop_count_incr_cols[knn] = knn_output_win_row_arr[knn]
+                output_prop_count_incr_vals[knn] = 1
 
                 learn_index[knn] += 1
+            else:
+
+                # this is new:
+
+                output_prop_count_incr_rows[knn] = knn * N + win_knn_rows_arr[knn]
+                output_prop_count_incr_cols[knn] = knn_output_win_row_arr[knn]
+                output_prop_count_incr_vals[knn] = 1
         else:
-            output_prop_count[knn * N + win_knn_rows_arr[knn], knn_output_win_row_arr[knn]] += 1
+            # update output prop count
+            # output_prop_count[knn * N + win_knn_rows_arr[knn], knn_output_win_row_arr[knn]] += 1
 
-            for k in range(r2):
-                output_prop_arr[knn * N + win_knn_rows_arr[knn], k] = output_prop_count[knn * N + win_knn_rows_arr[knn], k] / output_prop_sum_tmp_arr[knn]
-
+            output_prop_count_incr_rows[knn] = knn * N + win_knn_rows_arr[knn]
+            output_prop_count_incr_cols[knn] = knn_output_win_row_arr[knn]
+            output_prop_count_incr_vals[knn] = 1
 
 
 
