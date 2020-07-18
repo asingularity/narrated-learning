@@ -127,6 +127,10 @@ class MultiSparseBinaryKNN(object):
         self.t = 0  # only used for debug / printing
         self.printed_messages = []
 
+        self.last_debug_print_time = 0
+        self.debug_print_secs = 10
+
+
     def _print_message_once(self, message):
         if not message in self.printed_messages:
             print()
@@ -236,6 +240,13 @@ class MultiSparseBinaryKNN(object):
         self.output_prop_count[output_prop_count_incr_rows, output_prop_count_incr_cols] += output_prop_count_incr_vals
 
         # realization: don't even need output_prop_arr at all, count is sufficient
+
+        if time.time() - self.last_debug_print_time > self.debug_print_secs:
+            print()
+            print('multi_sparse_binary_knn:: debug print')
+            print('    ', 'learn_index', 'min:', np.amin(self.learn_index), 'max:', np.amax(self.learn_index), 'mean:', np.mean(self.learn_index))
+            print()
+            self.last_debug_print_time = time.time()
 
 
 # @profile
