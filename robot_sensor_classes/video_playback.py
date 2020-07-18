@@ -23,16 +23,25 @@ class VideoPlaybackSensor(object):
 
         self.skip_frame_count = params['skip_frame_count']  # 1 is normal; using 4 for model
 
+        self.prop_use_for_holdout = params['prop_use_for_holdout']
+        self.switch_to_holdout_frame = params['switch_to_holdout_frame']
+
+        assert 0.0 < self.prop_use_for_holdout < 1.0
+
         assert params['return_type'] is np.float32 or params['return_type'] is np.float64
         self.return_type = params['return_type']
 
         if self.preload_file:
             self._sample_frames = []
+            self._holdout_frames = []
+            self._training_frames = []
 
             self._frame_index = 0
             self._preload_file()
         else:
             self.cap = cv2.VideoCapture(self.video_dir + self.video_filename)
+
+        self.t = 0  # for switch to holdout time
 
     def _preload_file(self):
 
@@ -110,9 +119,24 @@ class VideoPlaybackSensor(object):
     def load_from_pkl(self, pkl_filename):
         print('Loading from pkl...')
         f = open(pkl_filename, 'rb')
-        self._sample_frames = pickle.load(f)
+        all_frames = pickle.load(f)
         f.close()
         print('Loading complete.')
+
+        num_holdout_frames = int(self.prop_use_for_holdout * len(all_frames))
+        tmp_ind = len(all_frames) - num_holdout_frames
+        self._holdout_frames = all_frames[0:tmp_ind]
+        self._training_frames = all_frames[tmp_ind:tmp_ind+num_holdout_frames]
+
+        print()
+        print('_training_frames:', len(self._training_frames))
+        print('_holdout_frames:', len(self._holdout_frames))
+
+        self._sample_frames = self._training_frames
+
+    def switch_to_holdout(self):
+        self._sample_frames = self._holdout_frames
+        self._frame_index = 0
 
     def save_to_pkl(self, pkl_filename):
         print('Saving to pkl...')
@@ -186,4 +210,53 @@ class VideoPlaybackSensor(object):
         assert sample_im.shape[0] == self.image_dim, (sample_im.shape[0], self.image_dim)
         assert sample_im.shape[1] == self.image_dim, (sample_im.shape[1], self.image_dim)
 
+        self.t += 1
+
+        if self.switch_to_holdout_frame is not None:
+            if self.t == self.switch_to_holdout_frame:
+                print()
+                print('INPUT IS SWITCHING TO HOLDOUT SET')
+                print()
+
+                self.switch_to_holdout()
+
         return sample_im
+
+
+if __name__ == '__main__':
+    IM_DIM = 128
+    params_video_playback = {
+        'image_dim': IM_DIM,  # sensor class has to figure out subset & scale to achieve this dim
+        'video_dir': '/srv/projects/NL-data/',
+        'video_filename': 'videoplayback',  # 3840x2160
+        # 'video_filename': 'P1033727.mp4',  # 3840x2160
+        'stop_preload_at_frames': None,  # None: use whole video
+        'use_full_frame': False,  # use the whole image
+        'partial_frame_factor': 4,  # from center, what factor to use - larger factor ~ smaller part of image
+        'return_type': np.float32,  # 32 or 64
+        'skip_frame_count': 4,  # Normal is 1 (not 0!); += K frames from video on each step; so we can see prediction better for high frame rate videos
+        'prop_use_for_holdout': 0.4,
+        'switch_to_holdout_frame': None
+    }
+    p = VideoPlaybackSensor(params_video_playback)
+    print()
+    print('training...')
+    print()
+    for fr in range(4000):
+        im = p.read_input()
+        cv2.imshow('im', im)
+        cv2.waitKey(10)
+
+    print()
+    print('holdout...')
+    print()
+
+    p.switch_to_holdout()
+
+    for fr in range(4000):
+        im = p.read_input()
+        cv2.imshow('im', im)
+        cv2.waitKey(10)
+
+
+

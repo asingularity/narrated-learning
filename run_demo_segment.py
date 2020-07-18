@@ -16,7 +16,7 @@ from math import pi
 MAX_HISTORY_LENGTH = 10600000 + 1
 USERNAME = 'intec'
 
-IM_DIM = 128  # pixels, width & height
+IM_DIM = 64  # pixels, width & height
 TILE_DIM = 5  # pixels, width & height
 TILES_OFFSET = 2  # pixels
 PREDICT_RADIUS = 5  # pixels
@@ -28,6 +28,8 @@ ROWS_PER_TILE = 400
 COLOR_ENABLED = False
 
 ENABLE_WEIGHT_BIAS = True
+
+TRAIN_STEPS = 10000
 
 USE_VIDEO_IN = True
 if USE_VIDEO_IN:
@@ -46,7 +48,9 @@ def get_sensors_params():
         'use_full_frame': False,  # use the whole image
         'partial_frame_factor': 4,  # from center, what factor to use - larger factor ~ smaller part of image
         'return_type': np.float32,  # 32 or 64
-        'skip_frame_count': 4  # Normal is 1 (not 0!); += K frames from video on each step; so we can see prediction better for high frame rate videos
+        'skip_frame_count': 4,  # Normal is 1 (not 0!); += K frames from video on each step; so we can see prediction better for high frame rate videos
+        'prop_use_for_holdout': 0.3,
+        'switch_to_holdout_frame': TRAIN_STEPS
     }
 
     params_physics_2d = {
@@ -85,6 +89,8 @@ def get_brain_params():
         'prediction_radius_N_pixels': PREDICT_RADIUS,
         'prediction_tau_list': PREDICT_TAU_LIST,
         'rows_per_tile': ROWS_PER_TILE,
+
+        'learning_off_time': TRAIN_STEPS
             }
 
     return params
@@ -99,7 +105,7 @@ def get_visualizer_params():
         'image_display_secs_slow': 0,  # 0: every frame
         'waitKey_time_slow': 1,  # 1, 100, 5000  #
         'scale_camera_factor': 1,
-        'auto_switch_to_slow_disp_time': 10000,
+        'auto_switch_to_slow_disp_time': TRAIN_STEPS,
         'init_fast': True  # start with "fast" display
     }
     return params

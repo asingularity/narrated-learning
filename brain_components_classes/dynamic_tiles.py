@@ -16,7 +16,12 @@ from brain_components_classes.multi_sparse_binary_knn import MultiSparseBinaryKN
 
 class OneTimeMessages(object):
     def __init__(self):
-        pass
+        self.d = []
+
+    def print_once(self, msg):
+        if msg not in self.d:
+            print(msg)
+            self.d.append(msg)
 
 
 class DynamicTiles(object):
@@ -28,6 +33,10 @@ class DynamicTiles(object):
 
         :param params:
         '''
+
+        self.otm = OneTimeMessages()
+
+        self.learning_off_time = params['learning_off_time']
 
         self.use_old_knn = False
         self.use_cython_if_new_knn = True
@@ -416,18 +425,25 @@ class DynamicTiles(object):
             print('    argmin_dists min, max: ', np.amin(argmin_dists), np.amax(argmin_dists))
 
         if self.t < self.table_learn_time:
+            self.otm.print_once('dynamic_tiles:: starting learning of table')
             self._learn_table(cuda_table=self.table,
                               dists=dists,
                               argmin_dists=argmin_dists,
                               tile_input_states_mat=tile_input_states_mat,
                               input_x_y_theta=None)
+        else:
+            self.otm.print_once('dynamic_tiles:: finished learning of table')
 
         if self.t > self.table_learn_time:
             # internally, this will first learn knn rows, and then learn weights
-            self._learn_prediction(cuda_table=self.table,
-                                   dists=dists,
-                                   argmin_dists=argmin_dists,
-                                   tile_input_states_mat=tile_input_states_mat)
+            if self.t < self.learning_off_time:
+                self.otm.print_once('dynamic_tiles:: started learning of predictions')
+                self._learn_prediction(cuda_table=self.table,
+                                       dists=dists,
+                                       argmin_dists=argmin_dists,
+                                       tile_input_states_mat=tile_input_states_mat)
+            else:
+                self.otm.print_once('dynamic_tiles:: finished learning of predictions')
 
             # start making predictions even while still learning prediction matrices
             predict_im = self._make_prediction(cuda_table=self.table,
