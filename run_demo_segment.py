@@ -35,7 +35,7 @@ USE_VIDEO_IN = True
 if USE_VIDEO_IN:
     # for this, use 800 rows per tile instead!
     ROWS_PER_TILE = 800
-
+    
 
 # uses: IM_DIM
 def get_sensors_params():
