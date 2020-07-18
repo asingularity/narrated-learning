@@ -125,8 +125,8 @@ class VideoPlaybackSensor(object):
 
         num_holdout_frames = int(self.prop_use_for_holdout * len(all_frames))
         tmp_ind = len(all_frames) - num_holdout_frames
-        self._holdout_frames = all_frames[0:tmp_ind]
-        self._training_frames = all_frames[tmp_ind:tmp_ind+num_holdout_frames]
+        self._training_frames = all_frames[0:tmp_ind]
+        self._holdout_frames = all_frames[tmp_ind:tmp_ind+num_holdout_frames]
 
         print()
         print('_training_frames:', len(self._training_frames))

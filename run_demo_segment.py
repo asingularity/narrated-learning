@@ -16,11 +16,11 @@ from math import pi
 MAX_HISTORY_LENGTH = 10600000 + 1
 USERNAME = 'intec'
 
-IM_DIM = 64  # pixels, width & height
-TILE_DIM = 5  # pixels, width & height
+IM_DIM = 128  # pixels, width & height
+TILE_DIM = 3  # pixels, width & height
 TILES_OFFSET = 2  # pixels
-PREDICT_RADIUS = 5  # pixels
-PREDICT_TAU_LIST = [2, 3, 4]  # time steps: [1, 2]
+PREDICT_RADIUS = 10  # pixels
+PREDICT_TAU_LIST = [1, 2, 3, 4]  # time steps: [1, 2]
 ROWS_PER_TILE = 400
 # TABLE_LEARN_TIME = 3000  # deprecated
 # PREDICTION_LEARN_TIME = 20000  # deprecated
@@ -29,7 +29,7 @@ COLOR_ENABLED = False
 
 ENABLE_WEIGHT_BIAS = True
 
-TRAIN_STEPS = 10000
+TRAIN_STEPS = 3000  # should be a good amount more than 2x ROWS_PER_TILE, but no use of it being longer than 1x video loop
 
 USE_VIDEO_IN = True
 if USE_VIDEO_IN:
