@@ -644,6 +644,9 @@ class DynamicTiles(object):
 
         predicted_row_per_valid_post_tile = self.mknn.predict(knn_input_win_rows_2d_arr=knn_input_win_rows_2d_arr)
 
+        # second layer
+        # print(predicted_row_per_valid_post_tile.shape)  # (3025,)
+
         # *************** make prediction image ***************
 
         sum_im = np.zeros((self.image_dim_NxN_pixels, self.image_dim_NxN_pixels))
