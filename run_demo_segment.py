@@ -6,6 +6,7 @@ np.random.seed(6)
 
 from robot_brain_classes.segment_brain import SegmentBrain
 from robot_sensor_classes.video_playback import VideoPlaybackSensor
+from robot_sensor_classes.duo_playback import DuoPlaybackSensor
 from robot_sensor_classes.physics_2d import Physics2DSensor
 from visualizer_classes.segment_visualizer import SegmentVisualizer
 from sim_folder_manager import SimFolderManager
@@ -29,7 +30,7 @@ COLOR_ENABLED = False
 
 ENABLE_WEIGHT_BIAS = True
 
-TRAIN_STEPS = 3000  # should be a good amount more than 2x ROWS_PER_TILE, but no use of it being longer than 1x video loop
+TRAIN_STEPS = 7000  # should be a good amount more than 2x ROWS_PER_TILE, but no use of it being longer than 1x video loop
 
 USE_VIDEO_IN = True
 if USE_VIDEO_IN:
@@ -58,8 +59,20 @@ def get_sensors_params():
         'return_type': np.float32  # 32 or 64
     }
 
+    params_duo_playback = {
+        'image_dim': IM_DIM,  # sensor class has to figure out subset & scale to achieve this dim
+        'video_dir': '/srv/projects/NL-data/',
+        'video_filename': 'DUOCapture-19-07-2020-14-26-57-330_20k_frames.avi',  #
+        'partial_frame_factor': 0.4,  # this prop of inside of frame
+        'return_type': np.float32,  # 32 or 64
+        'skip_frame_count': 4,  # Normal is 1 (not 0!); += K frames from video on each step; so we can see prediction better for high frame rate videos
+        'prop_use_for_holdout': 0.3,
+        'switch_to_holdout_frame': None
+    }
+
     if USE_VIDEO_IN:
-        params = params_video_playback
+        params = params_duo_playback
+        #params = params_video_playback
     else:
         params = params_physics_2d
 
@@ -114,7 +127,8 @@ def get_visualizer_params():
 def init_demo():
 
     if USE_VIDEO_IN:
-        robot_sensors = VideoPlaybackSensor(get_sensors_params())
+        #robot_sensors = VideoPlaybackSensor(get_sensors_params())
+        robot_sensors = DuoPlaybackSensor(get_sensors_params())
     else:
         robot_sensors = Physics2DSensor(get_sensors_params())
 
