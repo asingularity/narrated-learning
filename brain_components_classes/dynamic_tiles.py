@@ -50,12 +50,14 @@ class DynamicTiles(object):
 
         self.rows_per_tile = params['rows_per_tile']
 
+        self.table_learn_time_multiple = params['table_learn_time_multiple']
+
         assert 1 <= self.tiles_offset_N_pixels <= self.tile_dim_NxN_pixels
         # max density: only 1 pixel offset between spatially neighboring tiles; max overlap between tiles without being identical
         # min density: exactly size of tile offset; no overlap between tiles
 
         # set, no longer from params dict, but from other params!
-        self.table_learn_time = 2 * self.rows_per_tile  # params['table_learn_time']  # seq-nn-table learn time
+        self.table_learn_time = int(self.table_learn_time_multiple * self.rows_per_tile)  # params['table_learn_time']  # seq-nn-table learn time
 
         # these go to sparse binary knn
         # TODO these should be demo level params
@@ -65,13 +67,16 @@ class DynamicTiles(object):
         # prediction_learn_time is no longer set here, but it will be: self.binary_knn_rows * self.binary_knn_learn_every_k
 
         self.prediction_radius_N_pixels = params['prediction_radius_N_pixels']  # farthest that a tile should predict another tile, spatially
-        self.prediction_tau_list = params['prediction_tau_list']
+
+        # TODO this is not prediction tau: rename to reflect that this is time steps from past
+        self.input_delay_list = params['input_delay_list']
 
         # self.num_bins_per_pixel = 10
         # self.tile_input_dim = self.tile_dim_NxN_pixels * self.tile_dim_NxN_pixels * self.num_bins_per_pixel
         # total input dim of one tile: num_pixels * num_bins
 
         self.tile_input_dim = self.tile_dim_NxN_pixels * self.tile_dim_NxN_pixels
+        self.predict_steps_ahead = params['predict_steps_ahead']
 
         self._compute_tiling()
         self._verify_tiling()
@@ -81,8 +86,6 @@ class DynamicTiles(object):
                                disable_row_row_dist=False,
                                enable_weight_bias=False)
 
-        self.predict_steps_ahead = 1  # if changing this, would need to update how we display predicted image vs. current image etc. for debugging
-
         self.t = 0
         self.printed_init_step = False
         self.init_I_row_num = 0
@@ -91,10 +94,19 @@ class DynamicTiles(object):
         self.last_row_swap_disp = time.time()
         self.row_swap_disp_time = 1  # every K seconds
 
-        self.predict_im = None
-        self.current_im = None
-        self.last_current_im = None
-        self.last_predict_im = None  # ! assumes predict_tau = 1 !
+        # deprecated:
+        #self.predict_im = None
+        #self.current_im = None
+        #self.last_current_im = None
+        #self.last_predict_im = None  # ! assumes predict_tau = 1 !
+
+        self.input_im_history = StatesLimitedHistory(params={'max_delay': self.predict_steps_ahead,
+                                                             'states_dim_list': [self.image_dim_NxN_pixels * self.image_dim_NxN_pixels]})
+
+        self.prediction_im_history = StatesLimitedHistory(params={'max_delay': self.predict_steps_ahead,
+                                                                  'states_dim_list': [self.image_dim_NxN_pixels * self.image_dim_NxN_pixels]})
+
+        self.prediction_made_indices = None
 
     def _compute_tiling(self):
         '''
@@ -262,7 +274,7 @@ class DynamicTiles(object):
                 if tile_ind in valid_post_tile_list:
                     knn_params = {
                         'sparse_io_dim': self.rows_per_tile,
-                        'num_sparse_inputs': num_predictor_tiles * len(self.prediction_tau_list),
+                        'num_sparse_inputs': num_predictor_tiles * len(self.input_delay_list),
                         'num_sparse_outputs': 1,
                         'num_rows': self.binary_knn_rows,
                         'learn_row_every_k': self.binary_knn_learn_every_k
@@ -287,7 +299,7 @@ class DynamicTiles(object):
                 'use_cuda': False,  # not implemented!
                 'use_cython': self.use_cython_if_new_knn,
                 'sparse_io_dim': self.rows_per_tile,  # rows per tile of cuda tables
-                'num_sparse_inputs': num_predictor_tiles * len(self.prediction_tau_list),
+                'num_sparse_inputs': num_predictor_tiles * len(self.input_delay_list),
                 'num_sparse_outputs': 1,
                 'num_rows': self.binary_knn_rows,
                 'num_knn': len(valid_post_tile_list),
@@ -318,7 +330,7 @@ class DynamicTiles(object):
 
         self.num_tiles = num_tiles  # for verify tiles
 
-        self.win_row_history = StatesLimitedHistory(params={'max_delay': np.amax(np.array(self.prediction_tau_list)),
+        self.win_row_history = StatesLimitedHistory(params={'max_delay': np.amax(np.array(self.input_delay_list)) + self.predict_steps_ahead,
                                                             'states_dim_list': [self.num_tiles]})
 
     def _verify_tiling(self):
@@ -453,12 +465,8 @@ class DynamicTiles(object):
 
             # This logic below assumes we are predicting 1 step ahead! If it was more, we would need to change this to a states history!
 
-            if self.predict_im is not None:
-                self.last_current_im = self.current_im.copy()
-                self.last_predict_im = self.predict_im.copy()
-
-            self.current_im = input_image.copy()
-            self.predict_im = predict_im.copy()
+            self.input_im_history.process_new_states(newest_states_list=[input_image.flatten()], extra_data_list=[None])
+            self.prediction_im_history.process_new_states(newest_states_list=[predict_im.flatten()], extra_data_list=[None])
 
         if not self.printed_init_step:
             print()
@@ -587,11 +595,11 @@ class DynamicTiles(object):
             pre_tile_indices = self.predictor_tile_indices[tile_n, :]  # [post, pre]: (num_tiles, num_predictor_tiles)
             knn_input_all_tau = np.array([])
 
-            for tau in self.prediction_tau_list:
+            for tau in self.input_delay_list:
                 # get inputs from its from_tiles
 
                 if tau not in tmp5:
-                    tmp4 = self.win_row_history.get_state(state_index=0, delay=tau)[0]
+                    tmp4 = self.win_row_history.get_state(state_index=0, delay=tau + self.predict_steps_ahead)[0]
                     tmp4 = tmp4.astype(np.int)
                     tmp5[tau] = tmp4
                 else:
@@ -620,12 +628,11 @@ class DynamicTiles(object):
 
             knn_input_all_tau = np.array([])
 
-            for tau in self.prediction_tau_list:
-                predict_steps_ahead = self.predict_steps_ahead
-                assert tau >= predict_steps_ahead
+            for tau in self.input_delay_list:
+                predict_steps_ahead = self.predict_steps_ahead  # this is unused here (as it should be)
 
                 if tau not in tmp5:
-                    tmp4 = self.win_row_history.get_state(state_index=0, delay=tau - predict_steps_ahead)[0]
+                    tmp4 = self.win_row_history.get_state(state_index=0, delay=tau)[0]
                     tmp4 = tmp4.astype(np.int)
                     tmp5[tau] = tmp4
                 else:
@@ -738,37 +745,13 @@ class DynamicTiles(object):
             ims_list.append(select_im)
             ims_names_list.append('select')
 
-        if self.last_predict_im is not None:
-
-            # this assumes we are predicting 1 step ahead! if was more, we would need to change to rolling buffer i.e. states history for this debug display!
-            assert self.predict_steps_ahead == 1
-
-            #max_dim = max(self.predict_im.shape[0], self.predict_im.shape[1])
-            #imscale = self.ims_scale_pixels / max_dim  # 0.2: full table, 2.0
-            #p_im = cv2.resize(self.predict_im, dsize=(0, 0), fx=imscale, fy=imscale, interpolation=cv2.INTER_NEAREST)
-
+        if self.prediction_made_indices is not None:
 
             # append in order: current (t), prediction (t'+1), future (t+1)
 
-            current_im = self.last_current_im  # "current" input (from past for display)
-            predict_im = self.last_predict_im  # "current" prediction based on that input (from past for display)
-            future_im = self.current_im  # "future" input (from present for display)
-
-            # this is comparing: [current - prediction] vs. [future - prediction]
-            # error_to_current = np.fabs(np.sum(current_im[self.prediction_made_indices] - predict_im[self.prediction_made_indices]))
-            # error_to_future = np.fabs(np.sum(future_im[self.prediction_made_indices] - predict_im[self.prediction_made_indices]))
-
-            # this is comparing: [future - current] vs. [future - prediction], to see if it does better than "use current image as prediction of future"
-            error_to_current = np.fabs(np.sum(future_im[self.prediction_made_indices] - current_im[self.prediction_made_indices]))
-            error_to_predict = np.fabs(np.sum(future_im[self.prediction_made_indices] - predict_im[self.prediction_made_indices]))
-
-            good = error_to_predict < error_to_current
-            if good:
-                good = 'Y'
-            else:
-                good = ' '
-
-            print(good, 'err to input:', error_to_current, error_to_predict, ': err to predict')
+            current_im = self.input_im_history.get_state(state_index=0, delay=self.predict_steps_ahead)[0].reshape((self.image_dim_NxN_pixels, self.image_dim_NxN_pixels))   # "current" input (from past for display)
+            predict_im = self.prediction_im_history.get_state(state_index=0, delay=self.predict_steps_ahead)[0].reshape((self.image_dim_NxN_pixels, self.image_dim_NxN_pixels))    # "current" prediction based on that input (from past for display)
+            future_im = self.input_im_history.get_state(state_index=0, delay=0)[0].reshape((self.image_dim_NxN_pixels, self.image_dim_NxN_pixels))   # "future" input (from present for display)
 
             spacer = 0.0 * np.ones((current_im.shape[0], 5))
 

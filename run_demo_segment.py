@@ -21,22 +21,19 @@ IM_DIM = 128  # pixels, width & height
 TILE_DIM = 3  # pixels, width & height
 TILES_OFFSET = 2  # pixels
 PREDICT_RADIUS = 10  # pixels
-PREDICT_TAU_LIST = [1, 2, 3, 4]  # time steps: [1, 2]
-ROWS_PER_TILE = 400
+INPUT_DELAY_LIST = [0, 1, 2, 3]  # time steps: [1, 2]
+ROWS_PER_TILE = 1600
+PREDICT_STEPS = 4
+TABLE_LEARN_TIME_MULTIPLE = 4
+PREDICTION_LEARN_TIME = 3000  # no use of it being longer than 1x video loop
+TRAIN_STEPS = ROWS_PER_TILE * TABLE_LEARN_TIME_MULTIPLE + PREDICTION_LEARN_TIME
+
 # TABLE_LEARN_TIME = 3000  # deprecated
 # PREDICTION_LEARN_TIME = 20000  # deprecated
 
 COLOR_ENABLED = False
 
-ENABLE_WEIGHT_BIAS = True
-
-TRAIN_STEPS = 7000  # should be a good amount more than 2x ROWS_PER_TILE, but no use of it being longer than 1x video loop
-
 USE_VIDEO_IN = True
-if USE_VIDEO_IN:
-    # for this, use 800 rows per tile instead!
-    ROWS_PER_TILE = 800
-    
 
 # uses: IM_DIM
 def get_sensors_params():
@@ -49,7 +46,7 @@ def get_sensors_params():
         'use_full_frame': False,  # use the whole image
         'partial_frame_factor': 4,  # from center, what factor to use - larger factor ~ smaller part of image
         'return_type': np.float32,  # 32 or 64
-        'skip_frame_count': 4,  # Normal is 1 (not 0!); += K frames from video on each step; so we can see prediction better for high frame rate videos
+        'skip_frame_count': 1,  # Normal is 1 (not 0!); += K frames from video on each step; so we can see prediction better for high frame rate videos
         'prop_use_for_holdout': 0.3,
         'switch_to_holdout_frame': TRAIN_STEPS
     }
@@ -65,14 +62,14 @@ def get_sensors_params():
         'video_filename': 'DUOCapture-19-07-2020-14-26-57-330_20k_frames.avi',  #
         'partial_frame_factor': 0.4,  # this prop of inside of frame
         'return_type': np.float32,  # 32 or 64
-        'skip_frame_count': 4,  # Normal is 1 (not 0!); += K frames from video on each step; so we can see prediction better for high frame rate videos
+        'skip_frame_count': 1,  # Normal is 1 (not 0!); += K frames from video on each step; so we can see prediction better for high frame rate videos
         'prop_use_for_holdout': 0.3,
         'switch_to_holdout_frame': None
     }
 
     if USE_VIDEO_IN:
-        params = params_duo_playback
-        #params = params_video_playback
+        #params = params_duo_playback
+        params = params_video_playback
     else:
         params = params_physics_2d
 
@@ -100,10 +97,12 @@ def get_brain_params():
         'tile_dim_NxN_pixels': TILE_DIM,
         'tiles_offset_N_pixels': TILES_OFFSET,
         'prediction_radius_N_pixels': PREDICT_RADIUS,
-        'prediction_tau_list': PREDICT_TAU_LIST,
+        'input_delay_list': INPUT_DELAY_LIST,
         'rows_per_tile': ROWS_PER_TILE,
 
-        'learning_off_time': TRAIN_STEPS
+        'learning_off_time': TRAIN_STEPS,
+        'predict_steps_ahead': PREDICT_STEPS,
+        'table_learn_time_multiple': TABLE_LEARN_TIME_MULTIPLE
             }
 
     return params
@@ -127,8 +126,8 @@ def get_visualizer_params():
 def init_demo():
 
     if USE_VIDEO_IN:
-        #robot_sensors = VideoPlaybackSensor(get_sensors_params())
-        robot_sensors = DuoPlaybackSensor(get_sensors_params())
+        robot_sensors = VideoPlaybackSensor(get_sensors_params())
+        #robot_sensors = DuoPlaybackSensor(get_sensors_params())
     else:
         robot_sensors = Physics2DSensor(get_sensors_params())
 

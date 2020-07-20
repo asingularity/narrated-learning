@@ -23,9 +23,11 @@ class SegmentBrain(object):
             'tile_dim_NxN_pixels': params['tile_dim_NxN_pixels'],
             'tiles_offset_N_pixels': params['tiles_offset_N_pixels'],
             'prediction_radius_N_pixels': params['prediction_radius_N_pixels'],
-            'prediction_tau_list': params['prediction_tau_list'],
+            'input_delay_list': params['input_delay_list'],
             'rows_per_tile': params['rows_per_tile'],
-            'learning_off_time': params['learning_off_time']
+            'learning_off_time': params['learning_off_time'],
+            'predict_steps_ahead': params['predict_steps_ahead'],
+            'table_learn_time_multiple': params['table_learn_time_multiple']
         })
 
     # @profile
