@@ -32,6 +32,21 @@ class DynamicTiles(object):
         # assume binning
 
         :param params:
+
+        {
+            'max_history_length':
+            'ims_scale_pixels': 1200
+            'image_dim_NxN_pixels': IM_DIM: 128
+            'tile_dim_NxN_pixels': TILE_DIM: 3
+            'tiles_offset_N_pixels': TILES_OFFSET: 2
+            'prediction_radius_N_pixels': PREDICT_RADIUS: 10
+            'input_delay_list': INPUT_DELAY_LIST: [0, 1, 2, 3]
+            'rows_per_tile': ROWS_PER_TILE: 1600
+            'learning_off_time': TRAIN_STEPS: ROWS_PER_TILE * TABLE_LEARN_TIME_MULTIPLE + PREDICTION_LEARN_TIME
+            'predict_steps_ahead': PREDICT_STEPS: 4
+            'table_learn_time_multiple': TABLE_LEARN_TIME_MULTIPLE: 4
+        }
+
         '''
 
         self.otm = OneTimeMessages()
