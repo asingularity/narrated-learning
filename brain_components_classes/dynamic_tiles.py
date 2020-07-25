@@ -12,16 +12,7 @@ from utils.fps_counter import FPSCounter
 from brain_components_classes.states_history import StatesLimitedHistory
 from brain_components_classes.sparse_binary_knn import SparseBinaryKNN
 from brain_components_classes.multi_sparse_binary_knn import MultiSparseBinaryKNN
-
-
-class OneTimeMessages(object):
-    def __init__(self):
-        self.d = []
-
-    def print_once(self, msg):
-        if msg not in self.d:
-            print(msg)
-            self.d.append(msg)
+from utils.one_time_messages import OneTimeMessages
 
 
 class DynamicTiles(object):
