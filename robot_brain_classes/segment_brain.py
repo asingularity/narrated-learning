@@ -2,7 +2,6 @@
 
 import numpy as np
 from brain_components import WinRegionTiles, SimpleWeightTiles, SimplePredictionTiles, DynamicPredictor
-from brain_components_classes.dynamic_tiles import DynamicTiles
 
 
 class SegmentBrain(object):
@@ -16,29 +15,48 @@ class SegmentBrain(object):
         :param params:
         '''
 
-        self.predictor_ensemble = DynamicTiles(params={
-            'max_history_length': params['max_history_length'],
-            'ims_scale_pixels': params['ims_scale_pixels'],
-            'image_dim_NxN_pixels': params['image_dim_NxN_pixels'],  # 32,
-            'tile_dim_NxN_pixels': params['tile_dim_NxN_pixels'],
-            'tiles_offset_N_pixels': params['tiles_offset_N_pixels'],
-            'prediction_radius_N_pixels': params['prediction_radius_N_pixels'],
-            'input_delay_list': params['input_delay_list'],
-            'rows_per_tile': params['rows_per_tile'],
-            'learning_off_time': params['learning_off_time'],
-            'predict_steps_ahead': params['predict_steps_ahead'],
-            'table_learn_time_multiple': params['table_learn_time_multiple']
-        })
+        # this logic is so run_demo_segment.py can still be run, independent of run_demo_segment_multilayer.py
+        do_multilayer = False
+        if 'multilayer' in params:
+            if params['multilayer'] is True:
+                do_multilayer = True
 
-    # @profile
+        if do_multilayer:
+            from brain_components_classes.multi_layer_dynamic_tiles import MultiLayerDynamicTiles
+
+            self.predictor_ensemble = MultiLayerDynamicTiles(params={
+                'max_history_length': params['max_history_length'],
+                'ims_scale_pixels': params['ims_scale_pixels'],
+                'image_dim_NxN_pixels': params['image_dim_NxN_pixels'],  # 32,
+                'tile_dim_NxN_pixels_per_layer': params['tile_dim_NxN_pixels_per_layer'],
+                'tiles_offset_N_pixels_per_layer': params['tiles_offset_N_pixels_per_layer'],
+                'rows_per_tile_per_layer': params['rows_per_tile_per_layer'],
+                'table_learn_time_multiple': params['table_learn_time_multiple']
+            })
+
+        else:
+            from brain_components_classes.dynamic_tiles import DynamicTiles
+
+            self.predictor_ensemble = DynamicTiles(params={
+                'max_history_length': params['max_history_length'],
+                'ims_scale_pixels': params['ims_scale_pixels'],
+                'image_dim_NxN_pixels': params['image_dim_NxN_pixels'],  # 32,
+                'tile_dim_NxN_pixels': params['tile_dim_NxN_pixels'],
+                'tiles_offset_N_pixels': params['tiles_offset_N_pixels'],
+                'prediction_radius_N_pixels': params['prediction_radius_N_pixels'],
+                'input_delay_list': params['input_delay_list'],
+                'rows_per_tile': params['rows_per_tile'],
+                'learning_off_time': params['learning_off_time'],
+                'predict_steps_ahead': params['predict_steps_ahead'],
+                'table_learn_time_multiple': params['table_learn_time_multiple']
+            })
+
     def process_input(self, input_im):
         '''
 
         :param input_im:
         :return:
         '''
-
-        # print(np.amin(input_im), np.amax(input_im), input_im.dtype)
 
         motor_out = self.predictor_ensemble.step(raycast_image=input_im,
                                                  input_state=None,
