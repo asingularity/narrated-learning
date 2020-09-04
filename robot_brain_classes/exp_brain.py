@@ -39,7 +39,7 @@ class ExpBrain(object):
 
     def __init__(self, params):
 
-        im_dim = params['image_dim_NxN_pixels']
+        self.im_dim = params['image_dim_NxN_pixels']
 
         self.ims_scale_pixels = 800
         self.otm = OneTimeMessages()
@@ -74,6 +74,10 @@ class ExpBrain(object):
         self.in_r = 50
         self.in_c = 64
 
+        # top left of input region
+        # self.in_r = 30
+        # self.in_c = 34
+
         print()
         print('Initialized:')
         print('    (tl) in_r:', self.in_r)
@@ -86,17 +90,31 @@ class ExpBrain(object):
         self.gains = np.ones(self.rows, np.float32)
         # self.last_win_t = np.zeros()
 
+        self.MAX_TIME = 1000000
+        self.WTA_winner_history = np.zeros(self.MAX_TIME, np.int)
+        self.input_match_history = np.zeros(self.MAX_TIME, np.float32)
+        self.mean_input_match_history = np.zeros(self.MAX_TIME, np.float32)
+        self.fig = plt.figure(figsize=(40, 20))
+        self.ax = self.fig.add_subplot(1, 1, 1)
+        self.ax.cla()
+        self.ax.get_xaxis().get_major_formatter().set_scientific(False)
+        self.ax.get_yaxis().get_major_formatter().set_scientific(False)
+
     def process_input(self, input_im):
 
         if self.last_im is not None:
 
             # get input subset from image
+
+            assert self.in_r + self.NxN_input < self.im_dim, str((self.in_r + self.NxN_input, self.im_dim))
+            assert self.in_c + self.NxN_input < self.im_dim, str((self.in_c + self.NxN_input, self.im_dim))
+
             input_pixels = self.last_im[self.in_r:self.in_r + self.NxN_input, self.in_c:self.in_c + self.NxN_input]
             input_arr = input_pixels.flatten()[np.newaxis, :]
             input_exp = self._bin_pixels_expand_columns(arr=input_arr, num_bins_per_pixel=self.bins_per_pixel)
 
             assert input_exp.shape[0] == 1
-            assert input_exp.shape[1] == self.input_feature_len
+            assert input_exp.shape[1] == self.input_feature_len, str((input_exp.shape[1], self.input_feature_len))
 
             all_mp = np.multiply(self.table_i, input_exp)
             match = np.divide(np.sum(all_mp, axis=1), np.sum(self.table_i, axis=1))
@@ -107,11 +125,18 @@ class ExpBrain(object):
             win_row = argsort_match[0]
 
             learn_rate_p = 0.005 * abs(1.0 - match[argsort_match[0]])
+            # this is too extreme (forces synchrony):
+            # * self.gains[win_row]
 
             self.table_i[win_row, :] = (1.0 - learn_rate_p) * self.table_i[win_row, :] + learn_rate_p * input_exp
 
             self.gains = self.gains * 1.004
             self.gains[win_row] = 1.0
+
+            self.WTA_winner_history[self.t] = win_row
+            self.input_match_history[self.t] = match[win_row]
+            self.mean_input_match_history[self.t] = np.mean(self.input_match_history[max(0, self.t - 1000):self.t])
+            self.t += 1
 
         self.last_im = input_im.copy()
 
@@ -228,6 +253,19 @@ class ExpBrain(object):
 
         ims_list = [table_im.copy()]
         ims_names_list = ['table_i']
+
+        # plot mat plot lib
+        print()
+        print('Making plot of state vars...')
+        self.ax.cla()
+        self.ax.plot(self.WTA_winner_history[0:self.t], 'r.')
+        self.fig.savefig("WTA_winner_history.png", dpi=100)
+        self.ax.cla()
+        self.ax.plot(self.mean_input_match_history[0:self.t], 'r-')
+        self.fig.savefig("mean_input_match_history.png", dpi=100)
+        print('Done.')
+        print()
+
 
         return ims_list, ims_names_list
 
