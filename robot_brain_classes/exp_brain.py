@@ -51,7 +51,7 @@ class ExpBrain(object):
         self.rows = 36
 
         self.NxN_output = 1  # predicted output square size
-        self.NxN_input_pad = 8  # + pixels to pad on every side for input relative to output square
+        self.NxN_input_pad = 4  # + pixels to pad on every side for input relative to output square
 
         self.bins_per_pixel = 20
 
@@ -110,7 +110,7 @@ class ExpBrain(object):
 
             self.table_i[win_row, :] = (1.0 - learn_rate_p) * self.table_i[win_row, :] + learn_rate_p * input_exp
 
-            self.gains = self.gains * 1.001
+            self.gains = self.gains * 1.004
             self.gains[win_row] = 1.0
 
         self.last_im = input_im.copy()
