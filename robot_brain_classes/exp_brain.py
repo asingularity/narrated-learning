@@ -94,6 +94,9 @@ class ExpBrain(object):
         self.WTA_winner_history = np.zeros(self.MAX_TIME, np.int)
         self.input_match_history = np.zeros(self.MAX_TIME, np.float32)
         self.mean_input_match_history = np.zeros(self.MAX_TIME, np.float32)
+        self.mean_gain_history = np.zeros(self.MAX_TIME, np.float32)
+        self.mean_mean_gain_history = np.zeros(self.MAX_TIME, np.float32)
+
         self.fig = plt.figure(figsize=(40, 20))
         self.ax = self.fig.add_subplot(1, 1, 1)
         self.ax.cla()
@@ -136,6 +139,8 @@ class ExpBrain(object):
             self.WTA_winner_history[self.t] = win_row
             self.input_match_history[self.t] = match[win_row]
             self.mean_input_match_history[self.t] = np.mean(self.input_match_history[max(0, self.t - 1000):self.t])
+            self.mean_gain_history[self.t] = np.mean(self.gains)
+            self.mean_mean_gain_history[self.t] = np.mean(self.mean_gain_history[max(0, self.t - 1000):self.t])
             self.t += 1
 
         self.last_im = input_im.copy()
@@ -263,6 +268,12 @@ class ExpBrain(object):
         self.ax.cla()
         self.ax.plot(self.mean_input_match_history[0:self.t], 'r-')
         self.fig.savefig("mean_input_match_history.png", dpi=100)
+        self.ax.cla()
+        self.ax.plot(self.mean_gain_history[0:self.t], 'r-')
+        self.fig.savefig("mean_gain_history.png", dpi=100)
+        self.ax.cla()
+        self.ax.plot(self.mean_mean_gain_history[0:self.t], 'r-')
+        self.fig.savefig("mean_mean_gain_history.png", dpi=100)
         print('Done.')
         print()
 
