@@ -11,6 +11,17 @@ import skcuda.misc as misc
 from dist_matrix_helper import DistMatrixHelper, DumbDistMatrixHelper
 
 
+class CudaTableSeqNN(object):
+    '''
+
+    Encapsulate methods for seq-nn algorithm, using last query_multiple_rows
+
+
+    '''
+    def __init__(self):
+        pass
+
+
 class CudaTable(object):
     '''
     to test:

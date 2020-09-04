@@ -26,7 +26,7 @@ class VideoPlaybackSensor(object):
         self.prop_use_for_holdout = params['prop_use_for_holdout']
         self.switch_to_holdout_frame = params['switch_to_holdout_frame']
 
-        assert 0.0 < self.prop_use_for_holdout < 1.0
+        assert 0.0 <= self.prop_use_for_holdout < 1.0
 
         assert params['return_type'] is np.float32 or params['return_type'] is np.float64
         self.return_type = params['return_type']
