@@ -103,6 +103,92 @@ class ExpBrain(object):
         self.ax.get_xaxis().get_major_formatter().set_scientific(False)
         self.ax.get_yaxis().get_major_formatter().set_scientific(False)
 
+    def process_input_EGADS(self, input_im):
+
+        if self.last_im is not None:
+
+            # get input subset from image
+
+            assert self.in_r + self.NxN_input < self.im_dim, str((self.in_r + self.NxN_input, self.im_dim))
+            assert self.in_c + self.NxN_input < self.im_dim, str((self.in_c + self.NxN_input, self.im_dim))
+
+            input_pixels = self.last_im[self.in_r:self.in_r + self.NxN_input, self.in_c:self.in_c + self.NxN_input]
+            input_arr = input_pixels.flatten()[np.newaxis, :]
+            input_exp = self._bin_pixels_expand_columns(arr=input_arr, num_bins_per_pixel=self.bins_per_pixel)
+
+            assert input_exp.shape[0] == 1
+            assert input_exp.shape[1] == self.input_feature_len, str((input_exp.shape[1], self.input_feature_len))
+
+            all_mp = np.multiply(self.table_i, input_exp)
+            match_no_gain = np.divide(np.sum(all_mp, axis=1), np.sum(self.table_i, axis=1))
+
+            match = np.multiply(match_no_gain, self.gains)
+
+            argsort_match = np.argsort(match)[::-1]  # largest match first
+
+            multi_wta = True
+            if multi_wta:
+
+                unexplained = input_exp.copy()
+                active_rows = []
+
+                for k in range(argsort_match.shape[0]):
+
+                    row_i = argsort_match[k]
+                    unexplained = unexplained - self.table_i[row_i, :]
+                    unexplained[unexplained < 0] = 0
+                    val = np.sum(unexplained) / np.sum(input_exp)
+                    #print(k, row_i, val)
+                    active_rows.append(row_i)
+
+                    # TODO we are trying to compute match only to what is "unexplained"
+                    # BUT this is all wrong
+                    # already ranked them by overall match; that is where to look first; this would have to be integrated into that process, to work
+                    # learn_rate_p = 0.005 * abs(1.0 - match[row_i])
+
+                    if val < 0.4:
+                        break
+
+                active_rows = np.array(active_rows, np.int)
+
+                self.WTA_winner_history[self.t] = active_rows.shape[0]
+
+                # unstable
+                learn_rate_p = (0.001 * abs(1.0 - match[active_rows]))[:, np.newaxis]
+                self.table_i[active_rows, :] = (1.0 - learn_rate_p) * self.table_i[active_rows, :] + learn_rate_p * input_exp
+                self.gains = self.gains * 1.004
+                self.gains[active_rows] = 1.0
+
+            else:
+
+                win_row = argsort_match[0]
+
+                learn_rate_p = 0.005 * abs(1.0 - match[argsort_match[0]])
+                # this is too extreme (forces synchrony):
+                # * self.gains[win_row]
+                # this forces synchrony as well:
+                # - match_no_gain[...
+
+                self.learn_stop_time = np.inf  # 200000
+
+                if self.t < self.learn_stop_time:
+                    self.table_i[win_row, :] = (1.0 - learn_rate_p) * self.table_i[win_row, :] + learn_rate_p * input_exp
+
+                    self.gains = self.gains * 1.004
+                    self.gains[win_row] = 1.0
+                else:
+                    self.gains[:] = 1.0
+
+                self.WTA_winner_history[self.t] = win_row
+                self.input_match_history[self.t] = match[win_row]
+                self.mean_input_match_history[self.t] = np.mean(self.input_match_history[max(0, self.t - 1000):self.t])
+
+            self.mean_gain_history[self.t] = np.mean(self.gains)
+            self.mean_mean_gain_history[self.t] = np.mean(self.mean_gain_history[max(0, self.t - 1000):self.t])
+            self.t += 1
+
+        self.last_im = input_im.copy()
+
     def process_input(self, input_im):
 
         if self.last_im is not None:
