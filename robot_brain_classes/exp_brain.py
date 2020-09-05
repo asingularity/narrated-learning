@@ -51,7 +51,7 @@ class ExpBrain(object):
         self.rows = 36
 
         self.NxN_output = 1  # predicted output square size
-        self.NxN_input_pad = 4  # + pixels to pad on every side for input relative to output square
+        self.NxN_input_pad = 4  # 8  # + pixels to pad on every side for input relative to output square
 
         self.bins_per_pixel = 20
 
@@ -71,8 +71,8 @@ class ExpBrain(object):
             self.table_i = np.zeros((self.rows, self.input_feature_len), np.float32)
 
         # top left of input region
-        self.in_r = 50
-        self.in_c = 64
+        self.in_r = 50 #65 #50
+        self.in_c = 64 #76 #64
 
         # top left of input region
         # self.in_r = 30
@@ -120,9 +120,9 @@ class ExpBrain(object):
             assert input_exp.shape[1] == self.input_feature_len, str((input_exp.shape[1], self.input_feature_len))
 
             all_mp = np.multiply(self.table_i, input_exp)
-            match = np.divide(np.sum(all_mp, axis=1), np.sum(self.table_i, axis=1))
+            match_no_gain = np.divide(np.sum(all_mp, axis=1), np.sum(self.table_i, axis=1))
 
-            match = np.multiply(match, self.gains)
+            match = np.multiply(match_no_gain, self.gains)
 
             argsort_match = np.argsort(match)[::-1]  # largest match first
             win_row = argsort_match[0]
@@ -130,11 +130,18 @@ class ExpBrain(object):
             learn_rate_p = 0.005 * abs(1.0 - match[argsort_match[0]])
             # this is too extreme (forces synchrony):
             # * self.gains[win_row]
+            # this forces synchrony as well:
+            # - match_no_gain[...
 
-            self.table_i[win_row, :] = (1.0 - learn_rate_p) * self.table_i[win_row, :] + learn_rate_p * input_exp
+            self.learn_stop_time = np.inf  # 200000
 
-            self.gains = self.gains * 1.004
-            self.gains[win_row] = 1.0
+            if self.t < self.learn_stop_time:
+                self.table_i[win_row, :] = (1.0 - learn_rate_p) * self.table_i[win_row, :] + learn_rate_p * input_exp
+
+                self.gains = self.gains * 1.004
+                self.gains[win_row] = 1.0
+            else:
+                self.gains[:] = 1.0
 
             self.WTA_winner_history[self.t] = win_row
             self.input_match_history[self.t] = match[win_row]
@@ -258,6 +265,13 @@ class ExpBrain(object):
 
         ims_list = [table_im.copy()]
         ims_names_list = ['table_i']
+
+        # input image with box
+        in_region_im = self.last_im.copy()
+        cv2.rectangle(in_region_im, (self.in_c, self.in_r), (self.in_c + self.NxN_input, self.in_r + self.NxN_input), 255, 2)
+
+        ims_list.append(in_region_im.copy())
+        ims_names_list.append('input_region')
 
         # plot mat plot lib
         print()
