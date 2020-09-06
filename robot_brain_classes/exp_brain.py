@@ -54,9 +54,9 @@ class ExpBrain(object):
         self.prob = np.zeros((self.rows, self.rows), np.float32)
 
         self.NxN_output = 1  # predicted output square size
-        self.NxN_input_pad = 4  # 8  # + pixels to pad on every side for input relative to output square
+        self.NxN_input_pad = 8  # 8  # + pixels to pad on every side for input relative to output square
 
-        self.bins_per_pixel = 20
+        self.bins_per_pixel = 6
 
         self.NxN_input = int(self.NxN_output + 2 * self.NxN_input_pad)
 
@@ -383,15 +383,20 @@ class ExpBrain(object):
         max_index = np.argmax(tmp, axis=1)
         max_vals = bins[max_index]
 
+        weights = tmp[np.arange(tmp.shape[0]), max_index]
+
+        #print(max_vals.shape, weights.shape)
+
         # weighted mean val for display:
         # tmp1 = np.multiply(tmp, bins[np.newaxis, 0:num_bins_per_pixel])
         # tmp2 = np.sum(tmp1, axis=1)  # 65536
         # tmp3 = np.divide(tmp2, np.sum(tmp, axis=1))
         # max_vals = tmp3
 
+        weights = weights.reshape(num_rows, num_pixels)
         arr = max_vals.reshape(num_rows, num_pixels)
 
-        return arr
+        return arr, weights
 
     def get_table_ims(self):
 
@@ -399,13 +404,13 @@ class ExpBrain(object):
         # print((np.amin(self.prob), np.amax(self.prob)))
         # print(np.nonzero(self.prob==0))
 
-        rows = self._collapse_binned_columns_to_pixels(self.table_i, num_bins_per_pixel=self.bins_per_pixel)
+        rows, weights = self._collapse_binned_columns_to_pixels(self.table_i, num_bins_per_pixel=self.bins_per_pixel)
 
         tile_r_c = int(sqrt(rows.shape[1]))
         N = int(sqrt(self.rows))
 
         table_im = np.zeros((N * tile_r_c + N * 1, N * tile_r_c + N * 1)) + 0.5
-
+        weights_im = np.zeros((N * tile_r_c + N * 1, N * tile_r_c + N * 1)) + 0.5
         tile_n = 0
 
         last_win_row = self.WTA_winner_history[self.t - 1]
@@ -421,14 +426,34 @@ class ExpBrain(object):
                 c1 = (disp_c + 1) * tile_r_c + c_offset
 
                 tile_im = rows[tile_n, :].reshape((tile_r_c, tile_r_c))
+                tile_weights = weights[tile_n, :].reshape((tile_r_c, tile_r_c))
+
+                # RF-based / RGC-type view (one circle per pixel) in progress:
+                # tile_r = 0
+                # for im_r in range(r0, r1):
+                #     tile_c = 0
+                #     for im_c in range(c0, c1):
+                #
+                #         val =
+                #
+                #         tile_c += 1
+                #
+                #     tile_r += 1
 
                 table_im[r0:r1, c0:c1] = tile_im
+                weights_im[r0:r1, c0:c1] = tile_weights
 
                 if tile_n == last_win_row:
                     table_im[r0:r1, c0 - 1] = 1.0
                     table_im[r0:r1, c1] = 1.0
                     table_im[r0 - 1, c0:c1] = 1.0
                     table_im[r1, c0:c1] = 1.0
+
+                    weights_im[r0:r1, c0 - 1] = 1.0
+                    weights_im[r0:r1, c1] = 1.0
+                    weights_im[r0 - 1, c0:c1] = 1.0
+                    weights_im[r1, c0:c1] = 1.0
+
 
                 tile_n += 1
                 c_offset += 1
@@ -445,7 +470,14 @@ class ExpBrain(object):
         table_im = cv2.resize(table_im, dsize=(0, 0), fx=imscale, fy=imscale, interpolation=cv2.INTER_NEAREST)
 
         ims_list = [table_im.copy()]
-        ims_names_list = ['table_i']
+        ims_names_list = ['table_im']
+
+        max_dim = max(weights_im.shape[0], weights_im.shape[1])
+        imscale = self.ims_scale_pixels / max_dim  # 0.2: full table, 2.0
+        weights_im = cv2.resize(weights_im, dsize=(0, 0), fx=imscale, fy=imscale, interpolation=cv2.INTER_NEAREST)
+
+        ims_list.append(weights_im.copy())
+        ims_names_list.append('weights_im')
 
         # input image with box
         in_region_im = self.last_im.copy()
