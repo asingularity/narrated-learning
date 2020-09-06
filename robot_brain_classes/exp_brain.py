@@ -41,14 +41,17 @@ class ExpBrain(object):
 
         self.im_dim = params['image_dim_NxN_pixels']
 
-        self.ims_scale_pixels = 800
+        self.ims_scale_pixels = 300
+
         self.otm = OneTimeMessages()
 
         self.t = 0
 
         self.last_im = None
 
-        self.rows = 36
+        self.rows = 12 * 12  # 6 * 6
+
+        self.prob = np.zeros((self.rows, self.rows), np.float32)
 
         self.NxN_output = 1  # predicted output square size
         self.NxN_input_pad = 4  # 8  # + pixels to pad on every side for input relative to output square
@@ -88,10 +91,13 @@ class ExpBrain(object):
         # gain
 
         self.gains = np.ones(self.rows, np.float32)
+        self.threshold = 0.9 * np.ones(self.rows, np.float32)
         # self.last_win_t = np.zeros()
 
-        self.MAX_TIME = 1000000
+        self.MAX_TIME = 100000000
         self.WTA_winner_history = np.zeros(self.MAX_TIME, np.int)
+        self.mean_WTA_winner_history = np.zeros(self.MAX_TIME, np.float32)
+
         self.input_match_history = np.zeros(self.MAX_TIME, np.float32)
         self.mean_input_match_history = np.zeros(self.MAX_TIME, np.float32)
         self.mean_gain_history = np.zeros(self.MAX_TIME, np.float32)
@@ -189,6 +195,82 @@ class ExpBrain(object):
 
         self.last_im = input_im.copy()
 
+    def process_input_DYNAMIC_IN_PROGRESS(self, input_im):
+
+        if self.last_im is not None:
+
+            # get input subset from image
+
+            assert self.in_r + self.NxN_input < self.im_dim, str((self.in_r + self.NxN_input, self.im_dim))
+            assert self.in_c + self.NxN_input < self.im_dim, str((self.in_c + self.NxN_input, self.im_dim))
+
+            input_pixels = self.last_im[self.in_r:self.in_r + self.NxN_input, self.in_c:self.in_c + self.NxN_input]
+            input_arr = input_pixels.flatten()[np.newaxis, :]
+            input_exp = self._bin_pixels_expand_columns(arr=input_arr, num_bins_per_pixel=self.bins_per_pixel)
+
+            assert input_exp.shape[0] == 1
+            assert input_exp.shape[1] == self.input_feature_len, str((input_exp.shape[1], self.input_feature_len))
+
+            all_mp = np.multiply(self.table_i, input_exp)
+            match_no_gain = np.divide(np.sum(all_mp, axis=1), np.sum(self.table_i, axis=1))
+
+            match = np.multiply(match_no_gain, self.gains)
+
+            argsort_match = np.argsort(match)[::-1]  # largest match first
+
+            tmp = 1.0
+            for k in range(argsort_match.shape[0]):
+                row_i = argsort_match[k]
+                if match[row_i] > self.threshold[row_i]:
+                    self.threshold[row_i] = self.threshold[row_i] * tmp
+                    tmp = tmp * 1.1
+
+            active_rows = np.nonzero(np.greater(match, self.threshold))[0]
+            inactive_rows = np.nonzero(np.less_equal(match, self.threshold))[0]
+
+            learn_rate_p = (0.0025 * abs(1.0 - match[active_rows]))[:, np.newaxis]
+            self.table_i[active_rows, :] = (1.0 - learn_rate_p) * self.table_i[active_rows, :] + learn_rate_p * input_exp
+
+            self.threshold[inactive_rows] = self.threshold[inactive_rows] * 0.5
+            self.threshold[active_rows] = 0.2
+
+            #self.gains = self.gains * 1.004
+            #self.gains[active_rows] = 1.0
+
+            # n_tmp = 0
+            # g = 1.0
+            # for k in range(argsort_match.shape[0]):
+            #     row_i = argsort_match[k]
+            #     if row_i in list(active_rows):
+            #         lr_probs = 0.005
+            #         print((np.amin(self.prob), np.amax(self.prob)))
+            #         self.prob[row_i, active_rows] = (1 - lr_probs) * self.prob[row_i, active_rows] + lr_probs * 1.0
+            #         print((np.amin(self.prob), np.amax(self.prob)))
+            #         print(' updated prob for ', row_i, active_rows)
+            #         n_tmp += 1
+            # assert n_tmp == active_rows.shape[0]
+
+            if active_rows.shape[0] > 0:
+                for row_i in list(active_rows):
+                    for row_j in list(active_rows):
+                        if row_i != row_j:
+                            lr_probs = 0.1
+                            self.prob[row_i, row_j] = (1 - lr_probs) * self.prob[row_i, row_j] + lr_probs * 1.0
+
+                #print(self.t)
+                #print((np.amin(self.prob), np.amax(self.prob)))
+                # print(active_rows)
+
+            #print(np.nonzero(self.prob==0.0))
+            self.WTA_winner_history[self.t] = active_rows.shape[0]
+            self.mean_WTA_winner_history[self.t] = np.mean(self.WTA_winner_history[max(0, self.t - 1000):self.t])
+
+            self.mean_gain_history[self.t] = np.mean(self.threshold)
+            self.mean_mean_gain_history[self.t] = np.mean(self.mean_gain_history[max(0, self.t - 1000):self.t])
+            self.t += 1
+
+        self.last_im = input_im.copy()
+
     def process_input(self, input_im):
 
         if self.last_im is not None:
@@ -213,7 +295,7 @@ class ExpBrain(object):
             argsort_match = np.argsort(match)[::-1]  # largest match first
             win_row = argsort_match[0]
 
-            learn_rate_p = 0.005 * abs(1.0 - match[argsort_match[0]])
+            learn_rate_p = 0.0025 * abs(1.0 - match[argsort_match[0]])
             # this is too extreme (forces synchrony):
             # * self.gains[win_row]
             # this forces synchrony as well:
@@ -224,7 +306,7 @@ class ExpBrain(object):
             if self.t < self.learn_stop_time:
                 self.table_i[win_row, :] = (1.0 - learn_rate_p) * self.table_i[win_row, :] + learn_rate_p * input_exp
 
-                self.gains = self.gains * 1.004
+                self.gains = self.gains * 1.0005
                 self.gains[win_row] = 1.0
             else:
                 self.gains[:] = 1.0
@@ -312,6 +394,11 @@ class ExpBrain(object):
         return arr
 
     def get_table_ims(self):
+
+        # print(self.t)
+        # print((np.amin(self.prob), np.amax(self.prob)))
+        # print(np.nonzero(self.prob==0))
+
         rows = self._collapse_binned_columns_to_pixels(self.table_i, num_bins_per_pixel=self.bins_per_pixel)
 
         tile_r_c = int(sqrt(rows.shape[1]))
@@ -320,6 +407,8 @@ class ExpBrain(object):
         table_im = np.zeros((N * tile_r_c + N * 1, N * tile_r_c + N * 1)) + 0.5
 
         tile_n = 0
+
+        last_win_row = self.WTA_winner_history[self.t - 1]
 
         r_offset = 0
         for disp_r in range(N):
@@ -334,6 +423,12 @@ class ExpBrain(object):
                 tile_im = rows[tile_n, :].reshape((tile_r_c, tile_r_c))
 
                 table_im[r0:r1, c0:c1] = tile_im
+
+                if tile_n == last_win_row:
+                    table_im[r0:r1, c0 - 1] = 1.0
+                    table_im[r0:r1, c1] = 1.0
+                    table_im[r0 - 1, c0:c1] = 1.0
+                    table_im[r1, c0:c1] = 1.0
 
                 tile_n += 1
                 c_offset += 1
@@ -359,24 +454,41 @@ class ExpBrain(object):
         ims_list.append(in_region_im.copy())
         ims_names_list.append('input_region')
 
-        # plot mat plot lib
-        print()
-        print('Making plot of state vars...')
-        self.ax.cla()
-        self.ax.plot(self.WTA_winner_history[0:self.t], 'r.')
-        self.fig.savefig("WTA_winner_history.png", dpi=100)
-        self.ax.cla()
-        self.ax.plot(self.mean_input_match_history[0:self.t], 'r-')
-        self.fig.savefig("mean_input_match_history.png", dpi=100)
-        self.ax.cla()
-        self.ax.plot(self.mean_gain_history[0:self.t], 'r-')
-        self.fig.savefig("mean_gain_history.png", dpi=100)
-        self.ax.cla()
-        self.ax.plot(self.mean_mean_gain_history[0:self.t], 'r-')
-        self.fig.savefig("mean_mean_gain_history.png", dpi=100)
-        print('Done.')
-        print()
+        ims_scale_input_by_itself = int(self.ims_scale_pixels / N)
+        input_itself_im = self.last_im[self.in_r:self.in_r + self.NxN_input, self.in_c:self.in_c+self.NxN_input]
 
+        max_dim = max(input_itself_im.shape[0], input_itself_im.shape[1])
+        imscale = ims_scale_input_by_itself / max_dim  # 0.2: full table, 2.0
+        input_itself_im = cv2.resize(input_itself_im, dsize=(0, 0), fx=imscale, fy=imscale, interpolation=cv2.INTER_NEAREST)
+
+        ims_list.append(input_itself_im.copy())
+        ims_names_list.append('input_by_itself')
+
+        # plot mat plot lib
+        plot_on = False
+        if plot_on:
+            print()
+            print('Making plot of state vars...')
+
+            self.ax.cla()
+            self.ax.plot(self.WTA_winner_history[0:self.t], 'r.')
+            self.fig.savefig("WTA_winner_history.png", dpi=100)
+
+            self.ax.cla()
+            self.ax.plot(self.mean_WTA_winner_history[0:self.t], 'r.')
+            self.fig.savefig("mean_WTA_winner_history.png", dpi=100)
+
+            # self.ax.cla()
+            # self.ax.plot(self.mean_input_match_history[0:self.t], 'r-')
+            # self.fig.savefig("mean_input_match_history.png", dpi=100)
+            self.ax.cla()
+            self.ax.plot(self.mean_gain_history[0:self.t], 'r-')
+            self.fig.savefig("mean_gain_history.png", dpi=100)
+            self.ax.cla()
+            self.ax.plot(self.mean_mean_gain_history[0:self.t], 'r-')
+            self.fig.savefig("mean_mean_gain_history.png", dpi=100)
+            print('Done.')
+            print()
 
         return ims_list, ims_names_list
 
