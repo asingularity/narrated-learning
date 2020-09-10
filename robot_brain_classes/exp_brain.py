@@ -49,6 +49,24 @@ class ExpBrain(object):
 
         self.last_im = None
 
+        self.last_2_im = None
+        self.last_3_im = None
+        self.last_4_im = None
+        self.last_5_im = None
+        self.last_6_im = None
+        self.last_7_im = None
+
+        self.last_8_im = None
+
+        self.last_9_im = None
+        self.last_10_im = None
+        self.last_11_im = None
+        self.last_12_im = None
+        self.last_13_im = None
+        self.last_14_im = None
+
+        self.last_15_im = None
+
         self.rows = 12 * 12  # 6 * 6
 
         self.prob = np.zeros((self.rows, self.rows), np.float32)
@@ -61,8 +79,8 @@ class ExpBrain(object):
         self.NxN_input = int(self.NxN_output + 2 * self.NxN_input_pad)
 
         # for now, table is not spatiotemporal history, just spatial, as a start
-        self.input_history_steps = 1
-        assert self.input_history_steps == 1, 'havent implement history for input yet'
+        self.input_history_steps = 3
+        assert self.input_history_steps == 3, 'havent implement history for input yet for more than 3'
 
         self.input_feature_len = self.bins_per_pixel * self.NxN_input * self.NxN_input * self.input_history_steps
         self.output_feature_len = self.bins_per_pixel * self.NxN_output * self.NxN_output
@@ -273,16 +291,28 @@ class ExpBrain(object):
 
     def process_input(self, input_im):
 
-        if self.last_im is not None:
+        if self.last_15_im is not None:
 
             # get input subset from image
 
             assert self.in_r + self.NxN_input < self.im_dim, str((self.in_r + self.NxN_input, self.im_dim))
             assert self.in_c + self.NxN_input < self.im_dim, str((self.in_c + self.NxN_input, self.im_dim))
 
-            input_pixels = self.last_im[self.in_r:self.in_r + self.NxN_input, self.in_c:self.in_c + self.NxN_input]
-            input_arr = input_pixels.flatten()[np.newaxis, :]
-            input_exp = self._bin_pixels_expand_columns(arr=input_arr, num_bins_per_pixel=self.bins_per_pixel)
+            input_pixels_1 = self.last_im[self.in_r:self.in_r + self.NxN_input, self.in_c:self.in_c + self.NxN_input]
+            input_arr_1 = input_pixels_1.flatten()[np.newaxis, :]
+            input_exp_1 = self._bin_pixels_expand_columns(arr=input_arr_1, num_bins_per_pixel=self.bins_per_pixel)
+
+            input_pixels_2 = self.last_8_im[self.in_r:self.in_r + self.NxN_input, self.in_c:self.in_c + self.NxN_input]
+            input_arr_2 = input_pixels_2.flatten()[np.newaxis, :]
+            input_exp_2 = self._bin_pixels_expand_columns(arr=input_arr_2, num_bins_per_pixel=self.bins_per_pixel)
+
+            input_pixels_3 = self.last_15_im[self.in_r:self.in_r + self.NxN_input, self.in_c:self.in_c + self.NxN_input]
+            input_arr_3 = input_pixels_3.flatten()[np.newaxis, :]
+            input_exp_3 = self._bin_pixels_expand_columns(arr=input_arr_3, num_bins_per_pixel=self.bins_per_pixel)
+
+            input_exp = np.hstack((input_exp_1, input_exp_2, input_exp_3))
+
+            # print(input_exp_1.shape, input_exp.shape)
 
             assert input_exp.shape[0] == 1
             assert input_exp.shape[1] == self.input_feature_len, str((input_exp.shape[1], self.input_feature_len))
@@ -318,7 +348,43 @@ class ExpBrain(object):
             self.mean_mean_gain_history[self.t] = np.mean(self.mean_gain_history[max(0, self.t - 1000):self.t])
             self.t += 1
 
+        if self.last_14_im is not None:
+            self.last_15_im = self.last_14_im.copy()
+        if self.last_13_im is not None:
+            self.last_14_im = self.last_13_im.copy()
+        if self.last_12_im is not None:
+            self.last_13_im = self.last_12_im.copy()
+        if self.last_11_im is not None:
+            self.last_12_im = self.last_11_im.copy()
+        if self.last_10_im is not None:
+            self.last_11_im = self.last_10_im.copy()
+        if self.last_9_im is not None:
+            self.last_10_im = self.last_9_im.copy()
+        if self.last_8_im is not None:
+            self.last_9_im = self.last_8_im.copy()
+        if self.last_7_im is not None:
+            self.last_8_im = self.last_7_im.copy()
+
+        if self.last_6_im is not None:
+            self.last_7_im = self.last_6_im.copy()
+
+        if self.last_5_im is not None:
+            self.last_6_im = self.last_5_im.copy()
+
+        if self.last_4_im is not None:
+            self.last_5_im = self.last_4_im.copy()
+
+        if self.last_3_im is not None:
+            self.last_4_im = self.last_3_im.copy()
+
+        if self.last_2_im is not None:
+            self.last_3_im = self.last_2_im.copy()
+
+        if self.last_im is not None:
+            self.last_2_im = self.last_im.copy()
+
         self.last_im = input_im.copy()
+
 
     def _bin_pixels_expand_columns(self, arr, num_bins_per_pixel):
         '''
@@ -404,80 +470,94 @@ class ExpBrain(object):
         # print((np.amin(self.prob), np.amax(self.prob)))
         # print(np.nonzero(self.prob==0))
 
-        rows, weights = self._collapse_binned_columns_to_pixels(self.table_i, num_bins_per_pixel=self.bins_per_pixel)
+        ims_list = []
+        ims_names_list = []
 
-        tile_r_c = int(sqrt(rows.shape[1]))
-        N = int(sqrt(self.rows))
+        table_im_list = []
+        weights_im_list = []
+        tmp = int(self.input_feature_len / self.input_history_steps)
 
-        table_im = np.zeros((N * tile_r_c + N * 1, N * tile_r_c + N * 1)) + 0.5
-        weights_im = np.zeros((N * tile_r_c + N * 1, N * tile_r_c + N * 1)) + 0.5
-        tile_n = 0
+        for k in range(self.input_history_steps):
+            rows, weights = self._collapse_binned_columns_to_pixels(self.table_i[:, k * tmp:(k+1) * tmp], num_bins_per_pixel=self.bins_per_pixel)
 
-        last_win_row = self.WTA_winner_history[self.t - 1]
+            tile_r_c = int(sqrt(rows.shape[1]))
+            N = int(sqrt(self.rows))
 
-        r_offset = 0
-        for disp_r in range(N):
+            table_im = np.zeros((N * tile_r_c + N * 1, N * tile_r_c + N * 1)) + 0.5
 
-            c_offset = 0
-            for disp_c in range(N):
-                r0 = disp_r * tile_r_c + r_offset
-                r1 = (disp_r + 1) * tile_r_c + r_offset
-                c0 = disp_c * tile_r_c + c_offset
-                c1 = (disp_c + 1) * tile_r_c + c_offset
+            weights_im = np.zeros((N * tile_r_c + N * 1, N * tile_r_c + N * 1)) + 0.5
+            tile_n = 0
 
-                tile_im = rows[tile_n, :].reshape((tile_r_c, tile_r_c))
-                tile_weights = weights[tile_n, :].reshape((tile_r_c, tile_r_c))
+            last_win_row = self.WTA_winner_history[self.t - 1]
 
-                # RF-based / RGC-type view (one circle per pixel) in progress:
-                # tile_r = 0
-                # for im_r in range(r0, r1):
-                #     tile_c = 0
-                #     for im_c in range(c0, c1):
-                #
-                #         val =
-                #
-                #         tile_c += 1
-                #
-                #     tile_r += 1
+            r_offset = 0
+            for disp_r in range(N):
 
-                table_im[r0:r1, c0:c1] = tile_im
-                weights_im[r0:r1, c0:c1] = tile_weights
+                c_offset = 0
+                for disp_c in range(N):
+                    r0 = disp_r * tile_r_c + r_offset
+                    r1 = (disp_r + 1) * tile_r_c + r_offset
+                    c0 = disp_c * tile_r_c + c_offset
+                    c1 = (disp_c + 1) * tile_r_c + c_offset
 
-                if tile_n == last_win_row:
-                    table_im[r0:r1, c0 - 1] = 1.0
-                    table_im[r0:r1, c1] = 1.0
-                    table_im[r0 - 1, c0:c1] = 1.0
-                    table_im[r1, c0:c1] = 1.0
+                    tile_im = rows[tile_n, :].reshape((tile_r_c, tile_r_c))
+                    tile_weights = weights[tile_n, :].reshape((tile_r_c, tile_r_c))
 
-                    weights_im[r0:r1, c0 - 1] = 1.0
-                    weights_im[r0:r1, c1] = 1.0
-                    weights_im[r0 - 1, c0:c1] = 1.0
-                    weights_im[r1, c0:c1] = 1.0
+                    # RF-based / RGC-type view (one circle per pixel) in progress:
+                    # tile_r = 0
+                    # for im_r in range(r0, r1):
+                    #     tile_c = 0
+                    #     for im_c in range(c0, c1):
+                    #
+                    #         val =
+                    #
+                    #         tile_c += 1
+                    #
+                    #     tile_r += 1
+
+                    table_im[r0:r1, c0:c1] = tile_im
+                    weights_im[r0:r1, c0:c1] = tile_weights
+
+                    if tile_n == last_win_row:
+                        table_im[r0:r1, c0 - 1] = 1.0
+                        table_im[r0:r1, c1] = 1.0
+                        table_im[r0 - 1, c0:c1] = 1.0
+                        table_im[r1, c0:c1] = 1.0
+
+                        weights_im[r0:r1, c0 - 1] = 1.0
+                        weights_im[r0:r1, c1] = 1.0
+                        weights_im[r0 - 1, c0:c1] = 1.0
+                        weights_im[r1, c0:c1] = 1.0
 
 
-                tile_n += 1
-                c_offset += 1
+                    tile_n += 1
+                    c_offset += 1
 
-            r_offset += 1
+                r_offset += 1
 
-        # selection image
-        select_im = None
+            table_im_list.append(table_im.copy())
+            weights_im_list.append(weights_im.copy())
+
+
 
         # scale all
+        for k in range(len(table_im_list)):
+            table_im = table_im_list[k]
+            weights_im = weights_im_list[k]
 
-        max_dim = max(table_im.shape[0], table_im.shape[1])
-        imscale = self.ims_scale_pixels / max_dim  # 0.2: full table, 2.0
-        table_im = cv2.resize(table_im, dsize=(0, 0), fx=imscale, fy=imscale, interpolation=cv2.INTER_NEAREST)
+            max_dim = max(table_im.shape[0], table_im.shape[1])
+            imscale = self.ims_scale_pixels / max_dim  # 0.2: full table, 2.0
+            table_im = cv2.resize(table_im, dsize=(0, 0), fx=imscale, fy=imscale, interpolation=cv2.INTER_NEAREST)
 
-        ims_list = [table_im.copy()]
-        ims_names_list = ['table_im']
+            ims_list.append(table_im.copy())
+            ims_names_list.append('table_im_' + str(k))
 
-        max_dim = max(weights_im.shape[0], weights_im.shape[1])
-        imscale = self.ims_scale_pixels / max_dim  # 0.2: full table, 2.0
-        weights_im = cv2.resize(weights_im, dsize=(0, 0), fx=imscale, fy=imscale, interpolation=cv2.INTER_NEAREST)
+            max_dim = max(weights_im.shape[0], weights_im.shape[1])
+            imscale = self.ims_scale_pixels / max_dim  # 0.2: full table, 2.0
+            weights_im = cv2.resize(weights_im, dsize=(0, 0), fx=imscale, fy=imscale, interpolation=cv2.INTER_NEAREST)
 
-        ims_list.append(weights_im.copy())
-        ims_names_list.append('weights_im')
+            ims_list.append(weights_im.copy())
+            ims_names_list.append('weights_im_' + str(k))
 
         # input image with box
         in_region_im = self.last_im.copy()
