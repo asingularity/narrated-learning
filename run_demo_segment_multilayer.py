@@ -4,7 +4,7 @@ import numpy as np
 random.seed(6)
 np.random.seed(6)
 
-from robot_brain_classes.segment_brain import SegmentBrain
+from robot_brain_classes.n_brain import NBrain
 from robot_sensor_classes.video_playback import VideoPlaybackSensor
 from robot_sensor_classes.duo_playback import DuoPlaybackSensor
 from robot_sensor_classes.physics_2d import Physics2DSensor
@@ -18,25 +18,8 @@ MAX_HISTORY_LENGTH = 10600000 + 1
 USERNAME = 'intec'
 
 IM_DIM = 128  # pixels, width & height
-TILE_DIM =     [2, 4, 8, 16, 32, 64, 128]  # pixels, width & height
-TILES_OFFSET = [2, 4, 8, 16, 32, 64, 128]  # pixels; the last value is ignored as size is image size
-PREDICT_RADIUS = 10  # pixels
-
-# small model for testing code:
-ROWS_PER_TILE = [400, 400, 400, 400, 400, 400, 400]
-TABLE_LEARN_TIME_MULTIPLE = 2
-
-# real model:
-#ROWS_PER_TILE = [1600, 1600, 1600, 1600, 1600, 1600, 1600]
-# TABLE_LEARN_TIME_MULTIPLE = 4
-
-# INPUT_DELAY_LIST = [0, 1, 2, 3]  # time steps: [1, 2]
-# PREDICT_STEPS = 4
-# PREDICTION_LEARN_TIME = 3000  # no use of it being longer than 1x video loop
-# TRAIN_STEPS = ROWS_PER_TILE * TABLE_LEARN_TIME_MULTIPLE + PREDICTION_LEARN_TIME
-
-# TABLE_LEARN_TIME = 3000  # deprecated
-# PREDICTION_LEARN_TIME = 20000  # deprecated
+TILE_DIM = [8, 16, 32, 64, 128]  # pixels, width & height
+TILE_TAU = [1, 2,  4,  8,  16]  # spatiotemporal RF history steps
 
 COLOR_ENABLED = False
 
@@ -96,21 +79,12 @@ def get_sim_folder_manager_params():
 def get_brain_params():
 
     params = {
-        # ************ general ************
-        'multilayer': True,
-        'max_history_length': MAX_HISTORY_LENGTH,
-        'ims_scale_pixels': 1200,  # 2000 for 4k monitor, 1600 for laptop
-
-
-        # ************ MultiLayerDynamicTiles: table ************
         'image_dim_NxN_pixels': IM_DIM,
-        'tile_dim_NxN_pixels_per_layer': TILE_DIM,
-        'tiles_offset_N_pixels_per_layer': TILES_OFFSET,
-        'rows_per_tile_per_layer': ROWS_PER_TILE,
-        'table_learn_time_multiple': TABLE_LEARN_TIME_MULTIPLE
-
-        # ************ MultiLayerDynamicTiles: prediction ************
-            }
+        'tile_dim_per_layer': TILE_DIM,
+        'tile_tau_per_layer': TILE_TAU
+        'max_history_length': MAX_HISTORY_LENGTH,
+        'ims_scale_pixels': 800,
+    }
 
     return params
 
@@ -139,7 +113,7 @@ def init_demo():
         robot_sensors = Physics2DSensor(get_sensors_params())
 
     return {
-        'robot_brain': SegmentBrain(get_brain_params()),
+        'robot_brain': NBRain(get_brain_params()),
         'robot_sensors': robot_sensors,
         'visualizer': SegmentVisualizer(get_visualizer_params()),
         'sim_folder_manager': SimFolderManager(get_sim_folder_manager_params())
