@@ -49,22 +49,27 @@ class StatesLimitedHistory(object):
         self.extra_data_list = []
 
         self.active = False
+        self.store_extra_data = True
+        if 'store_extra_data' in params:
+            self.store_extra_data = params['store_extra_data']
 
         if self.states_dim_list[0] > 0:
             self.active = True
             for k in range(len(self.states_dim_list)):
                 self.state_arrays_list.append(np.zeros((self.max_delay, self.states_dim_list[k])).astype(np.float32))
-                self.extra_data_list.append([None] * self.max_delay)
+                if self.store_extra_data:
+                    self.extra_data_list.append([None] * self.max_delay)
         self.t_mod = 0
 
-    def store_new_states(self, newest_states_list, extra_data_list):
+    def store_new_states(self, newest_states_list, extra_data_list=None):
         self.process_new_states(newest_states_list=newest_states_list, extra_data_list=extra_data_list)
 
-    def process_new_states(self, newest_states_list, extra_data_list):
+    def process_new_states(self, newest_states_list, extra_data_list=None):
         if self.active:
             assert len(newest_states_list) == len(self.state_arrays_list), 'Error: invalid states length!'
-            assert len(extra_data_list) == len(self.extra_data_list), 'Error: invalid extra data length!'
-            assert len(newest_states_list) == len(self.extra_data_list), 'Error: invalid extra data length!'
+            if self.store_extra_data:
+                assert len(extra_data_list) == len(self.extra_data_list), 'Error: invalid extra data length!'
+                assert len(newest_states_list) == len(self.extra_data_list), 'Error: invalid extra data length!'
 
             self.t_mod += 1
             if self.t_mod == self.max_delay:
@@ -73,7 +78,8 @@ class StatesLimitedHistory(object):
             state_index = 0
             for state in newest_states_list:
                 self.state_arrays_list[state_index][self.t_mod, :] = state[:]
-                self.extra_data_list[state_index][self.t_mod] = extra_data_list[state_index]
+                if self.store_extra_data:
+                    self.extra_data_list[state_index][self.t_mod] = extra_data_list[state_index]
                 state_index += 1
 
     def get_state(self, state_index, delay):
@@ -88,10 +94,16 @@ class StatesLimitedHistory(object):
                 time_index = self.max_delay + time_index
 
             state = self.state_arrays_list[state_index][time_index, :]
-            extra_data = self.extra_data_list[state_index][time_index]
-            return state, extra_data
+            if self.store_extra_data:
+                extra_data = self.extra_data_list[state_index][time_index]
+                return state, extra_data
+            else:
+                return state
         else:
-            return None, None
+            if self.store_extra_data:
+                return None, None
+            else:
+                return None
 
     def get_state_sequence(self, state_index, delay_long, delay_short):
         # TODO this could be more efficient: just two lookups instead!

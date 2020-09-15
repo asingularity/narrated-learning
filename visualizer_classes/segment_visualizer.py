@@ -39,6 +39,11 @@ class SegmentVisualizer(object):
         self.image_display_secs_fast = params['image_display_secs_fast']
         self.auto_switch_to_slow_disp_time = params['auto_switch_to_slow_disp_time']
 
+        if 'disable_graphics' in params:
+            self.disable_graphics = params['disable_graphics']
+        else:
+            self.disable_graphics = False
+
         self.show_table_ims = True
 
         if params['init_fast']:
@@ -103,7 +108,7 @@ class SegmentVisualizer(object):
 
         self._display_fps()
 
-        if self.image_display_secs is not None:
+        if (not self.disable_graphics) and (self.image_display_secs is not None):
 
             display_now = (time.time() - self.last_image_display_time > self.image_display_secs)
 

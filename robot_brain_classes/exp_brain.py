@@ -72,7 +72,7 @@ class ExpBrain(object):
         self.prob = np.zeros((self.rows, self.rows), np.float32)
 
         self.NxN_output = 1  # predicted output square size
-        self.NxN_input_pad = 8  # 8  # + pixels to pad on every side for input relative to output square
+        self.NxN_input_pad = 4  # 8  # + pixels to pad on every side for input relative to output square
 
         self.bins_per_pixel = 6
 

@@ -17,9 +17,18 @@ from math import pi
 MAX_HISTORY_LENGTH = 10600000 + 1
 USERNAME = 'intec'
 
-IM_DIM = 128  # pixels, width & height
-TILE_DIM = [8, 16, 32, 64, 128]  # pixels, width & height
-TILE_TAU = [1, 2,  4,  8,  16]  # spatiotemporal RF history steps
+#IM_DIM = 128  # pixels, width & height
+#TILE_DIM = [8, 16, 32, 64, 128]  # pixels, width & height
+#TILE_TAU = [1, 2,  4,  8,  16]  # spatiotemporal RF history steps
+
+IM_DIM = 64  # pixels, width & height
+TILE_DIM = [8, 16, 32, 64]  # pixels, width & height
+TILE_TAU = [1, 2,  4,  8]  # spatiotemporal RF history steps
+
+# IM_DIM = 64  # pixels, width & height
+# TILE_DIM = [8]  # pixels, width & height
+# TILE_TAU = [1]  # spatiotemporal RF history steps
+
 
 COLOR_ENABLED = False
 
@@ -28,17 +37,31 @@ USE_VIDEO_IN = True
 
 # uses: IM_DIM
 def get_sensors_params():
+    # params_video_playback = {
+    #     'image_dim': IM_DIM,  # sensor class has to figure out subset & scale to achieve this dim
+    #     'video_dir': '/srv/projects/NL-data/',
+    #     'video_filename': 'videoplayback',  # 3840x2160
+    #     # 'video_filename': 'P1033727.mp4',  # 3840x2160
+    #     'stop_preload_at_frames': None,  # None: use whole video
+    #     'use_full_frame': False,  # use the whole image
+    #     'partial_frame_factor': 4,  # from center, what factor to use - larger factor ~ smaller part of image
+    #     'return_type': np.float32,  # 32 or 64
+    #     'skip_frame_count': 1,  # Normal is 1 (not 0!); += K frames from video on each step; so we can see prediction better for high frame rate videos
+    #     'prop_use_for_holdout': 0.0,
+    #     'switch_to_holdout_frame': None  # TODO re-introduce later for when training is done
+    # }
+
     params_video_playback = {
         'image_dim': IM_DIM,  # sensor class has to figure out subset & scale to achieve this dim
         'video_dir': '/srv/projects/NL-data/',
-        'video_filename': 'videoplayback',  # 3840x2160
+        'video_filename': 'DSC_0446.MOV',  # 32300 frames
         # 'video_filename': 'P1033727.mp4',  # 3840x2160
         'stop_preload_at_frames': None,  # None: use whole video
-        'use_full_frame': False,  # use the whole image
+        'use_full_frame': True,  # use the whole image
         'partial_frame_factor': 4,  # from center, what factor to use - larger factor ~ smaller part of image
         'return_type': np.float32,  # 32 or 64
         'skip_frame_count': 1,  # Normal is 1 (not 0!); += K frames from video on each step; so we can see prediction better for high frame rate videos
-        'prop_use_for_holdout': 0.3,
+        'prop_use_for_holdout': 0.0,
         'switch_to_holdout_frame': None  # TODO re-introduce later for when training is done
     }
 
@@ -67,6 +90,7 @@ def get_sensors_params():
     return params
 
 
+
 def get_sim_folder_manager_params():
     params = {
         'sim_prefix': 'test',
@@ -81,9 +105,9 @@ def get_brain_params():
     params = {
         'image_dim_NxN_pixels': IM_DIM,
         'tile_dim_per_layer': TILE_DIM,
-        'tile_tau_per_layer': TILE_TAU
+        'tile_tau_per_layer': TILE_TAU,
         'max_history_length': MAX_HISTORY_LENGTH,
-        'ims_scale_pixels': 800,
+        'ims_scale_pixels': 1700,
     }
 
     return params
@@ -99,7 +123,8 @@ def get_visualizer_params():
         'waitKey_time_slow': 1,  # 1, 100, 5000  #
         'scale_camera_factor': 1,
         'auto_switch_to_slow_disp_time': None,  # TODO re-introduce later for when training is done
-        'init_fast': True  # start with "fast" display
+        'init_fast': True,  # start with "fast" display
+        'disable_graphics': True
     }
     return params
 
@@ -113,7 +138,7 @@ def init_demo():
         robot_sensors = Physics2DSensor(get_sensors_params())
 
     return {
-        'robot_brain': NBRain(get_brain_params()),
+        'robot_brain': NBrain(get_brain_params()),
         'robot_sensors': robot_sensors,
         'visualizer': SegmentVisualizer(get_visualizer_params()),
         'sim_folder_manager': SimFolderManager(get_sim_folder_manager_params())
