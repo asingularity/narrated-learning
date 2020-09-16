@@ -17,17 +17,18 @@ from math import pi
 MAX_HISTORY_LENGTH = 10600000 + 1
 USERNAME = 'intec'
 
-#IM_DIM = 128  # pixels, width & height
-#TILE_DIM = [8, 16, 32, 64, 128]  # pixels, width & height
-#TILE_TAU = [1, 2,  4,  8,  16]  # spatiotemporal RF history steps
-
-IM_DIM = 64  # pixels, width & height
-TILE_DIM = [8, 16, 32, 64]  # pixels, width & height
-TILE_TAU = [1, 2,  4,  8]  # spatiotemporal RF history steps
+# IM_DIM = 128  # pixels, width & height
+# TILE_DIM = [8, 16, 32, 64, 128]  # pixels, width & height
+# TILE_TAU = [1, 2,  4,  8,  16]  # spatiotemporal RF history steps
 
 # IM_DIM = 64  # pixels, width & height
-# TILE_DIM = [8]  # pixels, width & height
-# TILE_TAU = [1]  # spatiotemporal RF history steps
+# TILE_DIM = [8, 16, 32, 64]  # pixels, width & height
+# TILE_TAU = [1, 2,  4,  8]  # spatiotemporal RF history steps
+#
+
+IM_DIM = 32  # pixels, width & height
+TILE_DIM = [8, 16, 32]  # pixels, width & height
+TILE_TAU = [1,  4,  8]  # spatiotemporal RF history steps
 
 
 COLOR_ENABLED = False
@@ -117,14 +118,14 @@ def get_visualizer_params():
     params = {
         'color_enabled': COLOR_ENABLED,
         'fps_display_interval': 6,
-        'image_display_secs_fast': 2,
+        'image_display_secs_fast': 6,
         'waitKey_time_fast': 1,  # 1, 100, 5000
         'image_display_secs_slow': 0,  # 0: every frame
         'waitKey_time_slow': 1,  # 1, 100, 5000  #
         'scale_camera_factor': 1,
         'auto_switch_to_slow_disp_time': None,  # TODO re-introduce later for when training is done
         'init_fast': True,  # start with "fast" display
-        'disable_graphics': True
+        'disable_graphics': False
     }
     return params
 

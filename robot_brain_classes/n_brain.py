@@ -150,6 +150,11 @@ class NBrain(object):
 
             num_units_prev = num_units
 
+            # history of weights, activities, input image pickle or frame number
+
+
+
+
     def _compute_input_indices(self, layer_n):
         '''
 
@@ -384,7 +389,9 @@ class NBrain(object):
             # commented because might be slow:
             # assert len(np.unique(win_row_indices)) == len(win_row_indices), str(win_row_indices)
 
-            learn_rate_p = 0.0025 * abs(1.0 - match[win_row_indices])
+            # was still reasonable:
+            # learn_rate_p = 5 * 0.0025 * abs(1.0 - match[win_row_indices])
+            learn_rate_p = 1 * 0.0025 * abs(1.0 - match[win_row_indices])
 
             # adjust weights for all tile winners based on their input features
 
@@ -394,7 +401,7 @@ class NBrain(object):
             self.weights_per_layer[layer_n][win_row_indices, :] = term_1 + term_2
 
             # adjust gains: winners reset to 1.0, all others increase slowly
-            self.gains_per_layer[layer_n] = layer_gains * 1.0005
+            self.gains_per_layer[layer_n] = layer_gains * 1.0 + 1 * .0005  # 1.0005
             self.gains_per_layer[layer_n][win_row_indices] = 1.0
 
             # update layer activity history
