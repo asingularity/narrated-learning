@@ -57,7 +57,7 @@ class ExpBrain(object):
         self.in_r = 50  # 65 #50
         self.in_c = 64  # 76 #64
 
-        self.in_bin = 1
+        self.in_bin = 2  # 5
 
         self.rf_dim = 16
 
@@ -92,6 +92,7 @@ class ExpBrain(object):
 
     def process_input(self, input_im):
 
+        self.t += 1
         self.last_im = input_im.copy()
 
         input_pixels_1 = input_im[self.in_r:self.in_r + self.rf_dim, self.in_c:self.in_c + self.rf_dim]
@@ -108,6 +109,8 @@ class ExpBrain(object):
             match = False
 
         if match:
+            print('match: ', self.t)
+            self.last_match_im = input_im.copy()
             # update probs if rf match
             tmp = input_exp_1.flatten().reshape((self.rf_dim, self.rf_dim, self.bins_per_pixel))
             tmp = np.nonzero(tmp)
@@ -222,9 +225,11 @@ class ExpBrain(object):
 
         arr, weights = self._collapse_binned_columns_to_pixels(arr_exp=self.rf.flatten()[np.newaxis, :], num_bins_per_pixel=self.bins_per_pixel)
 
+        # TODO investigate how many bins for a given pixel, in this example, are 1
+
         im0 = arr.reshape((self.rf_dim, self.rf_dim))
         im1 = weights.reshape((self.rf_dim, self.rf_dim))
-        im2 = self.last_im[self.in_r:self.in_r+self.rf_dim, self.in_c:self.in_c+self.rf_dim]
+        im2 = self.last_match_im[self.in_r:self.in_r+self.rf_dim, self.in_c:self.in_c+self.rf_dim]
         #cv2.imshow('asd', np.hstack((im0, im1)))
         #cv2.waitKey(1)
 
@@ -232,7 +237,7 @@ class ExpBrain(object):
         ims_names_list.append('im')
 
         # input image with box
-        in_region_im = self.last_im.copy()
+        in_region_im = self.last_match_im.copy()
         cv2.rectangle(in_region_im, (self.in_c, self.in_r), (self.in_c + self.rf_dim, self.in_r + self.rf_dim), 255, 2)
 
         ims_list.append(in_region_im.copy())
