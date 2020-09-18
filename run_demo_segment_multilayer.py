@@ -108,7 +108,7 @@ def get_brain_params():
         'tile_dim_per_layer': TILE_DIM,
         'tile_tau_per_layer': TILE_TAU,
         'max_history_length': MAX_HISTORY_LENGTH,
-        'ims_scale_pixels': 1700,
+        'ims_scale_pixels': 1200, #1700,
     }
 
     return params
@@ -120,10 +120,10 @@ def get_visualizer_params():
         'fps_display_interval': 6,
         'image_display_secs_fast': 6,
         'waitKey_time_fast': 1,  # 1, 100, 5000
-        'image_display_secs_slow': 0,  # 0: every frame
+        'image_display_secs_slow': 0.01,  # 0: every frame
         'waitKey_time_slow': 1,  # 1, 100, 5000  #
         'scale_camera_factor': 1,
-        'auto_switch_to_slow_disp_time': None,  # TODO re-introduce later for when training is done
+        'auto_switch_to_slow_disp_time': 2000000,  # TODO re-introduce later for when training is done
         'init_fast': True,  # start with "fast" display
         'disable_graphics': False
     }

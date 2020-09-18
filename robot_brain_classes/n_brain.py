@@ -75,6 +75,8 @@ class NBrain(object):
 
         self.input_features_arrs = []
 
+        self.last_activities = []
+
         for layer_n in range(self.n_layers):
             print()
             print('Starting init of layer ', layer_n)
@@ -152,7 +154,9 @@ class NBrain(object):
 
             # history of weights, activities, input image pickle or frame number
 
+            self.last_activities.append(None)
 
+        self.last_input_im = None
 
 
     def _compute_input_indices(self, layer_n):
@@ -314,6 +318,8 @@ class NBrain(object):
         :return:
         '''
 
+        self.last_input_im = input_im.copy()
+
         # compute binning for whole image, and store
         # compute actual (binned pixel, per tile) input_features here for layer 0
         input_pixels = input_im.flatten()[np.newaxis, :]
@@ -386,8 +392,17 @@ class NBrain(object):
 
             assert win_row_indices.shape[0] == self.num_tiles_per_layer[layer_n]
 
+            # print()
+            # print('layer', layer_n)
+            # print('tiles', self.num_tiles_per_layer[layer_n])
+            # print('win_row_indices', win_row_indices)
+            # print('int(win_row_indices / units_per_tile)', np.floor(win_row_indices * (1.0 / self.units_per_tile) )  )
+            #
+
             # commented because might be slow:
-            # assert len(np.unique(win_row_indices)) == len(win_row_indices), str(win_row_indices)
+
+            #assert len(np.unique(win_row_indices)) == len(win_row_indices), str(win_row_indices)
+            #assert np.sum(np.abs(np.arange(self.num_tiles_per_layer[layer_n]) - np.floor(win_row_indices * (1.0 / self.units_per_tile)))) == 0.0
 
             # was still reasonable:
             # learn_rate_p = 5 * 0.0025 * abs(1.0 - match[win_row_indices])
@@ -407,6 +422,8 @@ class NBrain(object):
             # update layer activity history
             layer_activity = np.zeros(num_units, np.float32)
             layer_activity[win_row_indices] = 1.0
+
+            self.last_activities[layer_n] = win_row_indices.copy()
 
             # later, we can store this as sparse, if memory for this becomes a bottleneck:
             # needs to be initialized with max delay according to input time steps parameter of next layer
@@ -604,6 +621,9 @@ class NBrain(object):
         # TODO
         # TODO
 
+        if self.last_input_im is None:
+            return [], []
+
         ims_list = []
         ims_names_list = []
 
@@ -627,6 +647,7 @@ class NBrain(object):
                 c0 = disp_c * tile_r_c + c_offset
                 c1 = (disp_c + 1) * tile_r_c + c_offset
 
+                # "tile_n" is actually row number, not tile number, as used here (historical code)
                 tile_im = rows[tile_n, :].reshape((tile_r_c, tile_r_c))
                 tile_weights = weights[tile_n, :].reshape((tile_r_c, tile_r_c))
 
@@ -655,5 +676,52 @@ class NBrain(object):
 
         ims_list.append(table_im.copy())
         ims_names_list.append('table_im')
+
+        # make reconstruction image, using current frame winning tiles and table above, and geometric locations
+        # draw color borders (lines) around tiles, ideally thin lines in rescaled image to not obscure anything
+        # also make an error image
+        #
+        # then we have to test for small model, and also larger model (after we run it on desktop)
+
+        #reconstruction_im = np.zeros((self.im_dim, self.im_dim, 3))
+        reconstruction_im = np.zeros((self.im_dim, self.im_dim))
+
+        layer_n = 0
+        tile_dim = self.tile_dim_per_layer[layer_n]
+        tile_tau = self.tile_tau_per_layer[layer_n]
+
+        # assume non-overlap for now
+        num_tiles_NxN = int(self.im_dim / tile_dim)
+        for tile_row in range(num_tiles_NxN):
+            for tile_col in range(num_tiles_NxN):
+
+                tile_index = tile_row * num_tiles_NxN + tile_col
+
+                # get tile indices of input (prev) layer, for this tile index
+                # assuming no overlap
+
+                # extend of this tile in terms of pixels
+                r0 = tile_row * tile_dim
+                r1 = (tile_row + 1) * tile_dim
+
+                c0 = tile_col * tile_dim
+                c1 = (tile_col + 1) * tile_dim
+
+                tile_im = rows[self.last_activities[layer_n][tile_index], :].reshape((tile_r_c, tile_r_c))
+
+                reconstruction_im[r0:r1, c0:c1] = tile_im[:, :]
+                #reconstruction_im[r0:r1, c0:c1, 0] = tile_im[:, :]
+                #reconstruction_im[r0:r1, c0:c1, 1] = tile_im[:, :]
+                #reconstruction_im[r0:r1, c0:c1, 2] = tile_im[:, :]
+
+
+        orig_reconstruct = np.hstack((self.last_input_im, reconstruction_im))
+
+        max_dim = max(orig_reconstruct.shape[0], orig_reconstruct.shape[1])
+        imscale = (self.ims_scale_pixels / 8) / max_dim  # 0.2: full table, 2.0
+        orig_reconstruct_scaled = cv2.resize(orig_reconstruct, dsize=(0, 0), fx=imscale, fy=imscale, interpolation=cv2.INTER_NEAREST)
+
+        ims_list.append(orig_reconstruct_scaled.copy())
+        ims_names_list.append('original, reconstruction')
 
         return ims_list, ims_names_list
