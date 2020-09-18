@@ -59,7 +59,7 @@ class ExpBrain(object):
 
         self.in_bin = 4
 
-        self.rf_dim = 32
+        self.rf_dim = 16
 
         self.bins_per_pixel = 6
         self.input_history_steps = 1
@@ -111,7 +111,7 @@ class ExpBrain(object):
             tmp = np.nonzero(tmp)
 
             tau = 0.1
-            thresh = 0.9
+            thresh = 0.8
 
             # TODO only increment prob for neighnors to enforce locality?
             self.prob[tmp] = (1.0 - tau) * self.prob[tmp] + tau * 1.0
