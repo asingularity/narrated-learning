@@ -26,8 +26,207 @@ import matplotlib.pyplot as plt
 from utils.one_time_messages import OneTimeMessages
 
 
-
 class ExpBrain(object):
+    '''
+
+    new greedy algorithm for growing RF over time
+
+    '''
+
+    def __init__(self, params):
+        '''
+
+        :param params:
+        '''
+
+        self.im_dim = params['image_dim_NxN_pixels']
+
+        self.ims_scale_pixels = 300
+
+        self.otm = OneTimeMessages()
+
+        self.t = 0
+
+        self.fig = plt.figure(figsize=(40, 20))
+        self.ax = self.fig.add_subplot(1, 1, 1)
+        self.ax.cla()
+        self.ax.get_xaxis().get_major_formatter().set_scientific(False)
+        self.ax.get_yaxis().get_major_formatter().set_scientific(False)
+
+        # top left of input region
+        self.in_r = 50  # 65 #50
+        self.in_c = 64  # 76 #64
+
+        self.in_bin = 4
+
+        self.rf_dim = 16
+
+        self.bins_per_pixel = 6
+        self.input_history_steps = 1
+
+        assert self.in_r + self.rf_dim < self.im_dim, str((self.in_r + self.rf_dim, self.im_dim))
+        assert self.in_c + self.rf_dim < self.im_dim, str((self.in_c + self.rf_dim, self.im_dim))
+
+        # TODO later introduce input history
+        self.input_feature_len = self.bins_per_pixel * self.rf_dim * self.rf_dim  # * self.input_history_steps
+
+        self.prob = np.zeros((self.rf_dim, self.rf_dim, self.bins_per_pixel))
+        self.rf = np.zeros((self.rf_dim, self.rf_dim, self.bins_per_pixel))
+
+        # set self.rf current pixel to 1: considering it the top left
+        self.rf[8, 8, self.in_bin] = 1
+
+        # TODO what to set prob for current RF (now and when updated)?
+
+
+    # def _r_c_bin_to_index(self, r, c, bin_n):
+    #     '''
+    #
+    #     :return:
+    #     '''
+    #
+    #     return index
+    #
+    # def _index_to_r_c_bin(self, index):
+    #     return r, c, bin_n
+
+    def process_input(self, input_im):
+
+        input_pixels_1 = input_im[self.in_r:self.in_r + self.rf_dim, self.in_c:self.in_c + self.rf_dim]
+        input_arr_1 = input_pixels_1.flatten()[np.newaxis, :]
+        input_exp_1 = self._bin_pixels_expand_columns(arr=input_arr_1, num_bins_per_pixel=self.bins_per_pixel)
+
+        # decide if RF match (all of it must be inside the current rf_im
+        nnz_rf = np.nonzero(self.rf.flatten())  # verified: flatten expands the same as _bin_pixels_expand_columns
+        tmp = input_exp_1[0, nnz_rf[0]]
+
+        if np.count_nonzero(tmp) == np.size(tmp):
+            match = True
+        else:
+            match = False
+
+        if match:
+            # update probs if rf match
+            tmp = input_exp_1.flatten().reshape((self.rf_dim, self.rf_dim, self.bins_per_pixel))
+            tmp = np.nonzero(tmp)
+
+            tau = 0.1
+            thresh = 0.8
+
+            self.prob[tmp] = (1.0 - tau) * self.prob[tmp] + tau * 1.0
+            self.prob[np.nonzero(self.rf)] = 0  # keep 0 for rf!
+
+            # update RF based on probs if needed
+            nnz_prob_high = np.nonzero(self.prob > thresh)
+
+            if len(nnz_prob_high[0]) > 0:
+                self.rf[nnz_prob_high] = 1.0
+                self.prob[:, :, :] = 0.0
+
+            # if RF updated, reset probs to zero (for now)
+
+            # print(np.amax(self.prob), np.amin(self.prob))
+
+    def _bin_pixels_expand_columns(self, arr, num_bins_per_pixel):
+        '''
+
+        keep number of rows, expand in number of columns
+        construct binary image: (0.0 or 1.0) per bin
+
+        https://stackoverflow.com/questions/6163334/binning-data-in-python-with-scipy-numpy
+            use: digitize, or histogram
+
+        https://het.as.utexas.edu/HET/Software/Numpy/reference/generated/numpy.digitize.html
+            digitize: returns index of bin to which each pixel belongs
+            expanded array will have a set of bins per pixel, in the expanded columns
+
+        :param arr:
+        :return:
+        '''
+        # print('***')
+        # print('arr', arr.shape)
+
+        bins = np.linspace(0, 1 + 1e-9, num_bins_per_pixel + 1)  # TODO to fix binning add 1e-9 to 1 in second argument!
+        # print('bins', bins.shape, bins)
+        bin_indices = np.digitize(arr, bins) - 1  # same shape as arr; which bin, per pixel
+        # print('bin_indices', bin_indices.shape, bin_indices)
+        arr_exp = np.zeros((arr.shape[0], arr.shape[1] * num_bins_per_pixel), np.float32)
+        # print('arr_exp', arr_exp.shape)
+
+        # term1 = np.tile(self.num_bins_per_pixel * np.arange(arr.shape[1]), 2)  # can't remember why this is np.tile(..., 2)
+        term1 = num_bins_per_pixel * np.arange(arr.shape[1])  # only works if arr rows is 1?
+        term2 = bin_indices.flatten()
+        # print('term1', term1.shape, term1)
+        # print('term2', term2.shape, term2)
+        c = term1 + term2
+        r = np.repeat(np.arange(arr.shape[0]), arr.shape[1])
+
+        arr_exp[r, c] = 1.0
+
+        return arr_exp
+
+    def _collapse_binned_columns_to_pixels(self, arr_exp, num_bins_per_pixel):
+        '''
+
+        non-trivial: arr_exp may no longer be binary; need to figure out how to collapse multiple values of different weight to one pixel:
+            weighted average? take max value?
+
+        :param arr_exp:
+        :return:
+        '''
+
+        num_pixels = int((arr_exp.shape[1] / num_bins_per_pixel))
+        num_rows = arr_exp.shape[0]
+
+        # reshape so we can take max along one dim
+        #   ie each row in this matrix is a pixel, temporarily
+        # then reshape back
+
+        tmp = arr_exp.reshape((num_rows * num_pixels, num_bins_per_pixel))
+
+        bins = np.linspace(0, 1 + 1e-9, num_bins_per_pixel + 1)
+
+        # max val for display:
+        max_index = np.argmax(tmp, axis=1)
+        max_vals = bins[max_index]
+
+        weights = tmp[np.arange(tmp.shape[0]), max_index]
+
+        # print(max_vals.shape, weights.shape)
+
+        # weighted mean val for display:
+        # tmp1 = np.multiply(tmp, bins[np.newaxis, 0:num_bins_per_pixel])
+        # tmp2 = np.sum(tmp1, axis=1)  # 65536
+        # tmp3 = np.divide(tmp2, np.sum(tmp, axis=1))
+        # max_vals = tmp3
+
+        weights = weights.reshape(num_rows, num_pixels)
+        arr = max_vals.reshape(num_rows, num_pixels)
+
+        return arr, weights
+
+    def get_table_ims(self):
+        # print(self.t)
+        # print((np.amin(self.prob), np.amax(self.prob)))
+        # print(np.nonzero(self.prob==0))
+
+        ims_list = []
+        ims_names_list = []
+
+        arr, weights = self._collapse_binned_columns_to_pixels(arr_exp=self.rf.flatten()[np.newaxis, :], num_bins_per_pixel=self.bins_per_pixel)
+
+        im0 = arr.reshape((self.rf_dim, self.rf_dim))
+        im1 = weights.reshape((self.rf_dim, self.rf_dim))
+        #cv2.imshow('asd', np.hstack((im0, im1)))
+        #cv2.waitKey(1)
+
+        ims_list.append(np.hstack((im0, im1)))
+        ims_names_list.append('im')
+
+        return ims_list, ims_names_list
+
+
+class ExpBrainWTA(object):
     '''
 
     first step:
@@ -1185,9 +1384,6 @@ class ExpBrainSinglePixelBin(object):
         print(self.win_count)
 
         return ims_list, ims_names_list
-
-
-
 
 
 class ExpBrainPerceptron(object):
