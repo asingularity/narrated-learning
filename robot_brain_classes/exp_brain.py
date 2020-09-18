@@ -26,10 +26,13 @@ import matplotlib.pyplot as plt
 from utils.one_time_messages import OneTimeMessages
 
 
-class ExpBrain(object):
+
+class ExpBrainSingleRF(object):
     '''
 
     new greedy algorithm for growing RF over time
+
+    single RF test
 
     '''
 
@@ -54,10 +57,14 @@ class ExpBrain(object):
         self.ax.get_yaxis().get_major_formatter().set_scientific(False)
 
         # top left of input region
-        self.in_r = 50  # 65 #50
+
+        # 50, 64
+        # 65, 76
+
+        self.in_r = 60  # 65 #50
         self.in_c = 64  # 76 #64
 
-        self.in_bin = 2  # 5
+        self.in_bin = 4  # 2
 
         self.rf_dim = 16
 
@@ -76,8 +83,8 @@ class ExpBrain(object):
         # set self.rf current pixel to 1: considering it the top left
         self.rf[8, 8, self.in_bin] = 1
 
-        # TODO what to set prob for current RF (now and when updated)?
-
+        # what to set prob for current RF (now and when updated)?
+        # set to zero
 
     # def _r_c_bin_to_index(self, r, c, bin_n):
     #     '''
@@ -116,7 +123,7 @@ class ExpBrain(object):
             tmp = np.nonzero(tmp)
 
             tau = 0.1
-            thresh = 0.8
+            thresh = 0.99
 
             # TODO only increment prob for neighnors to enforce locality?
             self.prob[tmp] = (1.0 - tau) * self.prob[tmp] + tau * 1.0
@@ -128,9 +135,6 @@ class ExpBrain(object):
             if len(nnz_prob_high[0]) > 0:
                 self.rf[nnz_prob_high] = 1.0
 
-                # TODO RE_NEABLE!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-                # TODO RE_NEABLE!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-                # TODO RE_NEABLE!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
                 self.prob[:, :, :] = 0.0
 
             # if RF updated, reset probs to zero (for now)
