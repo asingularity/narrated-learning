@@ -57,7 +57,7 @@ class ExpBrain(object):
         self.in_r = 50  # 65 #50
         self.in_c = 64  # 76 #64
 
-        self.in_bin = 4
+        self.in_bin = 1
 
         self.rf_dim = 16
 
@@ -92,6 +92,8 @@ class ExpBrain(object):
 
     def process_input(self, input_im):
 
+        self.last_im = input_im.copy()
+
         input_pixels_1 = input_im[self.in_r:self.in_r + self.rf_dim, self.in_c:self.in_c + self.rf_dim]
         input_arr_1 = input_pixels_1.flatten()[np.newaxis, :]
         input_exp_1 = self._bin_pixels_expand_columns(arr=input_arr_1, num_bins_per_pixel=self.bins_per_pixel)
@@ -122,6 +124,10 @@ class ExpBrain(object):
 
             if len(nnz_prob_high[0]) > 0:
                 self.rf[nnz_prob_high] = 1.0
+
+                # TODO RE_NEABLE!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+                # TODO RE_NEABLE!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+                # TODO RE_NEABLE!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
                 self.prob[:, :, :] = 0.0
 
             # if RF updated, reset probs to zero (for now)
@@ -218,11 +224,19 @@ class ExpBrain(object):
 
         im0 = arr.reshape((self.rf_dim, self.rf_dim))
         im1 = weights.reshape((self.rf_dim, self.rf_dim))
+        im2 = self.last_im[self.in_r:self.in_r+self.rf_dim, self.in_c:self.in_c+self.rf_dim]
         #cv2.imshow('asd', np.hstack((im0, im1)))
         #cv2.waitKey(1)
 
-        ims_list.append(np.hstack((im0, im1)))
+        ims_list.append(np.hstack((im0, im1, im2)))
         ims_names_list.append('im')
+
+        # input image with box
+        in_region_im = self.last_im.copy()
+        cv2.rectangle(in_region_im, (self.in_c, self.in_r), (self.in_c + self.rf_dim, self.in_r + self.rf_dim), 255, 2)
+
+        ims_list.append(in_region_im.copy())
+        ims_names_list.append('input_region')
 
         return ims_list, ims_names_list
 
