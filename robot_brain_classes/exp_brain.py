@@ -82,9 +82,11 @@ class ExpBrain(object):
         # measure of average pixel bins explained per frame, for RF as it currently stands
         self.rf_px_bins_exp_per_frame = 0.0
 
-        # for pixel-bins inside RF: if pixel-bin were removed, how much would be explained per frame by new smaller RF
         # for pixel-bins outside RF: if pixel-bin were added, how much would be explained per frame by new larger RF
         self.hyp_px_bin_exp_per_frame = np.zeros((self.rf_dim, self.rf_dim, self.bins_per_pixel))
+
+        # for pixel-bins inside RF: if pixel-bin were removed, how much would be explained per frame by new smaller RF
+        self.remove_hyp_px_bin_exp_per_frame = np.zeros((self.rf_dim, self.rf_dim, self.bins_per_pixel))
 
         # set self.rf current pixel to 1: considering it the top left
         self.rf[int(self.rf_dim/2), int(self.rf_dim/2), self.in_bin] = 1
@@ -103,6 +105,8 @@ class ExpBrain(object):
         self.tau = 0.0001  # 0.0001
         self.wait_learn_until = 4 * (log(2) / self.tau)
 
+        self.num_additions = 0
+        self.num_removals = 0
 
     # def _r_c_bin_to_index(self, r, c, bin_n):
     #     '''
@@ -143,10 +147,10 @@ class ExpBrain(object):
             match = False
 
         tau = self.tau
+        nnz_rf = np.nonzero(self.rf)
+        nz_rf = np.nonzero(self.rf==0)
 
         if match:
-
-            # TODO assert that only one value is 1 per pixel-bin, in input and in the RF (sanity check)
 
             self.count_matches += 1
             # print('match: ', self.t)
@@ -163,50 +167,116 @@ class ExpBrain(object):
 
             z_tmp = np.nonzero(tmp == 0)
             self.hyp_px_bin_exp_per_frame[z_tmp] = (1.0 - tau) * self.hyp_px_bin_exp_per_frame[z_tmp] + tau * 0
+
+            # assert that only one value is 1 per pixel-bin, in input and in the RF (sanity check)
+            do_debug = 0
+            if do_debug:
+                tmp_sum = np.sum(tmp, axis=2)
+                assert tmp_sum.size == np.sum(tmp_sum==1)
+                tmp_sum2 = np.sum(self.rf, axis=2)
+
+                assert np.amax(tmp_sum2) <= 1
+
+            # there is a current RF match: update self.remove_hyp_px_bin_exp_per_frame:
+            #   for all pixels within RF:
+            #       update towards hypothetical smaller RF value, since all sub-patterns are present
+            self.remove_hyp_px_bin_exp_per_frame[nnz_rf] = (1.0 - tau) * self.remove_hyp_px_bin_exp_per_frame[nnz_rf] + tau * (rf_size - 1)
+
         else:
             self.rf_px_bins_exp_per_frame = (1.0 - tau) * self.rf_px_bins_exp_per_frame + tau * 0.0
 
             self.hyp_px_bin_exp_per_frame = (1.0 - tau) * self.hyp_px_bin_exp_per_frame + tau * 0.0
 
-        nnz_rf = np.nonzero(self.rf)
+            # TODO
+            # no match: update self.remove_hyp_px_bin_exp_per_frame:
+            #   for all pixel-bin within RF:
+            #       if would have been exact pattern match without this pixel
+            #           update pixels-explained-per-frame towards hypothetical smaller RF value
+            #       else
+            #           update pixels-explained-per-frame towards zero
+
+            # way to do this: was there a partial match that missed by one pixel-bin?
+            #   then increment pixel-bin that was missed towards RF_size - 1, all others towards zero
+            if input_match_num == rf_size - 1 and input_match_num > 0:
+                # print('A', self.t, input_match_num)
+                # what if input_match_num is zero? still valid technically, but excluded anyways
+
+                # find which pixel-bin was the not-match:
+                # tmp = input_exp_1[0, nnz_rf_flat[0]]
+                # one element of tmp is zero here
+                flat_element_nz = np.nonzero(tmp==0)[0][0]  # before index, it is a tuple of one array of one element, which is the index
+
+                # flat_element_nz: index of np.nonzero(rf.flatten()) that was a not match
+                # now find (r, c, bin) for this index
+
+                flat_rf_index = nnz_rf_flat[0][flat_element_nz]
+                rf_indices = np.unravel_index(flat_rf_index, self.rf.shape)
+                # print(rf_indices)
+
+                old_val = self.remove_hyp_px_bin_exp_per_frame[rf_indices]
+                self.remove_hyp_px_bin_exp_per_frame[nnz_rf] = (1.0 - tau) * self.remove_hyp_px_bin_exp_per_frame[nnz_rf] + tau * 0
+                self.remove_hyp_px_bin_exp_per_frame[rf_indices] = (1.0 - tau) * old_val + tau * (rf_size - 1)
+
+            else:
+                self.remove_hyp_px_bin_exp_per_frame[nnz_rf] = (1.0 - tau) * self.remove_hyp_px_bin_exp_per_frame[nnz_rf] + tau * 0
+
         self.hyp_px_bin_exp_per_frame[nnz_rf] = 0.0
+        self.remove_hyp_px_bin_exp_per_frame[nz_rf] = 0.0
 
         max_hyp_ind = np.unravel_index(np.argmax(self.hyp_px_bin_exp_per_frame, axis=None), self.hyp_px_bin_exp_per_frame.shape)
         max_hyp = self.hyp_px_bin_exp_per_frame[max_hyp_ind]
 
+        did_add = False
         if max_hyp > self.rf_px_bins_exp_per_frame and self.t > self.wait_learn_until:
+            print()
+            print()
             print('ADDING ONE')
             print('max_hyp', max_hyp)
             print('self.rf_px_bins_exp_per_frame', self.rf_px_bins_exp_per_frame)
             print('max_hyp_ind', max_hyp_ind)
             print('t', self.t, self.wait_learn_until, 'of num candidates: ', np.count_nonzero(self.hyp_px_bin_exp_per_frame > self.rf_px_bins_exp_per_frame))
             print()
-            #print(self.hyp_px_bin_exp_per_frame)
             print()
-
 
             self.rf[max_hyp_ind] = 1.0
             self.hyp_px_bin_exp_per_frame[:, :, :] = 0.0
+            self.remove_hyp_px_bin_exp_per_frame[:, :, :] = 0.0
 
+            did_add = True
+            self.num_additions += 1
 
-        # update self.hyp_px_bin_exp_per_frame
+        if not did_add:
+            # see if remove should be done
+            max_hyp_ind = np.unravel_index(np.argmax(self.remove_hyp_px_bin_exp_per_frame, axis=None), self.remove_hyp_px_bin_exp_per_frame.shape)
+            max_hyp = self.remove_hyp_px_bin_exp_per_frame[max_hyp_ind]
 
+            if max_hyp > self.rf_px_bins_exp_per_frame and self.t > self.wait_learn_until:
+                print()
+                print()
+                print('REMOVING ONE PERHAPS')
 
+                print('max_hyp', max_hyp)
+                print('self.rf_px_bins_exp_per_frame', self.rf_px_bins_exp_per_frame)
+                print('max_hyp_ind', max_hyp_ind)
+                print('t', self.t, self.wait_learn_until, 'of num candidates: ', np.count_nonzero(self.remove_hyp_px_bin_exp_per_frame > self.rf_px_bins_exp_per_frame))
+                print()
+                print()
 
-        # update RF if needed
-        # nnz_prob_high = np.nonzero(self.prob > thresh)
-        #
-        # if len(nnz_prob_high[0]) > 0:
-        #     self.rf[nnz_prob_high] = 1.0
-        #
-        #     # if RF updated, reset probs to zero (for now)
-        #     self.prob[:, :, :] = 0.0
+                self.rf[max_hyp_ind] = 0.0
+                self.hyp_px_bin_exp_per_frame[:, :, :] = 0.0
+                self.remove_hyp_px_bin_exp_per_frame[:, :, :] = 0.0
 
+                self.num_removals += 1
 
         if self.count_steps > 10000:
+            print()
+            print('******************************************************************')
             print('Match Prop: ', self.count_matches / self.count_steps)
             print('pixel-bins explained per frame: ', self.rf_px_bins_exp_per_frame)
-
+            print('num_additions', self.num_additions)
+            print('num_removals', self.num_removals)
+            print('******************************************************************')
+            print()
             self.count_steps = 0
             self.count_matches = 0
 
