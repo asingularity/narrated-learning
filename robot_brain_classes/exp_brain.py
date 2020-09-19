@@ -18,7 +18,7 @@ from brain_components_classes.perceptron import Perceptron
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-
+from math import log
 
 
 
@@ -27,7 +27,7 @@ from utils.one_time_messages import OneTimeMessages
 
 
 
-class ExpBrainSingleRF(object):
+class ExpBrain(object):
     '''
 
     new greedy algorithm for growing RF over time
@@ -61,10 +61,10 @@ class ExpBrainSingleRF(object):
         # 50, 64
         # 65, 76
 
-        self.in_r = 60  # 65 #50
-        self.in_c = 64  # 76 #64
+        self.in_r = 50  # 40 # 65 #50 # 60
+        self.in_c = 64  # 84 # 76 #64 # 64
 
-        self.in_bin = 4  # 2
+        self.in_bin = 2  # 2
 
         self.rf_dim = 16
 
@@ -77,14 +77,32 @@ class ExpBrainSingleRF(object):
         # TODO later introduce input history
         self.input_feature_len = self.bins_per_pixel * self.rf_dim * self.rf_dim  # * self.input_history_steps
 
-        self.prob = np.zeros((self.rf_dim, self.rf_dim, self.bins_per_pixel))
         self.rf = np.zeros((self.rf_dim, self.rf_dim, self.bins_per_pixel))
 
+        # measure of average pixel bins explained per frame, for RF as it currently stands
+        self.rf_px_bins_exp_per_frame = 0.0
+
+        # for pixel-bins inside RF: if pixel-bin were removed, how much would be explained per frame by new smaller RF
+        # for pixel-bins outside RF: if pixel-bin were added, how much would be explained per frame by new larger RF
+        self.hyp_px_bin_exp_per_frame = np.zeros((self.rf_dim, self.rf_dim, self.bins_per_pixel))
+
         # set self.rf current pixel to 1: considering it the top left
-        self.rf[8, 8, self.in_bin] = 1
+        self.rf[int(self.rf_dim/2), int(self.rf_dim/2), self.in_bin] = 1
 
         # what to set prob for current RF (now and when updated)?
         # set to zero
+        # TODO but we may not need this anymore:
+        self.prob = np.zeros((self.rf_dim, self.rf_dim, self.bins_per_pixel))
+
+        self.count_steps = 0
+        self.count_matches = 0
+
+        self.last_im = None
+        self.last_match_im = None
+
+        self.tau = 0.0001  # 0.0001
+        self.wait_learn_until = 4 * (log(2) / self.tau)
+
 
     # def _r_c_bin_to_index(self, r, c, bin_n):
     #     '''
@@ -100,6 +118,7 @@ class ExpBrainSingleRF(object):
     def process_input(self, input_im):
 
         self.t += 1
+        self.count_steps += 1
         self.last_im = input_im.copy()
 
         input_pixels_1 = input_im[self.in_r:self.in_r + self.rf_dim, self.in_c:self.in_c + self.rf_dim]
@@ -107,39 +126,93 @@ class ExpBrainSingleRF(object):
         input_exp_1 = self._bin_pixels_expand_columns(arr=input_arr_1, num_bins_per_pixel=self.bins_per_pixel)
 
         # decide if RF match (all of it must be inside the current rf_im
-        nnz_rf = np.nonzero(self.rf.flatten())  # verified: flatten expands the same as _bin_pixels_expand_columns
-        tmp = input_exp_1[0, nnz_rf[0]]
 
-        if np.count_nonzero(tmp) == np.size(tmp):
+        # nonzero elements of RF:
+        nnz_rf_flat = np.nonzero(self.rf.flatten())  # verified: flatten expands the same as _bin_pixels_expand_columns
+
+        # input values for nonzero elements of RF:
+        tmp = input_exp_1[0, nnz_rf_flat[0]]
+
+        rf_size = np.size(tmp)
+        input_match_num = np.count_nonzero(tmp)
+        assert input_match_num <= rf_size
+
+        if input_match_num == rf_size:
             match = True
         else:
             match = False
 
+        tau = self.tau
+
         if match:
-            print('match: ', self.t)
+
+            # TODO assert that only one value is 1 per pixel-bin, in input and in the RF (sanity check)
+
+            self.count_matches += 1
+            # print('match: ', self.t)
             self.last_match_im = input_im.copy()
-            # update probs if rf match
+
+            self.rf_px_bins_exp_per_frame = (1.0 - tau) * self.rf_px_bins_exp_per_frame + tau * rf_size
+
+            # hypothetical additions to expand to:
+
+            # all pixel-bins activity values (1 or 0) on this frame:
             tmp = input_exp_1.flatten().reshape((self.rf_dim, self.rf_dim, self.bins_per_pixel))
-            tmp = np.nonzero(tmp)
+            nnz_tmp = np.nonzero(tmp)
+            self.hyp_px_bin_exp_per_frame[nnz_tmp] = (1.0 - tau) * self.hyp_px_bin_exp_per_frame[nnz_tmp] + tau * (rf_size + 1)
 
-            tau = 0.1
-            thresh = 0.99
+            z_tmp = np.nonzero(tmp == 0)
+            self.hyp_px_bin_exp_per_frame[z_tmp] = (1.0 - tau) * self.hyp_px_bin_exp_per_frame[z_tmp] + tau * 0
+        else:
+            self.rf_px_bins_exp_per_frame = (1.0 - tau) * self.rf_px_bins_exp_per_frame + tau * 0.0
 
-            # TODO only increment prob for neighnors to enforce locality?
-            self.prob[tmp] = (1.0 - tau) * self.prob[tmp] + tau * 1.0
-            self.prob[np.nonzero(self.rf)] = 0  # keep 0 for rf!
+            self.hyp_px_bin_exp_per_frame = (1.0 - tau) * self.hyp_px_bin_exp_per_frame + tau * 0.0
 
-            # update RF based on probs if needed
-            nnz_prob_high = np.nonzero(self.prob > thresh)
+        nnz_rf = np.nonzero(self.rf)
+        self.hyp_px_bin_exp_per_frame[nnz_rf] = 0.0
 
-            if len(nnz_prob_high[0]) > 0:
-                self.rf[nnz_prob_high] = 1.0
+        max_hyp_ind = np.unravel_index(np.argmax(self.hyp_px_bin_exp_per_frame, axis=None), self.hyp_px_bin_exp_per_frame.shape)
+        max_hyp = self.hyp_px_bin_exp_per_frame[max_hyp_ind]
 
-                self.prob[:, :, :] = 0.0
+        if max_hyp > self.rf_px_bins_exp_per_frame and self.t > self.wait_learn_until:
+            print('ADDING ONE')
+            print('max_hyp', max_hyp)
+            print('self.rf_px_bins_exp_per_frame', self.rf_px_bins_exp_per_frame)
+            print('max_hyp_ind', max_hyp_ind)
+            print('t', self.t, self.wait_learn_until, 'of num candidates: ', np.count_nonzero(self.hyp_px_bin_exp_per_frame > self.rf_px_bins_exp_per_frame))
+            print()
+            #print(self.hyp_px_bin_exp_per_frame)
+            print()
 
-            # if RF updated, reset probs to zero (for now)
 
-            # print(np.amax(self.prob), np.amin(self.prob))
+            self.rf[max_hyp_ind] = 1.0
+            self.hyp_px_bin_exp_per_frame[:, :, :] = 0.0
+
+
+        # update self.hyp_px_bin_exp_per_frame
+
+
+
+        # update RF if needed
+        # nnz_prob_high = np.nonzero(self.prob > thresh)
+        #
+        # if len(nnz_prob_high[0]) > 0:
+        #     self.rf[nnz_prob_high] = 1.0
+        #
+        #     # if RF updated, reset probs to zero (for now)
+        #     self.prob[:, :, :] = 0.0
+
+
+        if self.count_steps > 10000:
+            print('Match Prop: ', self.count_matches / self.count_steps)
+            print('pixel-bins explained per frame: ', self.rf_px_bins_exp_per_frame)
+
+            self.count_steps = 0
+            self.count_matches = 0
+
+            #print()
+            #print(self.hyp_px_bin_exp_per_frame)
+            #print()
 
     def _bin_pixels_expand_columns(self, arr, num_bins_per_pixel):
         '''
@@ -229,23 +302,22 @@ class ExpBrainSingleRF(object):
 
         arr, weights = self._collapse_binned_columns_to_pixels(arr_exp=self.rf.flatten()[np.newaxis, :], num_bins_per_pixel=self.bins_per_pixel)
 
-        # TODO investigate how many bins for a given pixel, in this example, are 1
+        if self.last_match_im is not None:
+            im0 = arr.reshape((self.rf_dim, self.rf_dim))
+            im1 = weights.reshape((self.rf_dim, self.rf_dim))
+            im2 = self.last_match_im[self.in_r:self.in_r+self.rf_dim, self.in_c:self.in_c+self.rf_dim]
+            #cv2.imshow('asd', np.hstack((im0, im1)))
+            #cv2.waitKey(1)
 
-        im0 = arr.reshape((self.rf_dim, self.rf_dim))
-        im1 = weights.reshape((self.rf_dim, self.rf_dim))
-        im2 = self.last_match_im[self.in_r:self.in_r+self.rf_dim, self.in_c:self.in_c+self.rf_dim]
-        #cv2.imshow('asd', np.hstack((im0, im1)))
-        #cv2.waitKey(1)
+            ims_list.append(np.hstack((im0, im1, im2)))
+            ims_names_list.append('im')
 
-        ims_list.append(np.hstack((im0, im1, im2)))
-        ims_names_list.append('im')
+            # input image with box
+            in_region_im = self.last_match_im.copy()
+            cv2.rectangle(in_region_im, (self.in_c, self.in_r), (self.in_c + self.rf_dim, self.in_r + self.rf_dim), 255, 2)
 
-        # input image with box
-        in_region_im = self.last_match_im.copy()
-        cv2.rectangle(in_region_im, (self.in_c, self.in_r), (self.in_c + self.rf_dim, self.in_r + self.rf_dim), 255, 2)
-
-        ims_list.append(in_region_im.copy())
-        ims_names_list.append('input_region')
+            ims_list.append(in_region_im.copy())
+            ims_names_list.append('input_region')
 
         return ims_list, ims_names_list
 
