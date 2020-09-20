@@ -26,11 +26,372 @@ from math import log
 from utils.one_time_messages import OneTimeMessages
 
 
-
 class ExpBrain(object):
     '''
+    new greedy algorithm for growing/contracting RF over time
 
-    new greedy algorithm for growing RF over time
+    multi-unit rule
+    '''
+
+    def __init__(self, params):
+        '''
+
+        :param params:
+        '''
+
+        random.seed(1124)
+        np.random.seed(1312)
+
+        self.im_dim = params['image_dim_NxN_pixels']
+
+        self.ims_scale_pixels = 300
+
+        self.otm = OneTimeMessages()
+
+        self.t = 0
+
+        self.fig = plt.figure(figsize=(40, 20))
+        self.ax = self.fig.add_subplot(1, 1, 1)
+        self.ax.cla()
+        self.ax.get_xaxis().get_major_formatter().set_scientific(False)
+        self.ax.get_yaxis().get_major_formatter().set_scientific(False)
+
+        # top left of input region
+
+        self.in_r = 50  # 40 # 65 #50 # 60
+        self.in_c = 64  # 84 # 76 #64 # 64
+
+        # parameters
+
+        self.num_rf = 8
+        self.rf_dim = 16
+        self.bins_per_pixel = 6
+        self.input_history_steps = 1
+        self.tau = 0.0001  # 0.0001
+        self.wait_learn_until = 4 * (log(2) / self.tau)
+
+        assert self.in_r + self.rf_dim < self.im_dim, str((self.in_r + self.rf_dim, self.im_dim))
+        assert self.in_c + self.rf_dim < self.im_dim, str((self.in_c + self.rf_dim, self.im_dim))
+
+        # arrays, per rf
+
+        self.rf_list = []
+        self.add_candidates_list = []
+        self.remove_candidates_list = []
+
+        # numbers, per rf
+
+        self.rf_px_bins_exp = []
+
+        # init per rf
+
+        # TODO should be smarter than this
+        self.init_done = []
+
+        for k in range(self.num_rf):
+            rf_px_bins_exp = 0.0
+            rf = np.zeros((self.rf_dim, self.rf_dim, self.bins_per_pixel))
+            add_candidates = np.zeros((self.rf_dim, self.rf_dim, self.bins_per_pixel))
+            remove_candidates = np.zeros((self.rf_dim, self.rf_dim, self.bins_per_pixel))
+
+            self.rf_px_bins_exp.append(rf_px_bins_exp)
+            self.rf_list.append(rf)
+            self.add_candidates_list.append(add_candidates)
+            self.remove_candidates_list.append(remove_candidates)
+
+            self.init_done.append(False)
+
+        # other
+
+        self.last_im = None
+        self.last_match_im = None
+
+        # TODO questions:
+        # TODO how RF initialized, if we dont choose an initial pixel-bin? should just work with zero-rf as a start
+        #       for now we did hack: random choice of an input pixel-bin
+        # TODO where is shared array of what others have already explained
+        # TODO need to verify that will also converge to less-rare features
+
+    def process_input(self, input_im):
+        '''
+
+        :param input_im:
+        :return:
+        '''
+
+        self.last_im = input_im.copy()
+
+        input_pixels_1 = input_im[self.in_r:self.in_r + self.rf_dim, self.in_c:self.in_c + self.rf_dim]
+        input_arr_1 = input_pixels_1.flatten()[np.newaxis, :]
+        input_exp_1 = self._bin_pixels_expand_columns(arr=input_arr_1, num_bins_per_pixel=self.bins_per_pixel)
+
+        for rf_ind in range(self.num_rf):
+            if self.init_done[rf_ind]:
+                self._process_rf(rf_index=rf_ind, input_exp_1=input_exp_1)
+            else:
+                if random.random() < 0.05:
+                    nnz_input = np.nonzero(input_exp_1)[1]
+                    rand_nnz = np.random.choice(nnz_input)
+                    rand_inds = np.unravel_index(rand_nnz, self.rf_list[rf_ind].shape)
+                    self.rf_list[rf_ind][rand_inds] = 1.0
+                    self.init_done[rf_ind] = True
+
+        self.t += 1
+
+    def _process_rf(self, rf_index, input_exp_1):
+
+        rf = self.rf_list[rf_index]
+        rf_px_bins_exp = self.rf_px_bins_exp[rf_index]
+        add_candidates = self.add_candidates_list[rf_index]
+        remove_candidates = self.remove_candidates_list[rf_index]
+
+        # nonzero elements of RF:
+        nnz_rf_flat = np.nonzero(rf.flatten())  # verified: flatten expands the same as _bin_pixels_expand_columns
+
+        # input values for nonzero elements of RF:
+        tmp = input_exp_1[0, nnz_rf_flat[0]]
+
+        rf_size = np.size(tmp)
+        input_match_num = np.count_nonzero(tmp)
+        assert input_match_num <= rf_size
+
+        if input_match_num == rf_size:
+            match = True
+        else:
+            match = False
+
+        tau = self.tau
+        nnz_rf = np.nonzero(rf)
+        nz_rf = np.nonzero(rf==0)
+
+        if match:
+
+            # self.count_matches += 1
+            # print('match: ', self.t)
+            # self.last_match_im = input_im.copy()
+
+            rf_px_bins_exp = (1.0 - tau) * rf_px_bins_exp + tau * rf_size
+
+            # hypothetical additions to expand to:
+
+            # all pixel-bins activity values (1 or 0) on this frame:
+            tmp = input_exp_1.flatten().reshape((self.rf_dim, self.rf_dim, self.bins_per_pixel))
+            nnz_tmp = np.nonzero(tmp)
+            add_candidates[nnz_tmp] = (1.0 - tau) * add_candidates[nnz_tmp] + tau * (rf_size + 1)
+
+            z_tmp = np.nonzero(tmp == 0)
+            add_candidates[z_tmp] = (1.0 - tau) * add_candidates[z_tmp] + tau * 0
+
+            # assert that only one value is 1 per pixel-bin, in input and in the RF (sanity check)
+            do_debug = 0
+            if do_debug:
+                tmp_sum = np.sum(tmp, axis=2)
+                assert tmp_sum.size == np.sum(tmp_sum==1)
+                tmp_sum2 = np.sum(rf, axis=2)
+
+                assert np.amax(tmp_sum2) <= 1
+
+            # there is a current RF match: update self.remove_hyp_px_bin_exp_per_frame:
+            #   for all pixels within RF:
+            #       update towards hypothetical smaller RF value, since all sub-patterns are present
+            remove_candidates[nnz_rf] = (1.0 - tau) * remove_candidates[nnz_rf] + tau * (rf_size - 1)
+
+        else:
+            rf_px_bins_exp = (1.0 - tau) * rf_px_bins_exp + tau * 0.0
+
+            add_candidates = (1.0 - tau) * add_candidates + tau * 0.0
+
+            # TODO
+            # no match: update self.remove_hyp_px_bin_exp_per_frame:
+            #   for all pixel-bin within RF:
+            #       if would have been exact pattern match without this pixel
+            #           update pixels-explained-per-frame towards hypothetical smaller RF value
+            #       else
+            #           update pixels-explained-per-frame towards zero
+
+            # way to do this: was there a partial match that missed by one pixel-bin?
+            #   then increment pixel-bin that was missed towards RF_size - 1, all others towards zero
+            if input_match_num == rf_size - 1 and input_match_num > 0:
+                # print('A', self.t, input_match_num)
+                # what if input_match_num is zero? still valid technically, but excluded anyways
+
+                # find which pixel-bin was the not-match:
+                # tmp = input_exp_1[0, nnz_rf_flat[0]]
+                # one element of tmp is zero here
+                flat_element_nz = np.nonzero(tmp==0)[0][0]  # before index, it is a tuple of one array of one element, which is the index
+
+                # flat_element_nz: index of np.nonzero(rf.flatten()) that was a not match
+                # now find (r, c, bin) for this index
+
+                flat_rf_index = nnz_rf_flat[0][flat_element_nz]
+                rf_indices = np.unravel_index(flat_rf_index, rf.shape)
+                # print(rf_indices)
+
+                old_val = remove_candidates[rf_indices]
+                remove_candidates[nnz_rf] = (1.0 - tau) * remove_candidates[nnz_rf] + tau * 0
+                remove_candidates[rf_indices] = (1.0 - tau) * old_val + tau * (rf_size - 1)
+
+            else:
+                remove_candidates[nnz_rf] = (1.0 - tau) * remove_candidates[nnz_rf] + tau * 0
+
+        add_candidates[nnz_rf] = 0.0
+        remove_candidates[nz_rf] = 0.0
+
+        max_hyp_ind = np.unravel_index(np.argmax(add_candidates, axis=None), add_candidates.shape)
+        max_hyp = add_candidates[max_hyp_ind]
+
+        did_add = False
+        if max_hyp > rf_px_bins_exp and self.t > self.wait_learn_until:
+            print()
+            print()
+            print('ADDING ONE')
+            print('max_hyp', max_hyp)
+            print('rf_px_bins_exp', rf_px_bins_exp)
+            print('max_hyp_ind', max_hyp_ind)
+            print('t', self.t, self.wait_learn_until, 'of num candidates: ', np.count_nonzero(add_candidates > rf_px_bins_exp))
+            print()
+            print()
+
+            rf[max_hyp_ind] = 1.0
+            add_candidates[:, :, :] = 0.0
+            remove_candidates[:, :, :] = 0.0
+
+            did_add = True
+            #self.num_additions += 1
+
+        if not did_add:
+            # see if remove should be done
+            max_hyp_ind = np.unravel_index(np.argmax(remove_candidates, axis=None), remove_candidates.shape)
+            max_hyp = remove_candidates[max_hyp_ind]
+
+            if max_hyp > rf_px_bins_exp and self.t > self.wait_learn_until:
+                print()
+                print()
+                print('REMOVING ONE PERHAPS')
+
+                print('max_hyp', max_hyp)
+                print('rf_px_bins_exp', rf_px_bins_exp)
+                print('max_hyp_ind', max_hyp_ind)
+                print('t', self.t, self.wait_learn_until, 'of num candidates: ', np.count_nonzero(remove_candidates> rf_px_bins_exp))
+                print()
+                print()
+
+                rf[max_hyp_ind] = 0.0
+                add_candidates[:, :, :] = 0.0
+                remove_candidates[:, :, :] = 0.0
+
+                #self.num_removals += 1
+
+        self.rf_list[rf_index] = rf
+        self.rf_px_bins_exp[rf_index] = rf_px_bins_exp
+        self.add_candidates_list[rf_index] = add_candidates
+        self.remove_candidates_list[rf_index] = remove_candidates
+
+    def _bin_pixels_expand_columns(self, arr, num_bins_per_pixel):
+        '''
+
+        keep number of rows, expand in number of columns
+        construct binary image: (0.0 or 1.0) per bin
+
+        https://stackoverflow.com/questions/6163334/binning-data-in-python-with-scipy-numpy
+            use: digitize, or histogram
+
+        https://het.as.utexas.edu/HET/Software/Numpy/reference/generated/numpy.digitize.html
+            digitize: returns index of bin to which each pixel belongs
+            expanded array will have a set of bins per pixel, in the expanded columns
+
+        :param arr:
+        :return:
+        '''
+        # print('***')
+        # print('arr', arr.shape)
+
+        bins = np.linspace(0, 1 + 1e-9, num_bins_per_pixel + 1)  # TODO to fix binning add 1e-9 to 1 in second argument!
+        # print('bins', bins.shape, bins)
+        bin_indices = np.digitize(arr, bins) - 1  # same shape as arr; which bin, per pixel
+        # print('bin_indices', bin_indices.shape, bin_indices)
+        arr_exp = np.zeros((arr.shape[0], arr.shape[1] * num_bins_per_pixel), np.float32)
+        # print('arr_exp', arr_exp.shape)
+
+        # term1 = np.tile(self.num_bins_per_pixel * np.arange(arr.shape[1]), 2)  # can't remember why this is np.tile(..., 2)
+        term1 = num_bins_per_pixel * np.arange(arr.shape[1])  # only works if arr rows is 1?
+        term2 = bin_indices.flatten()
+        # print('term1', term1.shape, term1)
+        # print('term2', term2.shape, term2)
+        c = term1 + term2
+        r = np.repeat(np.arange(arr.shape[0]), arr.shape[1])
+
+        arr_exp[r, c] = 1.0
+
+        return arr_exp
+
+    def _collapse_binned_columns_to_pixels(self, arr_exp, num_bins_per_pixel):
+        '''
+
+        non-trivial: arr_exp may no longer be binary; need to figure out how to collapse multiple values of different weight to one pixel:
+            weighted average? take max value?
+
+        :param arr_exp:
+        :return:
+        '''
+
+        num_pixels = int((arr_exp.shape[1] / num_bins_per_pixel))
+        num_rows = arr_exp.shape[0]
+
+        # reshape so we can take max along one dim
+        #   ie each row in this matrix is a pixel, temporarily
+        # then reshape back
+
+        tmp = arr_exp.reshape((num_rows * num_pixels, num_bins_per_pixel))
+
+        bins = np.linspace(0, 1 + 1e-9, num_bins_per_pixel + 1)
+
+        # max val for display:
+        max_index = np.argmax(tmp, axis=1)
+        max_vals = bins[max_index]
+
+        weights = tmp[np.arange(tmp.shape[0]), max_index]
+
+        # print(max_vals.shape, weights.shape)
+
+        # weighted mean val for display:
+        # tmp1 = np.multiply(tmp, bins[np.newaxis, 0:num_bins_per_pixel])
+        # tmp2 = np.sum(tmp1, axis=1)  # 65536
+        # tmp3 = np.divide(tmp2, np.sum(tmp, axis=1))
+        # max_vals = tmp3
+
+        weights = weights.reshape(num_rows, num_pixels)
+        arr = max_vals.reshape(num_rows, num_pixels)
+
+        return arr, weights
+
+    def get_table_ims(self):
+        '''
+
+        :return:
+        '''
+
+        ims_list = []
+        ims_names_list = []
+
+        rf_im = None
+        for rf_index in range(self.num_rf):
+            arr, weights = self._collapse_binned_columns_to_pixels(arr_exp=self.rf_list[rf_index].flatten()[np.newaxis, :], num_bins_per_pixel=self.bins_per_pixel)
+            if rf_im is None:
+                rf_im = arr.reshape((self.rf_dim, self.rf_dim))
+            else:
+                rf_im = np.hstack((rf_im, arr.reshape((self.rf_dim, self.rf_dim))))
+
+        ims_list.append(rf_im)
+        ims_names_list.append('rfs')
+
+        return ims_list, ims_names_list
+
+
+class ExpBrainSinglePartialPattern(object):
+    '''
+
+    new greedy algorithm for growing/contracting RF over time
 
     single RF test
 
@@ -75,7 +436,7 @@ class ExpBrain(object):
         assert self.in_c + self.rf_dim < self.im_dim, str((self.in_c + self.rf_dim, self.im_dim))
 
         # TODO later introduce input history
-        self.input_feature_len = self.bins_per_pixel * self.rf_dim * self.rf_dim  # * self.input_history_steps
+        #  self.input_feature_len = self.bins_per_pixel * self.rf_dim * self.rf_dim  # * self.input_history_steps
 
         self.rf = np.zeros((self.rf_dim, self.rf_dim, self.bins_per_pixel))
 
@@ -90,11 +451,6 @@ class ExpBrain(object):
 
         # set self.rf current pixel to 1: considering it the top left
         self.rf[int(self.rf_dim/2), int(self.rf_dim/2), self.in_bin] = 1
-
-        # what to set prob for current RF (now and when updated)?
-        # set to zero
-        # TODO but we may not need this anymore:
-        self.prob = np.zeros((self.rf_dim, self.rf_dim, self.bins_per_pixel))
 
         self.count_steps = 0
         self.count_matches = 0
