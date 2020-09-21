@@ -44,7 +44,7 @@ class ExpBrain(object):
 
         self.im_dim = params['image_dim_NxN_pixels']
 
-        self.ims_scale_pixels = 300
+        self.ims_scale_pixels = 1400
 
         self.otm = OneTimeMessages()
 
@@ -63,12 +63,14 @@ class ExpBrain(object):
 
         # parameters
 
-        self.num_rf = 8
+        self.num_rf = 64
         self.rf_dim = 16
         self.bins_per_pixel = 6
         self.input_history_steps = 1
-        self.tau = 0.0001  # 0.0001
+        self.tau = 0.001  # 0.001 # 0.0001
         self.wait_learn_until = 4 * (log(2) / self.tau)
+
+        print('start learning at: ', self.wait_learn_until)
 
         assert self.in_r + self.rf_dim < self.im_dim, str((self.in_r + self.rf_dim, self.im_dim))
         assert self.in_c + self.rf_dim < self.im_dim, str((self.in_c + self.rf_dim, self.im_dim))
@@ -106,6 +108,11 @@ class ExpBrain(object):
         self.last_im = None
         self.last_match_im = None
 
+        self.t = 0
+        self.MAX_TIME = 1000000
+        self.im_match_prop_history = np.zeros(self.MAX_TIME)
+        self.mean_im_match_prop_history = np.zeros(self.MAX_TIME)  # time-averaged
+
         # TODO questions:
         # TODO how RF initialized, if we dont choose an initial pixel-bin? should just work with zero-rf as a start
         #       for now we did hack: random choice of an input pixel-bin
@@ -125,16 +132,38 @@ class ExpBrain(object):
         input_arr_1 = input_pixels_1.flatten()[np.newaxis, :]
         input_exp_1 = self._bin_pixels_expand_columns(arr=input_arr_1, num_bins_per_pixel=self.bins_per_pixel)
 
+        input_exp_1_orig = input_exp_1.copy()
+        input_exp_1_tmp = input_exp_1.copy()
+
+        count_nnz_org = np.count_nonzero(input_exp_1)
+        DO_COMPETITION = 1
+
         for rf_ind in range(self.num_rf):
             if self.init_done[rf_ind]:
-                self._process_rf(rf_index=rf_ind, input_exp_1=input_exp_1)
+                if DO_COMPETITION:
+                    input_exp_1 = self._process_rf(rf_index=rf_ind, input_exp_1=input_exp_1)
+                else:
+                    # TODO fix this; logic is wrong; should be able to measure total explained without the logic to remove at every step
+
+                    input_exp_1 = self._process_rf(rf_index=rf_ind, input_exp_1=input_exp_1)
+                    input_exp_1_tmp = np.minimum(input_exp_1_tmp, input_exp_1)
+                    input_exp_1[:, :] = input_exp_1_orig[:, :]
+
             else:
-                if random.random() < 0.05:
+                if random.random() < 0.01:
                     nnz_input = np.nonzero(input_exp_1)[1]
                     rand_nnz = np.random.choice(nnz_input)
                     rand_inds = np.unravel_index(rand_nnz, self.rf_list[rf_ind].shape)
                     self.rf_list[rf_ind][rand_inds] = 1.0
                     self.init_done[rf_ind] = True
+
+        if DO_COMPETITION:
+            count_nnz_left = np.count_nonzero(input_exp_1)
+        else:
+            count_nnz_left = np.count_nonzero(input_exp_1_tmp)
+
+        self.im_match_prop_history[self.t] = (count_nnz_org - count_nnz_left) * 1.0 / count_nnz_org
+        self.mean_im_match_prop_history[self.t] = np.mean(self.im_match_prop_history[max(0, self.t - 4000):self.t])
 
         self.t += 1
 
@@ -181,6 +210,9 @@ class ExpBrain(object):
 
             z_tmp = np.nonzero(tmp == 0)
             add_candidates[z_tmp] = (1.0 - tau) * add_candidates[z_tmp] + tau * 0
+
+            # modify input_exp_1 to remove what matched
+            input_exp_1[0, nnz_rf_flat] = 0
 
             # assert that only one value is 1 per pixel-bin, in input and in the RF (sanity check)
             do_debug = 0
@@ -242,19 +274,23 @@ class ExpBrain(object):
 
         did_add = False
         if max_hyp > rf_px_bins_exp and self.t > self.wait_learn_until:
-            print()
-            print()
-            print('ADDING ONE')
-            print('max_hyp', max_hyp)
-            print('rf_px_bins_exp', rf_px_bins_exp)
-            print('max_hyp_ind', max_hyp_ind)
-            print('t', self.t, self.wait_learn_until, 'of num candidates: ', np.count_nonzero(add_candidates > rf_px_bins_exp))
-            print()
-            print()
+
+            # print()
+            # print()
+            # print('ADDING ONE')
+            # print('max_hyp', max_hyp)
+            # print('rf_px_bins_exp', rf_px_bins_exp)
+            # print('max_hyp_ind', max_hyp_ind)
+            # print('t', self.t, self.wait_learn_until, 'of num candidates: ', np.count_nonzero(add_candidates > rf_px_bins_exp))
+            # print()
+            # print()
 
             rf[max_hyp_ind] = 1.0
-            add_candidates[:, :, :] = 0.0
-            remove_candidates[:, :, :] = 0.0
+
+            add_candidates = add_candidates * 0.95
+            remove_candidates = remove_candidates * 0.95
+            #add_candidates[:, :, :] = 0.0
+            #remove_candidates[:, :, :] = 0.0
 
             did_add = True
             #self.num_additions += 1
@@ -265,20 +301,22 @@ class ExpBrain(object):
             max_hyp = remove_candidates[max_hyp_ind]
 
             if max_hyp > rf_px_bins_exp and self.t > self.wait_learn_until:
-                print()
-                print()
-                print('REMOVING ONE PERHAPS')
-
-                print('max_hyp', max_hyp)
-                print('rf_px_bins_exp', rf_px_bins_exp)
-                print('max_hyp_ind', max_hyp_ind)
-                print('t', self.t, self.wait_learn_until, 'of num candidates: ', np.count_nonzero(remove_candidates> rf_px_bins_exp))
-                print()
-                print()
+                # print()
+                # print()
+                # print('REMOVING ONE PERHAPS')
+                #
+                # print('max_hyp', max_hyp)
+                # print('rf_px_bins_exp', rf_px_bins_exp)
+                # print('max_hyp_ind', max_hyp_ind)
+                # print('t', self.t, self.wait_learn_until, 'of num candidates: ', np.count_nonzero(remove_candidates> rf_px_bins_exp))
+                # print()
+                # print()
 
                 rf[max_hyp_ind] = 0.0
-                add_candidates[:, :, :] = 0.0
-                remove_candidates[:, :, :] = 0.0
+                add_candidates = add_candidates * 0.95
+                remove_candidates = remove_candidates * 0.95
+                #add_candidates[:, :, :] = 0.0
+                #remove_candidates[:, :, :] = 0.0
 
                 #self.num_removals += 1
 
@@ -286,6 +324,8 @@ class ExpBrain(object):
         self.rf_px_bins_exp[rf_index] = rf_px_bins_exp
         self.add_candidates_list[rf_index] = add_candidates
         self.remove_candidates_list[rf_index] = remove_candidates
+
+        return input_exp_1
 
     def _bin_pixels_expand_columns(self, arr, num_bins_per_pixel):
         '''
@@ -375,15 +415,41 @@ class ExpBrain(object):
         ims_names_list = []
 
         rf_im = None
+        weights_im = None
         for rf_index in range(self.num_rf):
             arr, weights = self._collapse_binned_columns_to_pixels(arr_exp=self.rf_list[rf_index].flatten()[np.newaxis, :], num_bins_per_pixel=self.bins_per_pixel)
             if rf_im is None:
                 rf_im = arr.reshape((self.rf_dim, self.rf_dim))
+                weights_im = weights.reshape((self.rf_dim, self.rf_dim))
             else:
+                rf_im = np.hstack((rf_im, 1.0 * np.ones((self.rf_dim, 2))))
                 rf_im = np.hstack((rf_im, arr.reshape((self.rf_dim, self.rf_dim))))
+
+                weights_im = np.hstack((weights_im, 1.0 * np.ones((self.rf_dim, 2))))
+                weights_im = np.hstack((weights_im, weights.reshape((self.rf_dim, self.rf_dim))))
+
+        max_dim = max(rf_im.shape[0], rf_im.shape[1])
+        imscale = self.ims_scale_pixels / max_dim  # 0.2: full table, 2.0
+        rf_im = cv2.resize(rf_im, dsize=(0, 0), fx=imscale, fy=imscale, interpolation=cv2.INTER_NEAREST)
+
+        max_dim = max(weights_im.shape[0], weights_im.shape[1])
+        imscale = self.ims_scale_pixels / max_dim  # 0.2: full table, 2.0
+        weights_im = cv2.resize(weights_im, dsize=(0, 0), fx=imscale, fy=imscale, interpolation=cv2.INTER_NEAREST)
 
         ims_list.append(rf_im)
         ims_names_list.append('rfs')
+
+        ims_list.append(weights_im)
+        ims_names_list.append('weights')
+
+        print()
+        print('Making plot of state vars...')
+        self.ax.cla()
+        self.ax.plot(self.im_match_prop_history[0:self.t])
+        self.fig.savefig("match_prop.png", dpi=100)
+        self.ax.cla()
+        self.ax.plot(self.mean_im_match_prop_history[0:self.t])
+        self.fig.savefig("mean_match_prop.png", dpi=100)
 
         return ims_list, ims_names_list
 
