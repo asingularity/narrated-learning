@@ -4,6 +4,7 @@
 import time
 import cv2
 import numpy as np
+np.set_printoptions(suppress=True, precision=2)
 import random
 import pickle
 from math import sqrt
@@ -63,12 +64,14 @@ class ExpBrain(object):
 
         # parameters
 
-        self.num_rf = 64
+        self.num_rf = 32
         self.rf_dim = 16
         self.bins_per_pixel = 6
         self.input_history_steps = 1
         self.tau = 0.001  # 0.001 # 0.0001
         self.wait_learn_until = 4 * (log(2) / self.tau)
+
+        self.plot_graphs = False
 
         print('start learning at: ', self.wait_learn_until)
 
@@ -105,13 +108,26 @@ class ExpBrain(object):
 
         # other
 
+        self.rf_ages = np.zeros(self.num_rf)
+        self.rf_num_bad = np.zeros(self.num_rf)
+
         self.last_im = None
         self.last_match_im = None
+        self.whats_left_im = None
+        self.last_input_sub_im = None
 
         self.t = 0
         self.MAX_TIME = 1000000
         self.im_match_prop_history = np.zeros(self.MAX_TIME)
         self.mean_im_match_prop_history = np.zeros(self.MAX_TIME)  # time-averaged
+
+        self.last_print_time = 0
+
+
+        # TODO track here: a *new* hypothetical RF, made of any one of the pixel-bins, how effective would it be?
+        # TODO - computed on "whats left" after all RFs detect and subtract from image
+
+        self.single_pixel_bin_RF_exp = np.zeros((self.rf_dim, self.rf_dim, self.bins_per_pixel))
 
         # TODO questions:
         # TODO how RF initialized, if we dont choose an initial pixel-bin? should just work with zero-rf as a start
@@ -129,6 +145,9 @@ class ExpBrain(object):
         self.last_im = input_im.copy()
 
         input_pixels_1 = input_im[self.in_r:self.in_r + self.rf_dim, self.in_c:self.in_c + self.rf_dim]
+
+        self.last_input_sub_im = input_pixels_1.copy()
+
         input_arr_1 = input_pixels_1.flatten()[np.newaxis, :]
         input_exp_1 = self._bin_pixels_expand_columns(arr=input_arr_1, num_bins_per_pixel=self.bins_per_pixel)
 
@@ -138,12 +157,17 @@ class ExpBrain(object):
         count_nnz_org = np.count_nonzero(input_exp_1)
         DO_COMPETITION = 1
 
-        for rf_ind in range(self.num_rf):
+        # if self.t < 100000:
+        #     range_end = int(self.num_rf / 2)
+        # else:
+        range_end = self.num_rf
+
+        for rf_ind in range(range_end):
             if self.init_done[rf_ind]:
                 if DO_COMPETITION:
                     input_exp_1 = self._process_rf(rf_index=rf_ind, input_exp_1=input_exp_1)
                 else:
-                    # TODO fix this; logic is wrong; should be able to measure total explained without the logic to remove at every step
+                    # (Done?) fix this; logic is wrong; should be able to measure total explained without the logic to remove at every step
 
                     input_exp_1 = self._process_rf(rf_index=rf_ind, input_exp_1=input_exp_1)
                     input_exp_1_tmp = np.minimum(input_exp_1_tmp, input_exp_1)
@@ -159,8 +183,23 @@ class ExpBrain(object):
 
         if DO_COMPETITION:
             count_nnz_left = np.count_nonzero(input_exp_1)
+            # arr, weights = self._collapse_binned_columns_to_pixels(arr_exp=self.rf_list[rf_index].flatten()[np.newaxis, :], num_bins_per_pixel=self.bins_per_pixel)
+
+            _, whats_left = self._collapse_binned_columns_to_pixels(arr_exp=input_exp_1, num_bins_per_pixel=self.bins_per_pixel)
+
+            tmp = input_exp_1.flatten().reshape((self.rf_dim, self.rf_dim, self.bins_per_pixel))
+            nnz_tmp = np.nonzero(tmp)
+            nz_tmp = np.nonzero(tmp==0)
+            self.single_pixel_bin_RF_exp[nnz_tmp] = (1.0 - self.tau) * self.single_pixel_bin_RF_exp[nnz_tmp] + self.tau * 1.0
+            self.single_pixel_bin_RF_exp[nz_tmp] = (1.0 - self.tau) * self.single_pixel_bin_RF_exp[nz_tmp] + self.tau * 0.0
         else:
             count_nnz_left = np.count_nonzero(input_exp_1_tmp)
+            _, whats_left = self._collapse_binned_columns_to_pixels(arr_exp=input_exp_1_tmp, num_bins_per_pixel=self.bins_per_pixel)
+
+            # TODO update single_pixel_bin_RF_exp here
+
+
+        self.whats_left_im = whats_left.reshape((self.rf_dim, self.rf_dim))
 
         self.im_match_prop_history[self.t] = (count_nnz_org - count_nnz_left) * 1.0 / count_nnz_org
         self.mean_im_match_prop_history[self.t] = np.mean(self.im_match_prop_history[max(0, self.t - 4000):self.t])
@@ -320,7 +359,44 @@ class ExpBrain(object):
 
                 #self.num_removals += 1
 
+        did_replace = False
+        # TODO here, replace bad RFs with best single-pixel ones from self.single_pixel_bin_RF_exp
+        max_tmp = np.amax(self.single_pixel_bin_RF_exp)
+        if rf_px_bins_exp < max_tmp and self.rf_ages[rf_index] > self.wait_learn_until:
+
+            self.rf_num_bad[rf_index] += 1
+
+            if self.rf_num_bad[rf_index] > 10000:
+
+                print('REPLACING AN RF COMPLETELY RF:', rf_index, ', time: ', self.t, rf_px_bins_exp, max_tmp, self.rf_ages[rf_index], self.wait_learn_until * 4)
+
+                new_rf_ind = np.unravel_index(np.argmax(self.single_pixel_bin_RF_exp, axis=None), self.single_pixel_bin_RF_exp.shape)
+
+                rf[:, :, :] = 0.0
+                rf[new_rf_ind] = 1.0
+                self.single_pixel_bin_RF_exp[new_rf_ind] = 0.0
+
+                rf_px_bins_exp = max_tmp
+                add_candidates[:, :, :] = 0.0
+                remove_candidates[:, :, :]  = 0.0
+
+                self.rf_ages[rf_index] = 0
+                self.rf_num_bad[rf_index] = 0
+                print(np.sum(rf))
+                did_replace = True
+        else:
+
+            self.rf_num_bad[rf_index] -= 1
+            if self.rf_num_bad[rf_index] < 0:
+                self.rf_num_bad[rf_index] = 0
+
+            self.rf_ages[rf_index] = self.rf_ages[rf_index] + 1
+
         self.rf_list[rf_index] = rf
+
+        if did_replace:
+            print(np.sum(self.rf_list[rf_index]))
+
         self.rf_px_bins_exp[rf_index] = rf_px_bins_exp
         self.add_candidates_list[rf_index] = add_candidates
         self.remove_candidates_list[rf_index] = remove_candidates
@@ -442,14 +518,32 @@ class ExpBrain(object):
         ims_list.append(weights_im)
         ims_names_list.append('weights')
 
-        print()
-        print('Making plot of state vars...')
-        self.ax.cla()
-        self.ax.plot(self.im_match_prop_history[0:self.t])
-        self.fig.savefig("match_prop.png", dpi=100)
-        self.ax.cla()
-        self.ax.plot(self.mean_im_match_prop_history[0:self.t])
-        self.fig.savefig("mean_match_prop.png", dpi=100)
+        tmp_im = np.hstack((self.last_input_sub_im, 1.0 * np.ones((self.last_input_sub_im.shape[0], 2)), self.whats_left_im))
+        max_dim = max(tmp_im.shape[0], tmp_im.shape[1])
+        imscale = 600 / max_dim  # 0.2: full table, 2.0
+        tmp_im__2 = cv2.resize(tmp_im, dsize=(0, 0), fx=imscale, fy=imscale, interpolation=cv2.INTER_NEAREST)
+
+        ims_list.append(tmp_im__2)
+        ims_names_list.append('whats-left-mask')
+
+        if self.plot_graphs:
+            print()
+            print('Making plot of state vars...')
+            self.ax.cla()
+            self.ax.plot(self.im_match_prop_history[0:self.t])
+            self.fig.savefig("match_prop.png", dpi=100)
+            self.ax.cla()
+            self.ax.plot(self.mean_im_match_prop_history[0:self.t])
+            self.fig.savefig("mean_match_prop.png", dpi=100)
+
+        if time.time() > 5 + self.last_print_time:
+            print()
+            print('how good are RFs?')
+            print(np.sort(self.rf_px_bins_exp))
+            print('how good would be single pixel-bin RFs? min, max, mean, median')
+            print(np.amin(self.single_pixel_bin_RF_exp), np.amax(self.single_pixel_bin_RF_exp), np.mean(self.single_pixel_bin_RF_exp), np.median(self.single_pixel_bin_RF_exp))
+            print()
+            self.last_print_time = time.time()
 
         return ims_list, ims_names_list
 
