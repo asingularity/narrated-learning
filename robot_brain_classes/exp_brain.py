@@ -57,11 +57,15 @@ class ExpBrain(object):
 
         self.prob_lr = 0.0001
         self.mean_eff_lr = 0.00001
+
         self.weights_lr = 0.0001
 
         self.threshold = 0.165
 
         self.last_match_im = None
+
+        self.total_events_disp = 0
+        self.total_time_disp = 0
 
 
     def process_input(self, input_im):
@@ -73,17 +77,8 @@ class ExpBrain(object):
         mp_sum = np.sum(all_mp)
         #print(mp_sum)
 
-        # now normalize to maximum possible match, if all pixel-bins in RF were 1
-
-        # TODO !!!!!
-        # TODO !!!!!
-        ## TODO !!!!!
-        ## TODO !!!!!
-        ## TODO !!!!!
-        # TODO match can be positive here with negative weights and negative sum!!!!!
-        # investigate what is happening before fixing...
-
         match = mp_sum / np.sum(self.rf)
+
         if match > self.threshold:
             #print('Event!', self.t)
             self.last_match_im = input_im[self.in_r:self.in_r + self.rf_dim, self.in_c:self.in_c + self.rf_dim].copy()
@@ -95,8 +90,14 @@ class ExpBrain(object):
 
             eff_frame = eff_frame_p - eff_frame_n
 
+            # TODO stabilize this rule
             self.rf[np.nonzero(tmp)] += self.weights_lr
             self.rf[np.nonzero(tmp == 0)] -= self.weights_lr
+
+            # if this isn't here, weights can go negative... very bizarre results
+            self.rf[np.nonzero(self.rf < 0)] = 0
+
+            self.total_events_disp += 1
 
         else:
             # no match
@@ -108,6 +109,7 @@ class ExpBrain(object):
         # TODO now thing we want to know is: would increase in prob for any given pixel-bin, help mean_eff or not?
 
         self.t += 1
+        self.total_time_disp += 1
 
     def _bin_pixels_expand_columns(self, arr, num_bins_per_pixel):
         '''
@@ -192,7 +194,7 @@ class ExpBrain(object):
         # print((np.amin(self.prob), np.amax(self.prob)))
         # print(np.nonzero(self.prob==0))
 
-        print('t', self.t, 'mean_eff', self.mean_eff)
+        print('t', self.t, 'mean_eff:', self.mean_eff, 'prop frames with event:', self.total_events_disp / self.total_time_disp)
 
         ims_list = []
         ims_names_list = []
