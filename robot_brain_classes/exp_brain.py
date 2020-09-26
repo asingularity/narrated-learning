@@ -58,7 +58,7 @@ class ExpBrain(object):
         self.prob_lr = 0.0001
         self.mean_eff_lr = 0.00001
 
-        self.weights_lr = 0.0001
+        self.weights_lr = 0.0001 # 0.00001
 
         self.threshold = 0.165
 
@@ -96,6 +96,9 @@ class ExpBrain(object):
 
             # if this isn't here, weights can go negative... very bizarre results
             self.rf[np.nonzero(self.rf < 0)] = 0
+
+            # TODO max_threshold, if later we change the threshold
+            # self.rf[np.nonzero(self.rf > self.threshold)] = self.threshold
 
             self.total_events_disp += 1
 
