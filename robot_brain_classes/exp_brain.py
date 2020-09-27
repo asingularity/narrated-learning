@@ -117,7 +117,13 @@ class ExpBrain(object):
         nnz_input = np.nonzero(input_exp_1)[1]
         nz_input = np.nonzero(input_exp_1==0)[1]
 
+        argsort_event_rf = np.argsort(eff_frame)
+        sorted_event_rfs = event_rfs[argsort_event_rf]
+
+        print('***')
+        print(event_rfs, sorted_event_rfs)
         for event_rf in event_rfs:
+
             self.rfs[event_rf, nnz_input] = self.rfs[event_rf, nnz_input] + self.weights_lr
             self.rfs[event_rf, nz_input] = self.rfs[event_rf, nz_input] - self.weights_lr
 
