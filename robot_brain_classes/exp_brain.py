@@ -51,6 +51,7 @@ class ExpBrain(object):
         self.bins_per_pixel = 6
 
         self.num_rf = 16
+        self.im_dim = 1200
 
         assert self.in_r + self.rf_dim < self.im_dim, str((self.in_r + self.rf_dim, self.im_dim))
         assert self.in_c + self.rf_dim < self.im_dim, str((self.in_c + self.rf_dim, self.im_dim))
@@ -58,6 +59,8 @@ class ExpBrain(object):
         self.input_feature_len = self.rf_dim * self.rf_dim * self.bins_per_pixel
 
         self.rfs = np.random.random((self.num_rf, self.input_feature_len))
+        #self.rfs = np.zeros((self.num_rf, self.input_feature_len)) + 1e-3
+
         self.probs = np.zeros((self.num_rf, self.input_feature_len))
 
         self.total_events_disp = np.zeros(self.num_rf)
@@ -69,12 +72,24 @@ class ExpBrain(object):
         for k in range(self.num_rf):
             self.last_match_ims.append(None)
 
-        self.prob_lr = 0.0001
-        self.mean_eff_lr = 0.00001
+        lr_factor = 0.1
 
-        self.weights_lr = 0.0001  # 0.00001
+        self.prob_lr = 0.0001 * lr_factor
+        self.mean_eff_lr = 0.00001 * lr_factor
+        self.weights_lr = 0.0001 * lr_factor * 1  # 0.00001
+        self.inhib_weights_lr = 1 * self.weights_lr
+        #self.prob_corr_lr = 0.0001 * lr_factor * 100
+        self.prob_corr_lr = 0.7
 
-        self.threshold = 0.165
+        self.gain_lr = 0.0001 * lr_factor * 1
+
+        self.threshold = 127.0
+
+        # competition
+        self.prob_corr = np.zeros((self.num_rf, self.num_rf))
+        self.inhib_w = np.zeros((self.num_rf, self.num_rf))  # from, to
+        self.gains = np.ones(self.num_rf)
+        self.last_event_time = np.zeros(self.num_rf)
 
     def process_input(self, input_im):
         '''
@@ -96,16 +111,47 @@ class ExpBrain(object):
         mp_sum = np.sum(all_mp, axis=1)
         assert mp_sum.shape[0] == self.num_rf
 
-        match = np.divide(mp_sum, np.sum(self.rfs, axis=1))
+        #match = np.divide(mp_sum, np.sum(self.rfs, axis=1))
+        #match = mp_sum
+        match = np.multiply(mp_sum, self.gains)
+
         assert match.shape[0] == self.num_rf
+
+        argsort_match = np.argsort(match)
+        # print('********')
+        # print(np.amax(self.prob_corr), np.amin(self.prob_corr))
+        # print('***')
+
+        event_rfs_before_inhibit = len(np.nonzero(match >= self.threshold)[0])
+
+        for k in range(argsort_match.shape[0]):
+            rf_index = argsort_match[k]
+
+            inhib = 0.0
+            self.inhib_w[:, rf_index] -= self.inhib_weights_lr
+            for k2 in range(k):
+                rf_index_pre = argsort_match[k2]
+                inhib += self.inhib_w[rf_index_pre, rf_index]
+                self.inhib_w[rf_index_pre, rf_index] += (self.inhib_weights_lr * 2)
+
+            match -= inhib
+
+        self.inhib_w[self.inhib_w < 0] = 0
 
         # compute effectiveness for each rf that had an event:
         event_rfs = np.nonzero(match >= self.threshold)[0]
-        # no_event_rfs = np.nonzero(match < self.threshold)[0]
+        no_event_rfs = np.nonzero(match < self.threshold)[0]
+
+        # if len(event_rfs) > 0:
+        #     print('(((((((')
+        #     print(self.inhib_w)
+        #     print(self.t, '------', event_rfs_before_inhibit, '->', len(event_rfs))
 
         assert event_rfs.shape[0] <= self.num_rf
 
-        self.probs[event_rfs, :] = self.probs[event_rfs, :] * (1.0 - self.prob_lr) + self.prob_lr * input_exp_1
+        self.last_event_time[event_rfs] = self.t
+        self.gains[np.nonzero(self.t - self.last_event_time > 100)] *= (1.0 + self.gain_lr)
+        self.gains[event_rfs] = 1.0
 
         eff_frame_p = np.sum(np.multiply(self.probs[event_rfs], input_exp_1), axis=1)
         eff_frame_n = np.sum(np.multiply(self.probs[event_rfs], input_exp_1 == 0), axis=1)
@@ -132,15 +178,31 @@ class ExpBrain(object):
             self.rfs[event_rf, nnz_input] = self.rfs[event_rf, nnz_input] + lr
             self.rfs[event_rf, nz_input] = self.rfs[event_rf, nz_input] - lr
 
+        # for rf_index in range(self.num_rf):
+        #     if rf_index in event_rfs:
+        #         self.prob_corr[rf_index, event_rfs] = (1.0 - self.prob_corr_lr) * self.prob_corr[event_rf, event_rfs] + self.prob_corr_lr * 1.0
+        #         self.prob_corr[rf_index, no_event_rfs] = (1.0 - self.prob_corr_lr) * self.prob_corr[event_rf, no_event_rfs] + self.prob_corr_lr * 0.0
+        #     else:
+        #         pass
+        #
+        # self.prob_corr[range(self.num_rf), range(self.num_rf)] = 0.0
+
         self.rfs[np.nonzero(self.rfs < 0)] = 0
+        self.rfs[np.nonzero(self.rfs > self.threshold)] = self.threshold
+
+        self.probs[event_rfs, :] = self.probs[event_rfs, :] * (1.0 - self.prob_lr) + self.prob_lr * input_exp_1
 
         self.total_events_disp[event_rfs] += 1
         self.total_time_disp += 1
 
+        #if len(event_rfs) > 0:
+        #    print(event_rfs)
         for rf_index in event_rfs:
             self.last_match_ims[rf_index] = input_pixels_1.copy()
 
         self.mean_effs = (1.0 - self.mean_eff_lr) * self.mean_effs + self.mean_eff_lr * eff_frame_all
+
+        self.t += 1
 
     def _bin_pixels_expand_columns(self, arr, num_bins_per_pixel):
         '''
@@ -222,6 +284,10 @@ class ExpBrain(object):
 
     def get_table_ims(self):
         print('mean_effs:', self.mean_effs)
+        print(np.amax(self.prob_corr), np.amin(self.prob_corr))
+
+        #print('prob corr:')
+        #print(self.prob_corr)
 
         ims_list = []
         ims_names_list = []
@@ -236,7 +302,11 @@ class ExpBrain(object):
 
                 im0 = arr[r_tmp, :].reshape((self.rf_dim, self.rf_dim))
                 im1 = weights[r_tmp, :].reshape((self.rf_dim, self.rf_dim))
-                im2 = self.last_match_ims[r_tmp]
+
+                if self.last_match_ims[r_tmp] is None:
+                    im2 = np.zeros((self.rf_dim, self.rf_dim)) + 0.5
+                else:
+                    im2 = self.last_match_ims[r_tmp]
 
                 tmp2 = np.hstack((im0, im1, im2))
                 if tmp_im is None:
@@ -246,11 +316,41 @@ class ExpBrain(object):
                     tmp_im = np.vstack((tmp_im, tmp3, tmp2))
 
             max_dim = max(tmp_im.shape[0], tmp_im.shape[1])
-            imscale = 800 / max_dim  # 0.2: full table, 2.0
+            imscale = self.im_dim / max_dim  # 0.2: full table, 2.0
             tmp_im = cv2.resize(tmp_im, dsize=(0, 0), fx=imscale, fy=imscale, interpolation=cv2.INTER_NEAREST)
 
             ims_list.append(tmp_im)
             ims_names_list.append('rf_im')
+
+
+            arr, weights = self._collapse_binned_columns_to_pixels(arr_exp=self.probs, num_bins_per_pixel=self.bins_per_pixel)
+
+            tmp_im = None
+
+            for r_tmp in range(weights.shape[0]):
+                weights[r_tmp, :] = (weights[r_tmp, :] - np.amin(weights[r_tmp, :])) * 1.0 / (np.amax(weights[r_tmp, :]) - np.amin(weights[r_tmp, :]))
+
+                im0 = arr[r_tmp, :].reshape((self.rf_dim, self.rf_dim))
+                im1 = weights[r_tmp, :].reshape((self.rf_dim, self.rf_dim))
+
+                if self.last_match_ims[r_tmp] is None:
+                    im2 = np.zeros((self.rf_dim, self.rf_dim)) + 0.5
+                else:
+                    im2 = self.last_match_ims[r_tmp]
+
+                tmp2 = np.hstack((im0, im1, im2))
+                if tmp_im is None:
+                    tmp_im = tmp2.copy()
+                else:
+                    tmp3 = np.zeros((2, tmp_im.shape[1]))
+                    tmp_im = np.vstack((tmp_im, tmp3, tmp2))
+
+            max_dim = max(tmp_im.shape[0], tmp_im.shape[1])
+            imscale = self.im_dim / max_dim  # 0.2: full table, 2.0
+            tmp_im = cv2.resize(tmp_im, dsize=(0, 0), fx=imscale, fy=imscale, interpolation=cv2.INTER_NEAREST)
+
+            ims_list.append(tmp_im)
+            ims_names_list.append('probs_im')
 
         return ims_list, ims_names_list
 
