@@ -50,7 +50,7 @@ class ExpBrain(object):
 
         self.bins_per_pixel = 6
 
-        self.num_rf = 4
+        self.num_rf = 16
 
         assert self.in_r + self.rf_dim < self.im_dim, str((self.in_r + self.rf_dim, self.im_dim))
         assert self.in_c + self.rf_dim < self.im_dim, str((self.in_c + self.rf_dim, self.im_dim))
@@ -111,21 +111,26 @@ class ExpBrain(object):
         eff_frame_n = np.sum(np.multiply(self.probs[event_rfs], input_exp_1 == 0), axis=1)
 
         eff_frame = eff_frame_p - eff_frame_n
+        eff_frame_all = np.zeros(self.num_rf)
+        eff_frame_all[event_rfs] = eff_frame[:]
 
         assert eff_frame.shape[0] == event_rfs.shape[0]
 
-        nnz_input = np.nonzero(input_exp_1)[1]
-        nz_input = np.nonzero(input_exp_1==0)[1]
-
-        argsort_event_rf = np.argsort(eff_frame)
+        argsort_event_rf = np.argsort(eff_frame)[::-1]
         sorted_event_rfs = event_rfs[argsort_event_rf]
 
-        print('***')
-        print(event_rfs, sorted_event_rfs)
-        for event_rf in event_rfs:
+        lr = self.weights_lr
 
-            self.rfs[event_rf, nnz_input] = self.rfs[event_rf, nnz_input] + self.weights_lr
-            self.rfs[event_rf, nz_input] = self.rfs[event_rf, nz_input] - self.weights_lr
+        input_tmp = input_exp_1.copy()
+        nnz_input = np.nonzero(input_tmp)[1]
+        nz_input = np.nonzero(input_tmp == 0)[1]
+
+        tmp_p = np.multiply(self.probs, input_exp_1)
+
+        for event_rf in sorted_event_rfs:
+
+            self.rfs[event_rf, nnz_input] = self.rfs[event_rf, nnz_input] + lr
+            self.rfs[event_rf, nz_input] = self.rfs[event_rf, nz_input] - lr
 
         self.rfs[np.nonzero(self.rfs < 0)] = 0
 
@@ -135,8 +140,6 @@ class ExpBrain(object):
         for rf_index in event_rfs:
             self.last_match_ims[rf_index] = input_pixels_1.copy()
 
-        eff_frame_all = np.zeros(self.num_rf)
-        eff_frame_all[event_rfs] = eff_frame[:]
         self.mean_effs = (1.0 - self.mean_eff_lr) * self.mean_effs + self.mean_eff_lr * eff_frame_all
 
     def _bin_pixels_expand_columns(self, arr, num_bins_per_pixel):
@@ -243,7 +246,7 @@ class ExpBrain(object):
                     tmp_im = np.vstack((tmp_im, tmp3, tmp2))
 
             max_dim = max(tmp_im.shape[0], tmp_im.shape[1])
-            imscale = 400 / max_dim  # 0.2: full table, 2.0
+            imscale = 800 / max_dim  # 0.2: full table, 2.0
             tmp_im = cv2.resize(tmp_im, dsize=(0, 0), fx=imscale, fy=imscale, interpolation=cv2.INTER_NEAREST)
 
             ims_list.append(tmp_im)
