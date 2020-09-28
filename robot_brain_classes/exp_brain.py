@@ -50,8 +50,8 @@ class ExpBrain(object):
 
         self.bins_per_pixel = 6
 
-        self.num_rf = 1
-        self.im_dim = 300
+        self.num_rf = 6
+        self.im_dim = 500
 
         assert self.in_r + self.rf_dim < self.im_dim, str((self.in_r + self.rf_dim, self.im_dim))
         assert self.in_c + self.rf_dim < self.im_dim, str((self.in_c + self.rf_dim, self.im_dim))
@@ -83,7 +83,7 @@ class ExpBrain(object):
         #self.prob_corr_lr = 0.0001 * lr_factor * 100
         #self.prob_corr_lr = 0.7
 
-        self.gain_lr = 0.00001 * lr_factor
+        self.gain_lr = 0.0  #0.00001 * lr_factor
 
         self.threshold = 127.0
 
@@ -105,12 +105,28 @@ class ExpBrain(object):
         input_arr_1 = input_pixels_1.flatten()[np.newaxis, :]
         input_exp_1 = self._bin_pixels_expand_columns(arr=input_arr_1, num_bins_per_pixel=self.bins_per_pixel)
 
-        # event_rfs = []
+        event_rfs = []
 
-        all_mp = np.multiply(self.rfs, input_exp_1)
-        mp_sum = np.sum(all_mp, axis=1)
-        match = np.multiply(mp_sum, self.gains)
-        event_rfs = np.nonzero(match >= self.threshold)[0]
+        if 1:
+            remainder = input_exp_1
+
+            for rf_index in range(self.num_rf):
+
+                if rf_index == 0 or (rf_index == 1 and self.t > 50000) or (rf_index == 2 and self.t > 100000) or (rf_index == 3 and self.t > 150000) or (rf_index == 4 and self.t > 200000) or (rf_index == 5 and self.t > 250000):
+                    s_mp = np.multiply(self.rfs[rf_index, :], remainder)
+                    s_mp_sum = np.sum(s_mp)
+                    match = s_mp_sum * self.gains[rf_index]
+
+                    if match >= self.threshold:
+                        event_rfs.append(rf_index)
+                        remainder = remainder - np.multiply(self.probs[rf_index, :], input_exp_1)
+                    self.last_remainder_ims[rf_index] = remainder.copy()
+
+        else:
+            all_mp = np.multiply(self.rfs, input_exp_1)
+            mp_sum = np.sum(all_mp, axis=1)
+            match = np.multiply(mp_sum, self.gains)
+            event_rfs = np.nonzero(match >= self.threshold)[0]
 
         if 0:
 
@@ -203,15 +219,10 @@ class ExpBrain(object):
 
         # tmp_p = np.multiply(self.probs, input_exp_1)
 
-        remainder = input_exp_1
-
         for event_rf in sorted_event_rfs:
-
-            self.rfs[event_rf, nnz_input] = self.rfs[event_rf, nnz_input] + lr
-            self.rfs[event_rf, nz_input] = self.rfs[event_rf, nz_input] - lr
-
-            remainder = remainder - np.multiply(self.probs[event_rf, :], input_exp_1)
-            self.last_remainder_ims[event_rf] = remainder.copy()
+            if event_rf == 0 or (event_rf == 1 and self.t > 50000) or (event_rf == 2 and self.t > 100000) or (rf_index == 3 and self.t > 150000) or (rf_index == 4 and self.t > 200000) or (rf_index == 5 and self.t > 250000):
+                self.rfs[event_rf, nnz_input] = self.rfs[event_rf, nnz_input] + lr
+                self.rfs[event_rf, nz_input] = self.rfs[event_rf, nz_input] - lr
 
         # for rf_index in range(self.num_rf):
         #     if rf_index in event_rfs:
