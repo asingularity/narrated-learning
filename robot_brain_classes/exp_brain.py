@@ -74,7 +74,7 @@ class ExpBrain(object):
             self.last_match_ims.append(None)
             self.last_remainder_ims.append(None)
 
-        lr_factor = 1.0
+        lr_factor = 5.0
 
         self.prob_lr = 0.0001 * lr_factor
         self.mean_eff_lr = 0.00001 * lr_factor
@@ -83,7 +83,7 @@ class ExpBrain(object):
         #self.prob_corr_lr = 0.0001 * lr_factor * 100
         #self.prob_corr_lr = 0.7
 
-        self.gain_lr = 0.0  #0.00001 * lr_factor
+        self.gain_lr = 0.01  #0.00001 * lr_factor
 
         self.threshold = 127.0
 
@@ -106,6 +106,7 @@ class ExpBrain(object):
         input_exp_1 = self._bin_pixels_expand_columns(arr=input_arr_1, num_bins_per_pixel=self.bins_per_pixel)
 
         event_rfs = []
+        self.rf_inputs = []
 
         if 1:
             remainder = input_exp_1
@@ -113,9 +114,10 @@ class ExpBrain(object):
             for rf_index in range(self.num_rf):
 
                 if rf_index == 0 or (rf_index == 1 and self.t > 50000) or (rf_index == 2 and self.t > 100000) or (rf_index == 3 and self.t > 150000) or (rf_index == 4 and self.t > 200000) or (rf_index == 5 and self.t > 250000):
+                    self.rf_inputs.append(remainder.copy())
                     s_mp = np.multiply(self.rfs[rf_index, :], remainder)
                     s_mp_sum = np.sum(s_mp)
-                    match = s_mp_sum * self.gains[rf_index]
+                    match = s_mp_sum   # * self.gains[rf_index]
 
                     if match >= self.threshold:
                         event_rfs.append(rf_index)
@@ -198,6 +200,7 @@ class ExpBrain(object):
         self.last_event_time[event_rfs] = self.t
         self.gains[np.nonzero(self.t - self.last_event_time > 100)] *= (1.0 + self.gain_lr)
         self.gains[event_rfs] = 1.0
+        self.gains[self.gains > 1000] = 1000
 
         eff_frame_p = np.sum(np.multiply(self.probs[event_rfs], input_exp_1), axis=1)
         eff_frame_n = np.sum(np.multiply(self.probs[event_rfs], input_exp_1 == 0), axis=1)
@@ -221,8 +224,13 @@ class ExpBrain(object):
 
         for event_rf in sorted_event_rfs:
             if event_rf == 0 or (event_rf == 1 and self.t > 50000) or (event_rf == 2 and self.t > 100000) or (rf_index == 3 and self.t > 150000) or (rf_index == 4 and self.t > 200000) or (rf_index == 5 and self.t > 250000):
-                self.rfs[event_rf, nnz_input] = self.rfs[event_rf, nnz_input] + lr
-                self.rfs[event_rf, nz_input] = self.rfs[event_rf, nz_input] - lr
+                rf_input = self.rf_inputs[event_rf]
+
+                nnz_rf_input = np.nonzero(rf_input)[1]
+                nz_rf_input = np.nonzero(rf_input==0)[1]
+
+                self.rfs[event_rf, nnz_input] = self.rfs[event_rf, nnz_rf_input] + lr * self.gains[event_rf]
+                self.rfs[event_rf, nz_input] = self.rfs[event_rf, nz_rf_input] - lr * self.gains[event_rf]
 
         # for rf_index in range(self.num_rf):
         #     if rf_index in event_rfs:
@@ -331,7 +339,7 @@ class ExpBrain(object):
     def get_table_ims(self):
         print('mean_effs:', self.mean_effs)
         print(np.amax(self.prob_corr), np.amin(self.prob_corr))
-
+        print(self.gains)
         #print('prob corr:')
         #print(self.prob_corr)
 
