@@ -93,6 +93,10 @@ class ExpBrain(object):
         self.gains = np.ones(self.num_rf)
         self.last_event_time = np.zeros(self.num_rf)
 
+        # reconstruction
+        self.last_input_im = None
+        self.last_reconstruction_im = None
+
     def process_input(self, input_im):
         '''
 
@@ -111,6 +115,8 @@ class ExpBrain(object):
         if 1:
             remainder = input_exp_1
 
+            self.last_input_im = input_pixels_1.copy()
+
             for rf_index in range(self.num_rf):
 
                 if rf_index == 0 or (rf_index == 1 and self.t > 50000) or (rf_index == 2 and self.t > 100000) or (rf_index == 3 and self.t > 150000) or (rf_index == 4 and self.t > 200000) or (rf_index == 5 and self.t > 250000):
@@ -122,6 +128,7 @@ class ExpBrain(object):
                     if match >= self.threshold:
                         event_rfs.append(rf_index)
                         remainder = remainder - np.multiply(self.probs[rf_index, :], input_exp_1)
+
                     self.last_remainder_ims[rf_index] = remainder.copy()
 
         else:
@@ -222,6 +229,8 @@ class ExpBrain(object):
 
         # tmp_p = np.multiply(self.probs, input_exp_1)
 
+        reconstruction = np.zeros(self.input_feature_len)
+
         for event_rf in sorted_event_rfs:
             if event_rf == 0 or (event_rf == 1 and self.t > 50000) or (event_rf == 2 and self.t > 100000) or (rf_index == 3 and self.t > 150000) or (rf_index == 4 and self.t > 200000) or (rf_index == 5 and self.t > 250000):
                 rf_input = self.rf_inputs[event_rf]
@@ -231,6 +240,11 @@ class ExpBrain(object):
 
                 self.rfs[event_rf, nnz_input] = self.rfs[event_rf, nnz_rf_input] + lr * self.gains[event_rf]
                 self.rfs[event_rf, nz_input] = self.rfs[event_rf, nz_rf_input] - lr * self.gains[event_rf]
+
+                reconstruction = np.maximum(reconstruction, self.probs[event_rf, :])
+
+
+        self.last_reconstruction_im = reconstruction
 
         # for rf_index in range(self.num_rf):
         #     if rf_index in event_rfs:
@@ -412,6 +426,20 @@ class ExpBrain(object):
 
             ims_list.append(tmp_im)
             ims_names_list.append('probs_v, probs_w, last_match, rem_v, rem_w')
+
+
+            arr, weights = self._collapse_binned_columns_to_pixels(arr_exp=self.last_reconstruction_im[np.newaxis, :], num_bins_per_pixel=self.bins_per_pixel)
+            imr0 = arr[0, :].reshape((self.rf_dim, self.rf_dim))
+            imr1 = weights[0, :].reshape((self.rf_dim, self.rf_dim))
+
+            tmp_imr = np.hstack((self.last_input_im, imr0, imr1))
+
+            max_dim = max(tmp_imr.shape[0], tmp_imr.shape[1])
+            imscale = self.im_dim / max_dim  # 0.2: full table, 2.0
+            tmp_imr = cv2.resize(tmp_imr, dsize=(0, 0), fx=imscale, fy=imscale, interpolation=cv2.INTER_NEAREST)
+
+            ims_list.append(tmp_imr)
+            ims_names_list.append('reconstruction')
 
         return ims_list, ims_names_list
 
