@@ -37,8 +37,8 @@ class ExpBrain(object):
     def __init__(self, params):
         #self.im_dim = params['image_dim_NxN_pixels']
 
-        self.im_dim = 800
-        self.ims_scale_pixels = self.im_dim
+        self.im_dim = 1500
+        #self.ims_scale_pixels = self.im_dim
 
         self.otm = OneTimeMessages()
 
@@ -57,8 +57,8 @@ class ExpBrain(object):
 
         self.bins_per_pixel = 6
 
-        self.num_rf = 20
-        self.error_threshold = 100  # TODO experimenting with 50
+        self.num_rf = 40
+        self.error_threshold = 50  # TODO experimenting with 50
 
         assert self.in_r + self.rf_dim < self.im_dim, str((self.in_r + self.rf_dim, self.im_dim))
         assert self.in_c + self.rf_dim < self.im_dim, str((self.in_c + self.rf_dim, self.im_dim))
