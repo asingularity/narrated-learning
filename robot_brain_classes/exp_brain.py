@@ -68,6 +68,9 @@ class ExpBrain(object):
         self.probs = np.zeros((self.num_rf, self.input_feature_len))
         self.lr = 0.001
 
+        max_time = 100000000
+        self.rf_counts = np.zeros(max_time)
+
     def process_input(self, input_im):
         '''
 
@@ -128,14 +131,16 @@ class ExpBrain(object):
             # update rfs_active
             rfs_active[win_rf_index] = 1
 
-        #print(np.count_nonzero(rfs_active))
+        self.rf_counts[self.t] = np.count_nonzero(rfs_active)
+
+        self.t += 1
 
     def get_table_ims(self):
 
         ims_list = []
         ims_names_list = []
 
-
+        print('mean rf active: ', np.mean(self.rf_counts[max(0, self.t - 200):self.t]))
 
 
         arr, weights = self._collapse_binned_columns_to_pixels(arr_exp=self.probs, num_bins_per_pixel=self.bins_per_pixel)
