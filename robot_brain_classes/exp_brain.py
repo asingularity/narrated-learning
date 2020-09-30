@@ -27,7 +27,226 @@ from math import log
 from utils.one_time_messages import OneTimeMessages
 
 
+
 class ExpBrain(object):
+    '''
+    kWTA, where k is adaptive and based on remainder
+    activations and learning are based on remainder
+    '''
+
+    def __init__(self, params):
+        #self.im_dim = params['image_dim_NxN_pixels']
+
+        self.im_dim = 800
+        self.ims_scale_pixels = self.im_dim
+
+        self.otm = OneTimeMessages()
+
+        self.t = 0
+
+        self.fig = plt.figure(figsize=(40, 20))
+        self.ax = self.fig.add_subplot(1, 1, 1)
+        self.ax.cla()
+        self.ax.get_xaxis().get_major_formatter().set_scientific(False)
+        self.ax.get_yaxis().get_major_formatter().set_scientific(False)
+
+        self.in_r = 50  # 40 # 65 #50 # 60
+        self.in_c = 64  # 84 # 76 #64 # 64
+
+        self.rf_dim = 16
+
+        self.bins_per_pixel = 6
+
+        self.num_rf = 20
+        self.error_threshold = 100  # TODO experimenting with 50
+
+        assert self.in_r + self.rf_dim < self.im_dim, str((self.in_r + self.rf_dim, self.im_dim))
+        assert self.in_c + self.rf_dim < self.im_dim, str((self.in_c + self.rf_dim, self.im_dim))
+
+        self.input_feature_len = self.rf_dim * self.rf_dim * self.bins_per_pixel
+
+        self.probs = np.zeros((self.num_rf, self.input_feature_len))
+        self.lr = 0.001
+
+    def process_input(self, input_im):
+        '''
+
+        :param input_im:
+        :return:
+        '''
+
+        input_pixels_1 = input_im[self.in_r:self.in_r + self.rf_dim, self.in_c:self.in_c + self.rf_dim]
+        input_arr_1 = input_pixels_1.flatten()[np.newaxis, :]
+        input_exp_1 = self._bin_pixels_expand_columns(arr=input_arr_1, num_bins_per_pixel=self.bins_per_pixel)
+
+        error = np.sum(input_exp_1)
+
+        #print('***********************************')
+        #print('ERROR', error)
+        #print()
+
+        error_threshold = self.error_threshold
+
+        remainder = input_exp_1.copy()
+
+        rfs_active = np.zeros(self.num_rf)
+
+        while (error > error_threshold) and np.count_nonzero(rfs_active) < self.num_rf:
+            # do WTA over all RFs that have no event yet this frame
+            #   use prob, applied on remainder
+            #   include subtraction that we do to count EV
+
+            # TODO if remainder is not all-or-None, how do we quantify eff_frame?
+            # TODO  i.e. equivalent to having not all binary inputs
+            # for now arbitrary threshold of 0.5 prob means "explained"?
+
+            #print(np.amin(self.probs), np.amax(self.probs), np.amin(remainder), np.amax(remainder))
+            match = np.multiply(self.probs, remainder)
+            #print(self.probs.shape, remainder.shape, match.shape, np.amin(match), np.amax(match))
+            eff_frame_p = np.sum(match, axis=1)
+            eff_frame_n = np.sum(np.multiply(self.probs, 1.0 - remainder), axis=1)
+            eff_frame = eff_frame_p - eff_frame_n
+
+            inactive_rfs = np.nonzero(rfs_active==0)[0]
+            win_rf_index = inactive_rfs[np.argmax(eff_frame[inactive_rfs])]
+
+            #print(win_rf_index)
+
+            # winner learns (updates prob) on remainder
+            #   alternative: learns on whole image, not remainder
+            self.probs[win_rf_index, :] = (1.0 - self.lr) * self.probs[win_rf_index, :] + self.lr * remainder[0, :]
+
+            # recalculate new remainder
+            remainder = remainder - match[win_rf_index, :]
+            remainder[remainder < 0] = 0
+
+            # set error for next loop
+            error = np.sum(remainder)
+
+            #print(error)
+
+            # update rfs_active
+            rfs_active[win_rf_index] = 1
+
+        #print(np.count_nonzero(rfs_active))
+
+    def get_table_ims(self):
+
+        ims_list = []
+        ims_names_list = []
+
+
+
+
+        arr, weights = self._collapse_binned_columns_to_pixels(arr_exp=self.probs, num_bins_per_pixel=self.bins_per_pixel)
+
+        tmp_im = None
+
+        for r_tmp in range(weights.shape[0]):
+            #weights[r_tmp, :] = (weights[r_tmp, :] - np.amin(weights[r_tmp, :])) * 1.0 / (np.amax(weights[r_tmp, :]) - np.amin(weights[r_tmp, :]))
+
+            im0 = arr[r_tmp, :].reshape((self.rf_dim, self.rf_dim))
+            im1 = weights[r_tmp, :].reshape((self.rf_dim, self.rf_dim))
+
+            tmp2 = np.hstack((im0, im1))
+
+            if tmp_im is None:
+                tmp_im = tmp2.copy()
+            else:
+                tmp3 = np.zeros((2, tmp_im.shape[1]))
+                tmp_im = np.vstack((tmp_im, tmp3, tmp2))
+
+        max_dim = max(tmp_im.shape[0], tmp_im.shape[1])
+        imscale = self.im_dim / max_dim  # 0.2: full table, 2.0
+        tmp_im = cv2.resize(tmp_im, dsize=(0, 0), fx=imscale, fy=imscale, interpolation=cv2.INTER_NEAREST)
+
+        ims_list.append(tmp_im)
+        ims_names_list.append('probs_v, probs_w')
+
+
+
+        return ims_list, ims_names_list
+
+    def _bin_pixels_expand_columns(self, arr, num_bins_per_pixel):
+        '''
+
+        keep number of rows, expand in number of columns
+        construct binary image: (0.0 or 1.0) per bin
+
+        https://stackoverflow.com/questions/6163334/binning-data-in-python-with-scipy-numpy
+            use: digitize, or histogram
+
+        https://het.as.utexas.edu/HET/Software/Numpy/reference/generated/numpy.digitize.html
+            digitize: returns index of bin to which each pixel belongs
+            expanded array will have a set of bins per pixel, in the expanded columns
+
+        :param arr:
+        :return:
+        '''
+        # print('***')
+        # print('arr', arr.shape)
+
+        bins = np.linspace(0, 1 + 1e-9, num_bins_per_pixel + 1)  # TODO to fix binning add 1e-9 to 1 in second argument!
+        # print('bins', bins.shape, bins)
+        bin_indices = np.digitize(arr, bins) - 1  # same shape as arr; which bin, per pixel
+        # print('bin_indices', bin_indices.shape, bin_indices)
+        arr_exp = np.zeros((arr.shape[0], arr.shape[1] * num_bins_per_pixel), np.float32)
+        # print('arr_exp', arr_exp.shape)
+
+        # term1 = np.tile(self.num_bins_per_pixel * np.arange(arr.shape[1]), 2)  # can't remember why this is np.tile(..., 2)
+        term1 = num_bins_per_pixel * np.arange(arr.shape[1])  # only works if arr rows is 1?
+        term2 = bin_indices.flatten()
+        # print('term1', term1.shape, term1)
+        # print('term2', term2.shape, term2)
+        c = term1 + term2
+        r = np.repeat(np.arange(arr.shape[0]), arr.shape[1])
+
+        arr_exp[r, c] = 1.0
+
+        return arr_exp
+
+    def _collapse_binned_columns_to_pixels(self, arr_exp, num_bins_per_pixel):
+        '''
+
+        non-trivial: arr_exp may no longer be binary; need to figure out how to collapse multiple values of different weight to one pixel:
+            weighted average? take max value?
+
+        :param arr_exp:
+        :return:
+        '''
+
+        num_pixels = int((arr_exp.shape[1] / num_bins_per_pixel))
+        num_rows = arr_exp.shape[0]
+
+        # reshape so we can take max along one dim
+        #   ie each row in this matrix is a pixel, temporarily
+        # then reshape back
+
+        tmp = arr_exp.reshape((num_rows * num_pixels, num_bins_per_pixel))
+
+        bins = np.linspace(0, 1 + 1e-9, num_bins_per_pixel + 1)
+
+        # max val for display:
+        max_index = np.argmax(tmp, axis=1)
+        max_vals = bins[max_index]
+
+        weights = tmp[np.arange(tmp.shape[0]), max_index]
+
+        # print(max_vals.shape, weights.shape)
+
+        # weighted mean val for display:
+        # tmp1 = np.multiply(tmp, bins[np.newaxis, 0:num_bins_per_pixel])
+        # tmp2 = np.sum(tmp1, axis=1)  # 65536
+        # tmp3 = np.divide(tmp2, np.sum(tmp, axis=1))
+        # max_vals = tmp3
+
+        weights = weights.reshape(num_rows, num_pixels)
+        arr = max_vals.reshape(num_rows, num_pixels)
+
+        return arr, weights
+
+
+class ExpBrainMultiWeightedPartialWithReconstruction(object):
     def __init__(self, params):
         self.im_dim = params['image_dim_NxN_pixels']
 
