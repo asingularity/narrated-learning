@@ -82,6 +82,7 @@ class ExpBrain(object):
 
         self.last_input_im = None
         self.last_reconstruction_im = None
+        self.last_remainder_im = None
 
         # plot error
         self.last_plot_time = time.time()
@@ -154,9 +155,10 @@ class ExpBrain(object):
             # recalculate new remainder
             # TODO this is the part that is problematic:
             remainder = remainder - mp_p[win_rf_index, :]  # results in strange k-WTA, but suboptimal, and requiring higher error threshold
-            #remainder = remainder - (mp_p[win_rf_index, :] > 0)  # results in single-WTA
+            #remainder = remainder - (mp_p[win_rf_index, :] > 0)  # results in single-WTA; doesnt work for bouncing balls at all (single rf gray)
+            #remainder = remainder - self.probs[win_rf_index, :]  # k-wta also, same as mp_p one
             #remainder = remainder - (self.probs[win_rf_index, :] > 0)  # also results in single-WTA
-            #remainder = remainder - self.probs[win_rf_index, :]
+
 
             #remainder = np.minimum(remainder, match[win_rf_index, :])
 
@@ -176,6 +178,8 @@ class ExpBrain(object):
 
         reconstruction[reconstruction > 1] = 1
         self.last_reconstruction_im = reconstruction.copy()
+
+        self.last_remainder_im = remainder.copy()
 
         rec_error = np.sum(np.abs(reconstruction - input_exp_1))
 
@@ -237,8 +241,14 @@ class ExpBrain(object):
         im0 = rec_im[0, :].reshape((self.rf_dim, self.rf_dim))
         im1 = rec_w[0, :].reshape((self.rf_dim, self.rf_dim))
 
-        ims_list.append(np.hstack((self.last_input_im, np.zeros((self.rf_dim, 2)), im0, np.zeros((self.rf_dim, 2)), im1)))
-        ims_names_list.append('input, reconstruct')
+        rem_im, rem_w = self._collapse_binned_columns_to_pixels(arr_exp=self.last_remainder_im, num_bins_per_pixel=self.bins_per_pixel)
+        imr0 = rem_im[0, :].reshape((self.rf_dim, self.rf_dim))
+        imr1 = rem_w[0, :].reshape((self.rf_dim, self.rf_dim))
+
+        ims_list.append(np.hstack((self.last_input_im,
+                                   np.zeros((self.rf_dim, 2)), im0, np.zeros((self.rf_dim, 2)), im1,
+                                   np.zeros((self.rf_dim, 2)), imr0, np.zeros((self.rf_dim, 2)), imr1,)))
+        ims_names_list.append('input, reconstruct, remainder')
 
         return ims_list, ims_names_list
 
