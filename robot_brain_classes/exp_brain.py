@@ -36,6 +36,7 @@ class ExpBrain(object):
 
     def __init__(self, params):
         #self.im_dim = params['image_dim_NxN_pixels']
+        self.use_full_input = params['use_full_input']
 
         self.im_dim = 1500
         #self.ims_scale_pixels = self.im_dim
@@ -53,7 +54,7 @@ class ExpBrain(object):
         self.in_r = 50  # 40 # 65 #50 # 60
         self.in_c = 64  # 84 # 76 #64 # 64
 
-        self.rf_dim = 8
+        self.rf_dim = 16
 
         self.bins_per_pixel = 6
 
@@ -61,7 +62,7 @@ class ExpBrain(object):
         # self.error_threshold = 50 / 8.
 
         self.num_rf = 40
-        self.error_threshold = 12.5
+        self.error_threshold = 50  # 12.5 / 2
 
         assert self.in_r + self.rf_dim < self.im_dim, str((self.in_r + self.rf_dim, self.im_dim))
         assert self.in_c + self.rf_dim < self.im_dim, str((self.in_c + self.rf_dim, self.im_dim))
@@ -84,7 +85,7 @@ class ExpBrain(object):
 
         # plot error
         self.last_plot_time = time.time()
-        self.plot_interval = 10
+        self.plot_interval = 30
 
 
 
@@ -96,7 +97,6 @@ class ExpBrain(object):
         '''
 
         # TODO make this a param; this is for the full-frame input 16x16 that matches RFs size
-        #input_pixels_1 = input_im
 
         # if self.t == 40000:
         #     print()
@@ -105,7 +105,11 @@ class ExpBrain(object):
         #
         #     self.error_threshold = self.error_threshold / 2.0
 
-        input_pixels_1 = input_im[self.in_r:self.in_r + self.rf_dim, self.in_c:self.in_c + self.rf_dim]
+        if self.use_full_input:
+            input_pixels_1 = input_im
+        else:
+            input_pixels_1 = input_im[self.in_r:self.in_r + self.rf_dim, self.in_c:self.in_c + self.rf_dim]
+
         input_arr_1 = input_pixels_1.flatten()[np.newaxis, :]
         input_exp_1 = self._bin_pixels_expand_columns(arr=input_arr_1, num_bins_per_pixel=self.bins_per_pixel)
 
@@ -129,10 +133,12 @@ class ExpBrain(object):
             #   include subtraction that we do to count EV
 
             #print(np.amin(self.probs), np.amax(self.probs), np.amin(remainder), np.amax(remainder))
-            match = np.multiply(self.probs, remainder)
-            #print(self.probs.shape, remainder.shape, match.shape, np.amin(match), np.amax(match))
-            eff_frame_p = np.sum(match, axis=1)
-            eff_frame_n = np.sum(np.multiply(self.probs, 1.0 - remainder), axis=1)
+
+            mp_p = np.multiply(self.probs, remainder)
+            mp_n = np.multiply(self.probs, 1.0 - remainder)
+
+            eff_frame_p = np.sum(mp_p, axis=1)
+            eff_frame_n = np.sum(mp_n, axis=1)
             eff_frame = eff_frame_p - eff_frame_n
 
             inactive_rfs = np.nonzero(rfs_active==0)[0]
@@ -143,9 +149,17 @@ class ExpBrain(object):
             # winner learns (updates prob) on remainder
             #   alternative: learns on whole image, not remainder
             self.probs[win_rf_index, :] = (1.0 - self.lr) * self.probs[win_rf_index, :] + self.lr * remainder[0, :]
+            #self.probs[win_rf_index, :] = (1.0 - self.lr) * self.probs[win_rf_index, :] + self.lr * input_exp_1[0, :]
 
             # recalculate new remainder
-            remainder = remainder - match[win_rf_index, :]
+            # TODO this is the part that is problematic:
+            remainder = remainder - mp_p[win_rf_index, :]  # results in strange k-WTA, but suboptimal, and requiring higher error threshold
+            #remainder = remainder - (mp_p[win_rf_index, :] > 0)  # results in single-WTA
+            #remainder = remainder - (self.probs[win_rf_index, :] > 0)  # also results in single-WTA
+            #remainder = remainder - self.probs[win_rf_index, :]
+
+            #remainder = np.minimum(remainder, match[win_rf_index, :])
+
             remainder[remainder < 0] = 0
 
             # reconstruction

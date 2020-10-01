@@ -19,7 +19,7 @@ USERNAME = 'intec'
 
 COLOR_ENABLED = False
 
-USE_VIDEO_IN = True
+USE_VIDEO_IN = False
 
 if USE_VIDEO_IN:
     IM_DIM = 128  # pixels, width & height
@@ -95,6 +95,7 @@ def get_brain_params():
 
     params = {
         'image_dim_NxN_pixels': IM_DIM,
+        'use_full_input': not USE_VIDEO_IN
     }
 
     return params
@@ -109,7 +110,7 @@ def get_visualizer_params():
         'image_display_secs_slow': 0.01,  # 0: every frame
         'waitKey_time_slow': 1,  # 1, 100, 5000  #
         'scale_camera_factor': 1,
-        'auto_switch_to_slow_disp_time': 500000,  # TODO re-introduce later for when training is done
+        'auto_switch_to_slow_disp_time': None, #50000,  # TODO re-introduce later for when training is done
         'init_fast': True  # start with "fast" display
     }
     return params
