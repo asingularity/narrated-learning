@@ -17,11 +17,14 @@ from math import pi
 MAX_HISTORY_LENGTH = 10600000 + 1
 USERNAME = 'intec'
 
-IM_DIM = 128  # pixels, width & height
-
 COLOR_ENABLED = False
 
 USE_VIDEO_IN = True
+
+if USE_VIDEO_IN:
+    IM_DIM = 128  # pixels, width & height
+else:
+    IM_DIM = 16  # pixels, width & height
 
 
 # uses: IM_DIM
@@ -104,7 +107,7 @@ def get_visualizer_params():
         'image_display_secs_fast': 0.2, #0.2,
         'waitKey_time_fast': 1,  # 1, 100, 5000
         'image_display_secs_slow': 0,  # 0: every frame
-        'waitKey_time_slow': 1,  # 1, 100, 5000  #
+        'waitKey_time_slow': 100,  # 1, 100, 5000  #
         'scale_camera_factor': 1,
         'auto_switch_to_slow_disp_time': None,  # TODO re-introduce later for when training is done
         'init_fast': True  # start with "fast" display

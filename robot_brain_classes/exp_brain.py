@@ -71,6 +71,8 @@ class ExpBrain(object):
         max_time = 100000000
         self.rf_counts = np.zeros(max_time)
 
+        self.last_input_im = None
+
     def process_input(self, input_im):
         '''
 
@@ -78,9 +80,14 @@ class ExpBrain(object):
         :return:
         '''
 
+        # TODO make this a param; this is for the full-frame input 16x16 that matches RFs size
+        #input_pixels_1 = input_im
+
         input_pixels_1 = input_im[self.in_r:self.in_r + self.rf_dim, self.in_c:self.in_c + self.rf_dim]
         input_arr_1 = input_pixels_1.flatten()[np.newaxis, :]
         input_exp_1 = self._bin_pixels_expand_columns(arr=input_arr_1, num_bins_per_pixel=self.bins_per_pixel)
+
+        self.last_input_im = input_pixels_1.copy()
 
         error = np.sum(input_exp_1)
 
@@ -98,10 +105,6 @@ class ExpBrain(object):
             # do WTA over all RFs that have no event yet this frame
             #   use prob, applied on remainder
             #   include subtraction that we do to count EV
-
-            # TODO if remainder is not all-or-None, how do we quantify eff_frame?
-            # TODO  i.e. equivalent to having not all binary inputs
-            # for now arbitrary threshold of 0.5 prob means "explained"?
 
             #print(np.amin(self.probs), np.amax(self.probs), np.amin(remainder), np.amax(remainder))
             match = np.multiply(self.probs, remainder)
@@ -168,7 +171,8 @@ class ExpBrain(object):
         ims_list.append(tmp_im)
         ims_names_list.append('probs_v, probs_w')
 
-
+        ims_list.append(self.last_input_im)
+        ims_names_list.append('input')
 
         return ims_list, ims_names_list
 
