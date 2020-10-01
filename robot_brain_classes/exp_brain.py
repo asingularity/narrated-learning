@@ -57,8 +57,11 @@ class ExpBrain(object):
 
         self.bins_per_pixel = 6
 
+        # self.num_rf = 80
+        # self.error_threshold = 50 / 8.
+
         self.num_rf = 40
-        self.error_threshold = 50 / 4.  # TODO experimenting with 50
+        self.error_threshold = 12.5
 
         assert self.in_r + self.rf_dim < self.im_dim, str((self.in_r + self.rf_dim, self.im_dim))
         assert self.in_c + self.rf_dim < self.im_dim, str((self.in_c + self.rf_dim, self.im_dim))
@@ -69,10 +72,21 @@ class ExpBrain(object):
         self.lr = 0.001
 
         max_time = 100000000
+
+        self.mean_fr = 10000
         self.rf_counts = np.zeros(max_time)
+        self.mean_rf_counts = np.zeros(max_time)
+        self.rec_error = np.zeros(max_time)
+        self.mean_rec_error = np.zeros(max_time)
 
         self.last_input_im = None
         self.last_reconstruction_im = None
+
+        # plot error
+        self.last_plot_time = time.time()
+        self.plot_interval = 10
+
+
 
     def process_input(self, input_im):
         '''
@@ -83,6 +97,13 @@ class ExpBrain(object):
 
         # TODO make this a param; this is for the full-frame input 16x16 that matches RFs size
         #input_pixels_1 = input_im
+
+        # if self.t == 40000:
+        #     print()
+        #     print('REDUCING ERROR THRESHOLD')
+        #     print()
+        #
+        #     self.error_threshold = self.error_threshold / 2.0
 
         input_pixels_1 = input_im[self.in_r:self.in_r + self.rf_dim, self.in_c:self.in_c + self.rf_dim]
         input_arr_1 = input_pixels_1.flatten()[np.newaxis, :]
@@ -142,8 +163,13 @@ class ExpBrain(object):
         reconstruction[reconstruction > 1] = 1
         self.last_reconstruction_im = reconstruction.copy()
 
-        self.rf_counts[self.t] = np.count_nonzero(rfs_active)
+        rec_error = np.sum(np.abs(reconstruction - input_exp_1))
 
+        self.rec_error[self.t] = rec_error
+        self.mean_rec_error[self.t] = np.mean(self.rec_error[max(0, self.t - self.mean_fr):self.t])
+
+        self.rf_counts[self.t] = np.count_nonzero(rfs_active)
+        self.mean_rf_counts[self.t] = np.mean(self.rf_counts[max(0, self.t - self.mean_fr):self.t])
         self.t += 1
 
     def get_table_ims(self):
@@ -153,6 +179,20 @@ class ExpBrain(object):
 
         #print('mean rf active: ', np.mean(self.rf_counts[max(0, self.t - 200):self.t]))
 
+        if time.time() > self.last_plot_time + self.plot_interval:
+            print()
+            print('Making plot of state vars...')
+            self.ax.cla()
+            self.ax.plot(self.rec_error[0:self.t], color='r')
+            self.ax.plot(self.mean_rec_error[0:self.t], color='b')
+            self.fig.savefig("rec_error.png", dpi=100)
+
+            self.ax.cla()
+            self.ax.plot(self.rf_counts[0:self.t], color='r')
+            self.ax.plot(self.mean_rf_counts[0:self.t], color='b')
+            self.fig.savefig("rf_counts.png", dpi=100)
+
+            self.last_plot_time = time.time()
 
         arr, weights = self._collapse_binned_columns_to_pixels(arr_exp=self.probs, num_bins_per_pixel=self.bins_per_pixel)
 
