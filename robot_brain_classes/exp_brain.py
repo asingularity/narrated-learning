@@ -53,12 +53,12 @@ class ExpBrain(object):
         self.in_r = 50  # 40 # 65 #50 # 60
         self.in_c = 64  # 84 # 76 #64 # 64
 
-        self.rf_dim = 16
+        self.rf_dim = 8
 
         self.bins_per_pixel = 6
 
         self.num_rf = 40
-        self.error_threshold = 50  # TODO experimenting with 50
+        self.error_threshold = 50 / 4.  # TODO experimenting with 50
 
         assert self.in_r + self.rf_dim < self.im_dim, str((self.in_r + self.rf_dim, self.im_dim))
         assert self.in_c + self.rf_dim < self.im_dim, str((self.in_c + self.rf_dim, self.im_dim))
@@ -128,7 +128,8 @@ class ExpBrain(object):
             remainder[remainder < 0] = 0
 
             # reconstruction
-            reconstruction = reconstruction + self.probs[win_rf_index, :]
+            #reconstruction = reconstruction + self.probs[win_rf_index, :]
+            reconstruction = np.maximum(reconstruction, self.probs[win_rf_index, :])
 
             # set error for next loop
             error = np.sum(remainder)
@@ -150,7 +151,7 @@ class ExpBrain(object):
         ims_list = []
         ims_names_list = []
 
-        print('mean rf active: ', np.mean(self.rf_counts[max(0, self.t - 200):self.t]))
+        #print('mean rf active: ', np.mean(self.rf_counts[max(0, self.t - 200):self.t]))
 
 
         arr, weights = self._collapse_binned_columns_to_pixels(arr_exp=self.probs, num_bins_per_pixel=self.bins_per_pixel)

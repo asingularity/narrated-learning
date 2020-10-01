@@ -106,10 +106,10 @@ def get_visualizer_params():
         'fps_display_interval': 6,
         'image_display_secs_fast': 0.2, #0.2,
         'waitKey_time_fast': 1,  # 1, 100, 5000
-        'image_display_secs_slow': 0,  # 0: every frame
-        'waitKey_time_slow': 100,  # 1, 100, 5000  #
+        'image_display_secs_slow': 0.01,  # 0: every frame
+        'waitKey_time_slow': 1,  # 1, 100, 5000  #
         'scale_camera_factor': 1,
-        'auto_switch_to_slow_disp_time': None,  # TODO re-introduce later for when training is done
+        'auto_switch_to_slow_disp_time': 500000,  # TODO re-introduce later for when training is done
         'init_fast': True  # start with "fast" display
     }
     return params
