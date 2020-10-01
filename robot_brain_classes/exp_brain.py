@@ -62,7 +62,7 @@ class ExpBrain(object):
         # self.error_threshold = 50 / 8.
 
         self.num_rf = 40
-        self.error_threshold = 50  # 12.5 / 2
+        self.error_threshold = 50  # 50  # 12.5 / 2
 
         assert self.in_r + self.rf_dim < self.im_dim, str((self.in_r + self.rf_dim, self.im_dim))
         assert self.in_c + self.rf_dim < self.im_dim, str((self.in_c + self.rf_dim, self.im_dim))
@@ -88,7 +88,8 @@ class ExpBrain(object):
         self.last_plot_time = time.time()
         self.plot_interval = 30
 
-
+        self.last_info = None
+        self.last_eff_frames = np.zeros(self.num_rf)
 
     def process_input(self, input_im):
         '''
@@ -128,6 +129,9 @@ class ExpBrain(object):
         reconstruction = np.zeros((1, self.input_feature_len))
         rfs_active = np.zeros(self.num_rf)
 
+        self.last_eff_frames[:] = np.nan
+
+        loop = 0
         while (error > error_threshold) and np.count_nonzero(rfs_active) < self.num_rf:
             # do WTA over all RFs that have no event yet this frame
             #   use prob, applied on remainder
@@ -145,6 +149,8 @@ class ExpBrain(object):
             inactive_rfs = np.nonzero(rfs_active==0)[0]
             win_rf_index = inactive_rfs[np.argmax(eff_frame[inactive_rfs])]
 
+            self.last_eff_frames[win_rf_index] = eff_frame[win_rf_index]
+
             #print(win_rf_index)
 
             # winner learns (updates prob) on remainder
@@ -155,6 +161,7 @@ class ExpBrain(object):
             # recalculate new remainder
             # TODO this is the part that is problematic:
             remainder = remainder - mp_p[win_rf_index, :]  # results in strange k-WTA, but suboptimal, and requiring higher error threshold
+
             #remainder = remainder - (mp_p[win_rf_index, :] > 0)  # results in single-WTA; doesnt work for bouncing balls at all (single rf gray)
             #remainder = remainder - self.probs[win_rf_index, :]  # k-wta also, same as mp_p one
             #remainder = remainder - (self.probs[win_rf_index, :] > 0)  # also results in single-WTA
@@ -176,10 +183,14 @@ class ExpBrain(object):
             # update rfs_active
             rfs_active[win_rf_index] = 1
 
-        reconstruction[reconstruction > 1] = 1
-        self.last_reconstruction_im = reconstruction.copy()
+            # if loop == 0:
+            #     self.last_remainder_im = remainder.copy()
+            loop += 1
 
         self.last_remainder_im = remainder.copy()
+
+        reconstruction[reconstruction > 1] = 1
+        self.last_reconstruction_im = reconstruction.copy()
 
         rec_error = np.sum(np.abs(reconstruction - input_exp_1))
 
@@ -195,7 +206,9 @@ class ExpBrain(object):
         ims_list = []
         ims_names_list = []
 
+        # print (self.last_info)
         #print('mean rf active: ', np.mean(self.rf_counts[max(0, self.t - 200):self.t]))
+        print(self.last_eff_frames)
 
         if time.time() > self.last_plot_time + self.plot_interval:
             print()
