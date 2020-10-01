@@ -72,6 +72,7 @@ class ExpBrain(object):
         self.rf_counts = np.zeros(max_time)
 
         self.last_input_im = None
+        self.last_reconstruction_im = None
 
     def process_input(self, input_im):
         '''
@@ -98,7 +99,7 @@ class ExpBrain(object):
         error_threshold = self.error_threshold
 
         remainder = input_exp_1.copy()
-
+        reconstruction = np.zeros((1, self.input_feature_len))
         rfs_active = np.zeros(self.num_rf)
 
         while (error > error_threshold) and np.count_nonzero(rfs_active) < self.num_rf:
@@ -126,6 +127,9 @@ class ExpBrain(object):
             remainder = remainder - match[win_rf_index, :]
             remainder[remainder < 0] = 0
 
+            # reconstruction
+            reconstruction = reconstruction + self.probs[win_rf_index, :]
+
             # set error for next loop
             error = np.sum(remainder)
 
@@ -133,6 +137,9 @@ class ExpBrain(object):
 
             # update rfs_active
             rfs_active[win_rf_index] = 1
+
+        reconstruction[reconstruction > 1] = 1
+        self.last_reconstruction_im = reconstruction.copy()
 
         self.rf_counts[self.t] = np.count_nonzero(rfs_active)
 
@@ -171,8 +178,12 @@ class ExpBrain(object):
         ims_list.append(tmp_im)
         ims_names_list.append('probs_v, probs_w')
 
-        ims_list.append(self.last_input_im)
-        ims_names_list.append('input')
+        rec_im, rec_w = self._collapse_binned_columns_to_pixels(arr_exp=self.last_reconstruction_im, num_bins_per_pixel=self.bins_per_pixel)
+        im0 = rec_im[0, :].reshape((self.rf_dim, self.rf_dim))
+        im1 = rec_w[0, :].reshape((self.rf_dim, self.rf_dim))
+
+        ims_list.append(np.hstack((self.last_input_im, np.zeros((self.rf_dim, 2)), im0, np.zeros((self.rf_dim, 2)), im1)))
+        ims_names_list.append('input, reconstruct')
 
         return ims_list, ims_names_list
 
