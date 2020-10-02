@@ -63,6 +63,7 @@ class ExpBrain(object):
 
         self.num_rf = 40  # per layer
         self.layer_start_times = np.array([0, 1, 2, 3]) * 50000
+        #self.layer_start_times = np.array([0, 1]) * 50000
         self.num_layers = self.layer_start_times.shape[0]
 
         # no more error threshold
@@ -86,6 +87,9 @@ class ExpBrain(object):
         self.mean_rf_counts = np.zeros(max_time)
         self.rec_error = np.zeros(max_time)
         self.mean_rec_error = np.zeros(max_time)
+
+        self.im_error = np.zeros(max_time)
+        self.mean_im_error = np.zeros(max_time)
 
         self.last_input_im = None
         self.last_reconstruction_im = None
@@ -179,7 +183,7 @@ class ExpBrain(object):
                 reconstruction = np.maximum(reconstruction, self.probs[layer_n][win_rf_index, :])
 
                 # set error for next loop
-                error = np.sum(remainder)
+                # error = np.sum(remainder)
 
                 #print(error)
 
@@ -195,7 +199,15 @@ class ExpBrain(object):
         reconstruction[reconstruction > 1] = 1
         self.last_reconstruction_im = reconstruction.copy()
 
-        rec_error = np.sum(np.abs(reconstruction - input_exp_1))
+        # None of these rec_error values converge / reduce:
+
+        #rec_error = np.sum(np.abs(reconstruction - input_exp_1))
+
+        #rec_im, rec_w = self._collapse_binned_columns_to_pixels(arr_exp=self.last_reconstruction_im, num_bins_per_pixel=self.bins_per_pixel)
+        #im0 = rec_im[0, :].reshape((self.rf_dim, self.rf_dim))
+        #rec_error = np.sum(np.abs(im0 - input_pixels_1))
+
+        rec_error = np.sum(remainder)
 
         self.rec_error[self.t] = rec_error
         self.mean_rec_error[self.t] = np.mean(self.rec_error[max(0, self.t - self.mean_fr):self.t])
