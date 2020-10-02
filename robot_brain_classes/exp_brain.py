@@ -132,7 +132,8 @@ class ExpBrain(object):
         self.last_eff_frames[:] = np.nan
 
         loop = 0
-        while (error > error_threshold) and np.count_nonzero(rfs_active) < self.num_rf:
+        #while (error > error_threshold) and np.count_nonzero(rfs_active) < self.num_rf:
+        for k in range(4):
             # do WTA over all RFs that have no event yet this frame
             #   use prob, applied on remainder
             #   include subtraction that we do to count EV
@@ -208,7 +209,7 @@ class ExpBrain(object):
 
         # print (self.last_info)
         #print('mean rf active: ', np.mean(self.rf_counts[max(0, self.t - 200):self.t]))
-        print(self.last_eff_frames)
+        # print(self.last_eff_frames)
 
         if time.time() > self.last_plot_time + self.plot_interval:
             print()
