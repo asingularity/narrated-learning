@@ -153,8 +153,15 @@ class ExpBrain(object):
                 eff_frame_n = np.sum(mp_n, axis=1)
                 eff_frame = eff_frame_p - eff_frame_n
 
-                inactive_rfs = np.nonzero(rfs_active==0)[0]
-                win_rf_index = inactive_rfs[np.argmax(eff_frame[inactive_rfs])]
+                # TODO commit this; this is a bug!
+                #inactive_rfs = np.nonzero(rfs_active==0)[0]
+                #win_rf_index = inactive_rfs[np.argmax(eff_frame[inactive_rfs])]
+
+                # this is the correct one, and using eff_frame (p-n) is super important:
+                win_rf_index = np.argmax(eff_frame)
+
+                # this one means first one is stuck always as the winner:
+                #win_rf_index = np.argmax(eff_frame_p)
 
                 self.last_eff_frames[win_rf_index] = eff_frame[win_rf_index]
 
@@ -162,16 +169,34 @@ class ExpBrain(object):
 
                 # winner learns (updates prob) on remainder
                 #   alternative: learns on whole image, not remainder
+                # this is the right one:
                 self.probs[layer_n][win_rf_index, :] = (1.0 - self.lr) * self.probs[layer_n][win_rf_index, :] + self.lr * remainder[0, :]
-                #self.probs[win_rf_index, :] = (1.0 - self.lr) * self.probs[win_rf_index, :] + self.lr * input_exp_1[0, :]
+
+                # doesn't make sense:
+                #self.probs[layer_n][win_rf_index, :] = (1.0 - self.lr) * self.probs[layer_n][win_rf_index, :] + self.lr * input_exp_1[0, :]
+
+                #trying some weights thing, this does nothing reasonable: first always wins, needs work:
+                #   (probs should be separated from weights properly for this to work)
+                # nnz_rem = np.nonzero(remainder)[1]
+                # nz_rem = np.nonzero(remainder==0)[1]
+                # self.probs[layer_n][win_rf_index, nnz_rem] += self.lr
+                # self.probs[layer_n][win_rf_index, nz_rem] -= self.lr
 
                 # recalculate new remainder
-                # TODO this is the part that is problematic:
-                remainder = remainder - mp_p[win_rf_index, :]  # results in strange k-WTA, but suboptimal, and requiring higher error threshold
+
+                # OPTION 1: for bouncing balls, first layer is just one RF
+                # remainder = remainder - mp_p[win_rf_index, :]  # results in strange k-WTA, but suboptimal, and requiring higher error threshold
 
                 #remainder = remainder - (mp_p[win_rf_index, :] > 0)  # results in single-WTA; doesnt work for bouncing balls at all (single rf gray)
-                #remainder = remainder - self.probs[win_rf_index, :]  # k-wta also, same as mp_p one
-                #remainder = remainder - (self.probs[win_rf_index, :] > 0)  # also results in single-WTA
+
+                # OPTION 2: for bouncing balls, first layer is just one RF
+                remainder = remainder - self.probs[layer_n][win_rf_index, :]  # k-wta also, same as mp_p one
+
+                # a lot (almost all) gets left in remainder:
+                # remainder[remainder > 0] = 1
+
+                # there's nothing to learn in the next layer:
+                #remainder = remainder - (self.probs[layer_n][win_rf_index, :] > 0)  # also results in single-WTA
 
 
                 #remainder = np.minimum(remainder, match[win_rf_index, :])
@@ -179,8 +204,13 @@ class ExpBrain(object):
                 remainder[remainder < 0] = 0
 
                 # reconstruction
-                #reconstruction = reconstruction + self.probs[win_rf_index, :]
-                reconstruction = np.maximum(reconstruction, self.probs[layer_n][win_rf_index, :])
+                # with this one, error when measuring reconstruction - input_exp_1, actually reduces for a bit longer:
+                #   , and then it starts going up
+                # at least this appears "correct" with respect to remainder computation above
+                reconstruction = reconstruction + self.probs[layer_n][win_rf_index, :]
+
+                # with this one, error just fluctuates:
+                #reconstruction = np.maximum(reconstruction, self.probs[layer_n][win_rf_index, :])
 
                 # set error for next loop
                 # error = np.sum(remainder)
@@ -188,7 +218,7 @@ class ExpBrain(object):
                 #print(error)
 
                 # update rfs_active
-                rfs_active[win_rf_index] = 1
+                # rfs_active[win_rf_index] = 1
 
                 # if loop == 0:
                 #     self.last_remainder_im = remainder.copy()
@@ -201,13 +231,14 @@ class ExpBrain(object):
 
         # None of these rec_error values converge / reduce:
 
-        #rec_error = np.sum(np.abs(reconstruction - input_exp_1))
+        rec_error = np.sum(np.abs(reconstruction - input_exp_1))
 
-        #rec_im, rec_w = self._collapse_binned_columns_to_pixels(arr_exp=self.last_reconstruction_im, num_bins_per_pixel=self.bins_per_pixel)
-        #im0 = rec_im[0, :].reshape((self.rf_dim, self.rf_dim))
-        #rec_error = np.sum(np.abs(im0 - input_pixels_1))
+        # rec_im, rec_w = self._collapse_binned_columns_to_pixels(arr_exp=self.last_reconstruction_im, num_bins_per_pixel=self.bins_per_pixel)
+        # im0 = rec_im[0, :].reshape((self.rf_dim, self.rf_dim))
+        # rec_error = np.sum(np.abs(im0 - input_pixels_1))
 
-        rec_error = np.sum(remainder)
+        # this one converges:
+        # rec_error = np.sum(remainder)
 
         self.rec_error[self.t] = rec_error
         self.mean_rec_error[self.t] = np.mean(self.rec_error[max(0, self.t - self.mean_fr):self.t])

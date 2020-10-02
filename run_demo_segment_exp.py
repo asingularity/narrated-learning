@@ -19,7 +19,7 @@ USERNAME = 'intec'
 
 COLOR_ENABLED = False
 
-USE_VIDEO_IN = True
+USE_VIDEO_IN = False
 
 if USE_VIDEO_IN:
     IM_DIM = 128  # pixels, width & height
