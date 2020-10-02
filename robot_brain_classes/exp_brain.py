@@ -61,15 +61,22 @@ class ExpBrain(object):
         # self.num_rf = 80
         # self.error_threshold = 50 / 8.
 
-        self.num_rf = 40
-        self.error_threshold = 50  # 50  # 12.5 / 2
+        self.num_rf = 40  # per layer
+        self.layer_start_times = np.array([0, 1, 2, 3]) * 50000
+        self.num_layers = self.layer_start_times.shape[0]
+
+        # no more error threshold
+        # self.error_threshold = 50  # 50  # 12.5 / 2
 
         assert self.in_r + self.rf_dim < self.im_dim, str((self.in_r + self.rf_dim, self.im_dim))
         assert self.in_c + self.rf_dim < self.im_dim, str((self.in_c + self.rf_dim, self.im_dim))
 
         self.input_feature_len = self.rf_dim * self.rf_dim * self.bins_per_pixel
 
-        self.probs = np.zeros((self.num_rf, self.input_feature_len))
+        self.probs = []
+        for k in range(self.num_layers):
+            self.probs.append(np.zeros((self.num_rf, self.input_feature_len)))
+
         self.lr = 0.001
 
         max_time = 100000000
@@ -119,12 +126,6 @@ class ExpBrain(object):
 
         error = np.sum(input_exp_1)
 
-        #print('***********************************')
-        #print('ERROR', error)
-        #print()
-
-        error_threshold = self.error_threshold
-
         remainder = input_exp_1.copy()
         reconstruction = np.zeros((1, self.input_feature_len))
         rfs_active = np.zeros(self.num_rf)
@@ -133,60 +134,61 @@ class ExpBrain(object):
 
         loop = 0
         #while (error > error_threshold) and np.count_nonzero(rfs_active) < self.num_rf:
-        for k in range(4):
-            # do WTA over all RFs that have no event yet this frame
-            #   use prob, applied on remainder
-            #   include subtraction that we do to count EV
+        for layer_n in range(self.num_layers):
+            if self.t >= self.layer_start_times[layer_n]:
+                # do WTA over all RFs that have no event yet this frame
+                #   use prob, applied on remainder
+                #   include subtraction that we do to count EV
 
-            #print(np.amin(self.probs), np.amax(self.probs), np.amin(remainder), np.amax(remainder))
+                #print(np.amin(self.probs), np.amax(self.probs), np.amin(remainder), np.amax(remainder))
 
-            mp_p = np.multiply(self.probs, remainder)
-            mp_n = np.multiply(self.probs, 1.0 - remainder)
+                mp_p = np.multiply(self.probs[layer_n], remainder)
+                mp_n = np.multiply(self.probs[layer_n], 1.0 - remainder)
 
-            eff_frame_p = np.sum(mp_p, axis=1)
-            eff_frame_n = np.sum(mp_n, axis=1)
-            eff_frame = eff_frame_p - eff_frame_n
+                eff_frame_p = np.sum(mp_p, axis=1)
+                eff_frame_n = np.sum(mp_n, axis=1)
+                eff_frame = eff_frame_p - eff_frame_n
 
-            inactive_rfs = np.nonzero(rfs_active==0)[0]
-            win_rf_index = inactive_rfs[np.argmax(eff_frame[inactive_rfs])]
+                inactive_rfs = np.nonzero(rfs_active==0)[0]
+                win_rf_index = inactive_rfs[np.argmax(eff_frame[inactive_rfs])]
 
-            self.last_eff_frames[win_rf_index] = eff_frame[win_rf_index]
+                self.last_eff_frames[win_rf_index] = eff_frame[win_rf_index]
 
-            #print(win_rf_index)
+                #print(win_rf_index)
 
-            # winner learns (updates prob) on remainder
-            #   alternative: learns on whole image, not remainder
-            self.probs[win_rf_index, :] = (1.0 - self.lr) * self.probs[win_rf_index, :] + self.lr * remainder[0, :]
-            #self.probs[win_rf_index, :] = (1.0 - self.lr) * self.probs[win_rf_index, :] + self.lr * input_exp_1[0, :]
+                # winner learns (updates prob) on remainder
+                #   alternative: learns on whole image, not remainder
+                self.probs[layer_n][win_rf_index, :] = (1.0 - self.lr) * self.probs[layer_n][win_rf_index, :] + self.lr * remainder[0, :]
+                #self.probs[win_rf_index, :] = (1.0 - self.lr) * self.probs[win_rf_index, :] + self.lr * input_exp_1[0, :]
 
-            # recalculate new remainder
-            # TODO this is the part that is problematic:
-            remainder = remainder - mp_p[win_rf_index, :]  # results in strange k-WTA, but suboptimal, and requiring higher error threshold
+                # recalculate new remainder
+                # TODO this is the part that is problematic:
+                remainder = remainder - mp_p[win_rf_index, :]  # results in strange k-WTA, but suboptimal, and requiring higher error threshold
 
-            #remainder = remainder - (mp_p[win_rf_index, :] > 0)  # results in single-WTA; doesnt work for bouncing balls at all (single rf gray)
-            #remainder = remainder - self.probs[win_rf_index, :]  # k-wta also, same as mp_p one
-            #remainder = remainder - (self.probs[win_rf_index, :] > 0)  # also results in single-WTA
+                #remainder = remainder - (mp_p[win_rf_index, :] > 0)  # results in single-WTA; doesnt work for bouncing balls at all (single rf gray)
+                #remainder = remainder - self.probs[win_rf_index, :]  # k-wta also, same as mp_p one
+                #remainder = remainder - (self.probs[win_rf_index, :] > 0)  # also results in single-WTA
 
 
-            #remainder = np.minimum(remainder, match[win_rf_index, :])
+                #remainder = np.minimum(remainder, match[win_rf_index, :])
 
-            remainder[remainder < 0] = 0
+                remainder[remainder < 0] = 0
 
-            # reconstruction
-            #reconstruction = reconstruction + self.probs[win_rf_index, :]
-            reconstruction = np.maximum(reconstruction, self.probs[win_rf_index, :])
+                # reconstruction
+                #reconstruction = reconstruction + self.probs[win_rf_index, :]
+                reconstruction = np.maximum(reconstruction, self.probs[layer_n][win_rf_index, :])
 
-            # set error for next loop
-            error = np.sum(remainder)
+                # set error for next loop
+                error = np.sum(remainder)
 
-            #print(error)
+                #print(error)
 
-            # update rfs_active
-            rfs_active[win_rf_index] = 1
+                # update rfs_active
+                rfs_active[win_rf_index] = 1
 
-            # if loop == 0:
-            #     self.last_remainder_im = remainder.copy()
-            loop += 1
+                # if loop == 0:
+                #     self.last_remainder_im = remainder.copy()
+                loop += 1
 
         self.last_remainder_im = remainder.copy()
 
@@ -226,27 +228,34 @@ class ExpBrain(object):
 
             self.last_plot_time = time.time()
 
-        arr, weights = self._collapse_binned_columns_to_pixels(arr_exp=self.probs, num_bins_per_pixel=self.bins_per_pixel)
+        tmp_all_im = None
+        for layer_n in range(self.num_layers):
+            tmp_im = None
+            arr, weights = self._collapse_binned_columns_to_pixels(arr_exp=self.probs[layer_n], num_bins_per_pixel=self.bins_per_pixel)
 
-        tmp_im = None
+            for r_tmp in range(weights.shape[0]):
+                #weights[r_tmp, :] = (weights[r_tmp, :] - np.amin(weights[r_tmp, :])) * 1.0 / (np.amax(weights[r_tmp, :]) - np.amin(weights[r_tmp, :]))
 
-        for r_tmp in range(weights.shape[0]):
-            #weights[r_tmp, :] = (weights[r_tmp, :] - np.amin(weights[r_tmp, :])) * 1.0 / (np.amax(weights[r_tmp, :]) - np.amin(weights[r_tmp, :]))
+                im0 = arr[r_tmp, :].reshape((self.rf_dim, self.rf_dim))
+                im1 = weights[r_tmp, :].reshape((self.rf_dim, self.rf_dim))
 
-            im0 = arr[r_tmp, :].reshape((self.rf_dim, self.rf_dim))
-            im1 = weights[r_tmp, :].reshape((self.rf_dim, self.rf_dim))
+                tmp2 = np.hstack((im0, im1))
 
-            tmp2 = np.hstack((im0, im1))
+                if tmp_im is None:
+                    tmp_im = tmp2.copy()
+                else:
+                    tmp3 = np.zeros((2, tmp_im.shape[1]))
+                    tmp_im = np.vstack((tmp_im, tmp3, tmp2))
 
-            if tmp_im is None:
-                tmp_im = tmp2.copy()
+            if tmp_all_im is None:
+                tmp_all_im = tmp_im.copy()
             else:
-                tmp3 = np.zeros((2, tmp_im.shape[1]))
-                tmp_im = np.vstack((tmp_im, tmp3, tmp2))
+                tmp4 = np.zeros((tmp_im.shape[0], 2))
+                tmp_all_im = np.hstack((tmp_all_im, tmp4, tmp_im))
 
-        max_dim = max(tmp_im.shape[0], tmp_im.shape[1])
+        max_dim = max(tmp_all_im.shape[0], tmp_all_im.shape[1])
         imscale = self.im_dim / max_dim  # 0.2: full table, 2.0
-        tmp_im = cv2.resize(tmp_im, dsize=(0, 0), fx=imscale, fy=imscale, interpolation=cv2.INTER_NEAREST)
+        tmp_im = cv2.resize(tmp_all_im, dsize=(0, 0), fx=imscale, fy=imscale, interpolation=cv2.INTER_NEAREST)
 
         ims_list.append(tmp_im)
         ims_names_list.append('probs_v, probs_w')
