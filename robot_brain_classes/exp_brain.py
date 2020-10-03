@@ -223,7 +223,11 @@ class ExpBrain(object):
                 #win_rf_index = inactive_rfs[np.argmax(eff_frame[inactive_rfs])]
 
                 # this is the correct one, and using eff_frame (p-n) is super important:
-                win_rf_index = np.argmin(eff_frame)
+
+                if newest_way:
+                    win_rf_index = np.argmin(eff_frame)
+                else:
+                    win_rf_index = np.argmax(eff_frame)
 
                 self.rf_winners[self.t, layer_n] = int(win_rf_index)
                 # this one means first one is stuck always as the winner:
@@ -262,8 +266,13 @@ class ExpBrain(object):
 
                 # OPTION 2: for bouncing balls, first layer is just one RF
                 # added abs here! as an experiment
-                # TODO retrofitting to work without abs
+
+                # work without abs, using negative -> requires "newest_way" above
                 remainder = remainder - self.probs[layer_n][win_rf_index, :]  # k-wta also, same as mp_p one
+
+                # this one has rapidly minimizing remainder, but reconstruction error goes up and up, not recoverable due to abs
+                # remainder = np.abs(remainder - self.probs[layer_n][win_rf_index, :])  # k-wta also, same as mp_p one
+
                 # positive above: more of input left to explain with positive weights
                 # negative above: over-explained input, need to reverse with negative weights
 
