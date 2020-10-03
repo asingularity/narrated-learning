@@ -61,9 +61,11 @@ class ExpBrain(object):
         # self.num_rf = 80
         # self.error_threshold = 50 / 8.
 
-        self.num_rf = 40  # per layer
+        self.num_rf = 20  # per layer
+        #self.layer_start_times = np.array([0]) #, 1, 2, 3]) * 50000
+        # self.layer_start_times = np.array([0, 1]) * 50000
         self.layer_start_times = np.array([0, 1, 2, 3]) * 50000
-        #self.layer_start_times = np.array([0, 1]) * 50000
+
         self.num_layers = self.layer_start_times.shape[0]
 
         # no more error threshold
@@ -74,13 +76,17 @@ class ExpBrain(object):
 
         self.input_feature_len = self.rf_dim * self.rf_dim * self.bins_per_pixel
 
+        max_time = 10000000
         self.probs = []
+
+        # self.lr = 0.001
+        self.lr_base = 0.001
+        self.lr = self.lr_base * np.ones((self.num_layers, self.num_rf))
+
         for k in range(self.num_layers):
             self.probs.append(np.zeros((self.num_rf, self.input_feature_len)))
 
-        self.lr = 0.001
-
-        max_time = 100000000
+        self.rf_winners = np.zeros((max_time, self.num_rf), np.int)
 
         self.mean_fr = 10000
         self.rf_counts = np.zeros(max_time)
@@ -97,7 +103,7 @@ class ExpBrain(object):
 
         # plot error
         self.last_plot_time = time.time()
-        self.plot_interval = 30
+        self.plot_interval = 10
 
         self.last_info = None
         self.last_eff_frames = np.zeros(self.num_rf)
@@ -146,20 +152,74 @@ class ExpBrain(object):
 
                 #print(np.amin(self.probs), np.amax(self.probs), np.amin(remainder), np.amax(remainder))
 
-                mp_p = np.multiply(self.probs[layer_n], remainder)
-                mp_n = np.multiply(self.probs[layer_n], 1.0 - remainder)
+                # Result: new_way and old way are the same result!
+                # i.e. either way, same WTA winners
+                # old way is much faster to compute
+                new_way = False
 
-                eff_frame_p = np.sum(mp_p, axis=1)
-                eff_frame_n = np.sum(mp_n, axis=1)
-                eff_frame = eff_frame_p - eff_frame_n
+                if new_way:
+                    # contributions to mp_p:
+                    # still assuming input and prob (w) : [0, 1]
+                    # TODO alternative to multiply! as an experiment
 
-                # TODO commit this; this is a bug!
+                    # subtract input from w
+                    # mp_p: how much of prob (w) is explained by input
+                    # mp_n: how much of prob (w) is NOT explained by input
+
+                    diff = self.probs[layer_n] - remainder
+                    # diff is positive: input small; leftover w      --> remainder goes to mp_p, diff goes to mp_n
+                    # diff is negative: all of w is explained       --> w goes to mp_p
+
+                    nnz_diff_p = np.nonzero(diff >= 0)
+                    nnz_diff_n = np.nonzero(diff < 0)
+
+                    mp_p = 0.0 * diff.copy()
+                    mp_n = 0.0 * diff.copy()
+
+                    #print()
+                    #print(remainder.shape, diff.shape)
+                    tmp17 = np.tile(remainder, (diff.shape[0], 1))
+                    #print(tmp17.shape)
+                    #print(nnz_diff_p)
+
+                    mp_p[nnz_diff_p] = tmp17[nnz_diff_p]
+                    mp_n[nnz_diff_p] = diff[nnz_diff_p]
+
+                    mp_p[nnz_diff_n] = self.probs[layer_n][nnz_diff_n]
+                    eff_frame_p = np.sum(mp_p, axis=1)
+                    eff_frame_n = np.sum(mp_n, axis=1)
+                    eff_frame = eff_frame_p - eff_frame_n
+
+                else:
+                    # this assumes remainder is in [0, 1] range but what if there is negative remainder?
+
+                    # this is assuming positive remainder:
+                    # probs is really learning "average input"
+                    # can / should that be negative? i.e. "false positives" from upper layers?
+
+                    mp_p = np.multiply(self.probs[layer_n], remainder)
+                    mp_n = np.multiply(self.probs[layer_n], 1.0 - remainder)
+
+                    # this is assuming negative remainder:
+                    # this is the work in progress:
+                    # mp_p_neg = np.multiply(self.probs[layer_n], remainder)
+                    # mp_n_neg = np.multiply(self.probs[layer_n], -1.0 - remainder)
+
+                    # generates no additional RFs
+                    # mp_n = np.multiply(self.probs[layer_n], - remainder)
+
+                    eff_frame_p = np.sum(mp_p, axis=1)
+                    eff_frame_n = np.sum(mp_n, axis=1)
+                    eff_frame = eff_frame_p - eff_frame_n
+
+                # this was necessary for same layer iterative:
                 #inactive_rfs = np.nonzero(rfs_active==0)[0]
                 #win_rf_index = inactive_rfs[np.argmax(eff_frame[inactive_rfs])]
 
                 # this is the correct one, and using eff_frame (p-n) is super important:
                 win_rf_index = np.argmax(eff_frame)
 
+                self.rf_winners[self.t, layer_n] = int(win_rf_index)
                 # this one means first one is stuck always as the winner:
                 #win_rf_index = np.argmax(eff_frame_p)
 
@@ -170,7 +230,12 @@ class ExpBrain(object):
                 # winner learns (updates prob) on remainder
                 #   alternative: learns on whole image, not remainder
                 # this is the right one:
-                self.probs[layer_n][win_rf_index, :] = (1.0 - self.lr) * self.probs[layer_n][win_rf_index, :] + self.lr * remainder[0, :]
+
+                lr = self.lr[layer_n, win_rf_index]
+
+                self.probs[layer_n][win_rf_index, :] = (1.0 - lr) * self.probs[layer_n][win_rf_index, :] + lr * remainder[0, :]
+
+                self.lr[layer_n, win_rf_index] = self.lr_base
 
                 # doesn't make sense:
                 #self.probs[layer_n][win_rf_index, :] = (1.0 - self.lr) * self.probs[layer_n][win_rf_index, :] + self.lr * input_exp_1[0, :]
@@ -190,7 +255,8 @@ class ExpBrain(object):
                 #remainder = remainder - (mp_p[win_rf_index, :] > 0)  # results in single-WTA; doesnt work for bouncing balls at all (single rf gray)
 
                 # OPTION 2: for bouncing balls, first layer is just one RF
-                remainder = remainder - self.probs[layer_n][win_rf_index, :]  # k-wta also, same as mp_p one
+                # TODO added abs here! as an experiment
+                remainder = np.abs(remainder - self.probs[layer_n][win_rf_index, :])  # k-wta also, same as mp_p one
 
                 # a lot (almost all) gets left in remainder:
                 # remainder[remainder > 0] = 1
@@ -201,13 +267,24 @@ class ExpBrain(object):
 
                 #remainder = np.minimum(remainder, match[win_rf_index, :])
 
-                remainder[remainder < 0] = 0
+                # print(np.amin(remainder), np.amax(remainder))
+                #   this is [-1, 1]
+
+                # TODO this is the source of our problems
+                #   TODO here, we ignore a large portion of what does contribute to the reconstruction error
+
+                # remainder[remainder < 0] = 0
 
                 # reconstruction
                 # with this one, error when measuring reconstruction - input_exp_1, actually reduces for a bit longer:
                 #   , and then it starts going up
                 # at least this appears "correct" with respect to remainder computation above
+
+                # old way, which diverges / error grows with multiple layers:
                 reconstruction = reconstruction + self.probs[layer_n][win_rf_index, :]
+
+                # also diverges still
+                #reconstruction = np.maximum(reconstruction, self.probs[layer_n][win_rf_index, :])
 
                 # with this one, error just fluctuates:
                 #reconstruction = np.maximum(reconstruction, self.probs[layer_n][win_rf_index, :])
@@ -226,12 +303,31 @@ class ExpBrain(object):
 
         self.last_remainder_im = remainder.copy()
 
-        reconstruction[reconstruction > 1] = 1
+        #print(np.amin(reconstruction), np.amax(reconstruction))
+
+        #reconstruction[reconstruction > 1] = 1
+
+        # TODO experiment
+        # still diverges this way, but not as much
+        reconstruction = reconstruction * 1.0 / np.amax(reconstruction)
+
+        assert np.amax(reconstruction) <= 1
+        assert np.amin(reconstruction) >= 0
+
         self.last_reconstruction_im = reconstruction.copy()
 
         # None of these rec_error values converge / reduce:
 
         rec_error = np.sum(np.abs(reconstruction - input_exp_1))
+        sum_remainder = np.sum(np.abs(remainder))
+
+        # remainder: |input_exp - prob|,  -> ([-1, 1]) ->   (<0 -> 0)
+        #               [0, 1]   [0, <1]
+
+        #   Problem above: ignoring all the false positives, when we cut that off (remainder < 0 -> 0); rec_error does not ignore them
+
+        # rec_error: |prob - input_exp|
+        #             [0, <1]   [0, 1]
 
         # rec_im, rec_w = self._collapse_binned_columns_to_pixels(arr_exp=self.last_reconstruction_im, num_bins_per_pixel=self.bins_per_pixel)
         # im0 = rec_im[0, :].reshape((self.rf_dim, self.rf_dim))
@@ -240,10 +336,16 @@ class ExpBrain(object):
         # this one converges:
         # rec_error = np.sum(remainder)
 
+        # update adaptive learning rate:
+
+        # not sure if needed, doesn't help single layer
+        #self.lr = 1.005 * self.lr
+        #self.lr[self.lr > 0.1] = 0.1
+
         self.rec_error[self.t] = rec_error
         self.mean_rec_error[self.t] = np.mean(self.rec_error[max(0, self.t - self.mean_fr):self.t])
 
-        self.rf_counts[self.t] = np.count_nonzero(rfs_active)
+        self.rf_counts[self.t] = sum_remainder  #np.count_nonzero(rfs_active)
         self.mean_rf_counts[self.t] = np.mean(self.rf_counts[max(0, self.t - self.mean_fr):self.t])
         self.t += 1
 
@@ -262,12 +364,23 @@ class ExpBrain(object):
             self.ax.cla()
             self.ax.plot(self.rec_error[0:self.t], color='r')
             self.ax.plot(self.mean_rec_error[0:self.t], color='b')
+            for k in [10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140]:
+                self.ax.axhline(y=k, color='g')
             self.fig.savefig("rec_error.png", dpi=100)
 
             self.ax.cla()
             self.ax.plot(self.rf_counts[0:self.t], color='r')
             self.ax.plot(self.mean_rf_counts[0:self.t], color='b')
-            self.fig.savefig("rf_counts.png", dpi=100)
+            for k in [10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140]:
+                self.ax.axhline(y=k, color='g')
+            self.fig.savefig("sum_remainder.png", dpi=100)
+
+            self.ax.cla()
+
+            self.ax.plot(self.rf_winners[max(0, self.t - 1000):self.t, :], color='b', marker='o', linestyle='')
+            self.ax.set_ylim([-1, self.num_rf])
+            self.fig.savefig("rf_winners.png", dpi=100)
+
 
             self.last_plot_time = time.time()
 
