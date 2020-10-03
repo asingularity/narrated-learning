@@ -155,9 +155,15 @@ class ExpBrain(object):
                 # Result: new_way and old way are the same result!
                 # i.e. either way, same WTA winners
                 # old way is much faster to compute
+                newest_way = True  # accomodate negative remainder / input
                 new_way = False
 
-                if new_way:
+                if newest_way:
+                    eff_frame = np.sum(np.abs(self.probs[layer_n] - remainder), axis=1)
+
+
+
+                elif new_way:
                     # contributions to mp_p:
                     # still assuming input and prob (w) : [0, 1]
                     # TODO alternative to multiply! as an experiment
@@ -217,7 +223,7 @@ class ExpBrain(object):
                 #win_rf_index = inactive_rfs[np.argmax(eff_frame[inactive_rfs])]
 
                 # this is the correct one, and using eff_frame (p-n) is super important:
-                win_rf_index = np.argmax(eff_frame)
+                win_rf_index = np.argmin(eff_frame)
 
                 self.rf_winners[self.t, layer_n] = int(win_rf_index)
                 # this one means first one is stuck always as the winner:
@@ -255,8 +261,11 @@ class ExpBrain(object):
                 #remainder = remainder - (mp_p[win_rf_index, :] > 0)  # results in single-WTA; doesnt work for bouncing balls at all (single rf gray)
 
                 # OPTION 2: for bouncing balls, first layer is just one RF
-                # TODO added abs here! as an experiment
-                remainder = np.abs(remainder - self.probs[layer_n][win_rf_index, :])  # k-wta also, same as mp_p one
+                # added abs here! as an experiment
+                # TODO retrofitting to work without abs
+                remainder = remainder - self.probs[layer_n][win_rf_index, :]  # k-wta also, same as mp_p one
+                # positive above: more of input left to explain with positive weights
+                # negative above: over-explained input, need to reverse with negative weights
 
                 # a lot (almost all) gets left in remainder:
                 # remainder[remainder > 0] = 1
@@ -305,11 +314,12 @@ class ExpBrain(object):
 
         #print(np.amin(reconstruction), np.amax(reconstruction))
 
-        #reconstruction[reconstruction > 1] = 1
+        reconstruction[reconstruction > 1] = 1
+        reconstruction[reconstruction < 0] = 0
 
         # TODO experiment
         # still diverges this way, but not as much
-        reconstruction = reconstruction * 1.0 / np.amax(reconstruction)
+        # reconstruction = reconstruction * 1.0 / np.amax(reconstruction)
 
         assert np.amax(reconstruction) <= 1
         assert np.amin(reconstruction) >= 0
