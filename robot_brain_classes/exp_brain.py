@@ -80,7 +80,7 @@ class ExpBrain(object):
         self.probs = []
 
         # self.lr = 0.001
-        self.lr_base = 0.001
+        self.lr_base = 0.001 * 4
         self.lr = self.lr_base * np.ones((self.num_layers, self.num_rf))
 
         for k in range(self.num_layers):
@@ -103,7 +103,7 @@ class ExpBrain(object):
 
         # plot error
         self.last_plot_time = time.time()
-        self.plot_interval = 10
+        self.plot_interval = 30
 
         self.last_info = None
         self.last_eff_frames = np.zeros(self.num_rf)
