@@ -18,6 +18,7 @@ from brain_components_classes.perceptron import Perceptron
 
 import matplotlib
 matplotlib.use('Agg')
+matplotlib.rcParams['agg.path.chunksize'] = 10000
 import matplotlib.pyplot as plt
 from math import log
 
@@ -64,7 +65,7 @@ class ExpBrain(object):
         self.num_rf = 20  # per layer
         #self.layer_start_times = np.array([0]) #, 1, 2, 3]) * 50000
         # self.layer_start_times = np.array([0, 1]) * 50000
-        self.layer_start_times = np.array([0, 1, 2, 3]) * 50000
+        self.layer_start_times = np.array([0, 1, 2, 3, 4, 5]) * 300000
 
         self.num_layers = self.layer_start_times.shape[0]
 
@@ -80,7 +81,9 @@ class ExpBrain(object):
         self.probs = []
 
         # self.lr = 0.001
-        self.lr_base = 0.001 * 4
+
+        self.lr_base = 0.0001 * 0.25
+        # self.lr_base = 0.0001 * 0.5
         self.lr = self.lr_base * np.ones((self.num_layers, self.num_rf))
 
         for k in range(self.num_layers):
@@ -107,6 +110,8 @@ class ExpBrain(object):
 
         self.last_info = None
         self.last_eff_frames = np.zeros(self.num_rf)
+
+        self.learning_enabled = None
 
     def process_input(self, input_im):
         '''
@@ -243,7 +248,11 @@ class ExpBrain(object):
 
                 lr = self.lr[layer_n, win_rf_index]
 
-                self.probs[layer_n][win_rf_index, :] = (1.0 - lr) * self.probs[layer_n][win_rf_index, :] + lr * remainder[0, :]
+                if self.t < 1800000:
+                    self.probs[layer_n][win_rf_index, :] = (1.0 - lr) * self.probs[layer_n][win_rf_index, :] + lr * remainder[0, :]
+                    self.learning_enabled = True
+                else:
+                    self.learning_enabled = False
 
                 self.lr[layer_n, win_rf_index] = self.lr_base
 
@@ -377,29 +386,36 @@ class ExpBrain(object):
         #print('mean rf active: ', np.mean(self.rf_counts[max(0, self.t - 200):self.t]))
         # print(self.last_eff_frames)
 
+
         if time.time() > self.last_plot_time + self.plot_interval:
             print()
             print('Making plot of state vars...')
-            self.ax.cla()
-            self.ax.plot(self.rec_error[0:self.t], color='r')
-            self.ax.plot(self.mean_rec_error[0:self.t], color='b')
-            for k in [10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140]:
-                self.ax.axhline(y=k, color='g')
-            self.fig.savefig("rec_error.png", dpi=100)
+            print()
+            print('learning enabled:', self.learning_enabled)
+            print()
 
-            self.ax.cla()
-            self.ax.plot(self.rf_counts[0:self.t], color='r')
-            self.ax.plot(self.mean_rf_counts[0:self.t], color='b')
-            for k in [10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140]:
-                self.ax.axhline(y=k, color='g')
-            self.fig.savefig("sum_remainder.png", dpi=100)
+            try:
+                self.ax.cla()
+                self.ax.plot(self.rec_error[0:self.t], color='r')
+                self.ax.plot(self.mean_rec_error[0:self.t], color='b')
+                for k in [10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140]:
+                    self.ax.axhline(y=k, color='g')
+                self.fig.savefig("rec_error.png", dpi=100)
 
-            self.ax.cla()
+                self.ax.cla()
+                self.ax.plot(self.rf_counts[0:self.t], color='r')
+                self.ax.plot(self.mean_rf_counts[0:self.t], color='b')
+                for k in [10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140]:
+                    self.ax.axhline(y=k, color='g')
+                self.fig.savefig("sum_remainder.png", dpi=100)
 
-            self.ax.plot(self.rf_winners[max(0, self.t - 1000):self.t, :], color='b', marker='o', linestyle='')
-            self.ax.set_ylim([-1, self.num_rf])
-            self.fig.savefig("rf_winners.png", dpi=100)
+                self.ax.cla()
 
+                self.ax.plot(self.rf_winners[max(0, self.t - 1000):self.t, :], color='b', marker='o', linestyle='')
+                self.ax.set_ylim([-1, self.num_rf])
+                self.fig.savefig("rf_winners.png", dpi=100)
+            except:
+                print('Plot Failed!')
 
             self.last_plot_time = time.time()
 
