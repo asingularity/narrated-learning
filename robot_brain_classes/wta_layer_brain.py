@@ -181,16 +181,24 @@ class WTALayerBrain(object):
                 self.ax.cla()
                 self.ax.plot(self.rec_error[0:self.t], color='r')
                 self.ax.plot(self.mean_rec_error[0:self.t], color='b')
-                for k in [10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140]:
+
+                for k in [10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160, 170]:
                     self.ax.axhline(y=k, color='g')
+
+                for k in self.layer_start_times:
+                    self.ax.axvline(x=k, color='g')
+
+                self.ax.axvline(x=self.learn_off_time, color='r')
+
                 self.fig.savefig("rec_error.png", dpi=100)
 
-                self.ax.cla()
-                self.ax.plot(self.rf_counts[0:self.t], color='r')
-                self.ax.plot(self.mean_rf_counts[0:self.t], color='b')
-                for k in [10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140]:
-                    self.ax.axhline(y=k, color='g')
-                self.fig.savefig("sum_remainder.png", dpi=100)
+                # TODO delete or rename:
+                # self.ax.cla()
+                # self.ax.plot(self.rf_counts[0:self.t], color='r')
+                # self.ax.plot(self.mean_rf_counts[0:self.t], color='b')
+                # for k in [10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140]:
+                #     self.ax.axhline(y=k, color='g')
+                # self.fig.savefig("sum_remainder.png", dpi=100)
 
                 self.ax.cla()
 

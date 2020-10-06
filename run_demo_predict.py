@@ -97,12 +97,12 @@ def get_brain_params():
     params = {
         'image_dim_display': 1500,
         'image_dim_NxN_pixels': IM_DIM,
-        'learning_rate': 0.0001 * 0.25,
+        'learning_rate': 0.001,
         'bins_per_pixel': 6,
-        'num_rf': 20,
-        'layer_start_times': np.array([0, 1, 2, 3, 4, 5]) * 300000,
+        'num_rf': 10,
+        'layer_start_times': np.array([0, 1, 2, 3, 4, 5]) * 100000,
         'max_time': 10000000,
-        'learning_off_time': 1800000,
+        'learning_off_time': 6 * 100000,
         'plot_interval_seconds': 30
     }
 
