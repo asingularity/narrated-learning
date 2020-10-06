@@ -1,6 +1,5 @@
 
 
-
 import time
 import cv2
 import numpy as np
@@ -27,10 +26,13 @@ from math import log
 
 from utils.one_time_messages import OneTimeMessages
 
-
-
+# TODO ********************************************************************************************
+# NOTE this class is deprecated! replacecd by wta_layer_brain.py, where it is now kept and updated!
+# TODO ********************************************************************************************
 class ExpBrain(object):
     '''
+    # NOTE this class is deprecated! replacecd by wta_layer_brain.py, where it is now kept and updated!
+
     kWTA, where k is adaptive and based on remainder
     activations and learning are based on remainder
     '''
@@ -115,6 +117,9 @@ class ExpBrain(object):
 
     def process_input(self, input_im):
         '''
+        # TODO ********************************************************************************************
+        # NOTE this class is deprecated! replacecd by wta_layer_brain.py, where it is now kept and updated!
+        # TODO ********************************************************************************************
 
         :param input_im:
         :return:
