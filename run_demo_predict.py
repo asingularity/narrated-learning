@@ -114,10 +114,10 @@ def get_brain_params():
         'image_dim_NxN_pixels': IM_DIM,
         'learning_rate': 0.001,
         'bins_per_pixel': 6,
-        'num_rf_per_wta_layer_per_hl': np.array([10, 10]),
+        'num_rf_per_wta_layer_per_hl': np.array([20, 20]),
         'num_wta_layer_per_hl': np.array([6, 6]),
         'input_time_steps_per_hl': np.array([1, 5]),
-        'layer_start_time_offset_per_hl': np.array([60000, 60000]), # np.array([300000, 300000])
+        'layer_start_time_offset_per_hl': np.array([60000, 4 * 60000]), # np.array([300000, 300000])
         'enable_learning_off': True,
         'plot_interval_seconds': 30
     }
@@ -134,7 +134,7 @@ def get_visualizer_params():
         'image_display_secs_slow': 0, #0.001,  # 0: every frame
         'waitKey_time_slow': 1,  # 1, 100, 5000  #
         'scale_camera_factor': 1,
-        'auto_switch_to_slow_disp_time': 800000, #50000,  # TODO re-introduce later for when training is done
+        'auto_switch_to_slow_disp_time': 2000000, #50000,  # TODO re-introduce later for when training is done
         'init_fast': True  # start with "fast" display
     }
     return params
