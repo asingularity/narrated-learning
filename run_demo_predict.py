@@ -5,6 +5,7 @@ random.seed(6)
 np.random.seed(6)
 
 from robot_brain_classes.wta_layer_brain import WTALayerBrain
+from robot_brain_classes.wta_multi_layer_brain import WTAMultiLayerBrain
 from robot_sensor_classes.video_playback import VideoPlaybackSensor
 from robot_sensor_classes.duo_playback import DuoPlaybackSensor
 from robot_sensor_classes.physics_2d import Physics2DSensor
@@ -94,15 +95,30 @@ def get_sim_folder_manager_params():
 
 def get_brain_params():
 
+    # # WTALayerBrain
+    # params = {
+    #     'image_dim_display': 1500,
+    #     'image_dim_NxN_pixels': IM_DIM,
+    #     'learning_rate': 0.001,
+    #     'bins_per_pixel': 6,
+    #     'num_rf': 10,
+    #     'layer_start_times': np.array([0, 1, 2, 3, 4, 5]) * 100000,
+    #     'max_time': 10000000,
+    #     'learning_off_time': 6 * 100000,
+    #     'plot_interval_seconds': 30
+    # }
+
+    # WTAMultiLayerBrain
     params = {
         'image_dim_display': 1500,
         'image_dim_NxN_pixels': IM_DIM,
         'learning_rate': 0.001,
         'bins_per_pixel': 6,
-        'num_rf': 10,
-        'layer_start_times': np.array([0, 1, 2, 3, 4, 5]) * 100000,
-        'max_time': 10000000,
-        'learning_off_time': 6 * 100000,
+        'num_rf_per_wta_layer_per_hl': np.array([10, 5]),
+        'num_wta_layer_per_hl': np.array([6, 4]),
+        'input_time_steps_per_hl': np.array([1, 10]),
+        'layer_start_time_offset_per_hl': np.array([30000, 30000]), # np.array([300000, 300000])
+        'enable_learning_off': True,
         'plot_interval_seconds': 30
     }
 
@@ -133,7 +149,8 @@ def init_demo():
         robot_sensors = Physics2DSensor(get_sensors_params())
 
     return {
-        'robot_brain': WTALayerBrain(get_brain_params()),
+        #'robot_brain': WTALayerBrain(get_brain_params()),
+        'robot_brain': WTAMultiLayerBrain(get_brain_params()),
         'robot_sensors': robot_sensors,
         'visualizer': SegmentVisualizer(get_visualizer_params()),
         'sim_folder_manager': SimFolderManager(get_sim_folder_manager_params())

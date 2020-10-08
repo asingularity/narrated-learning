@@ -38,7 +38,6 @@ class WTALayerBrain(object):
         self.im_dim = params['image_dim_display']  # TODO 1500
 
         self.input_im_dim = params['image_dim_NxN_pixels']  # TODO 16
-        self.rf_dim = self.input_im_dim  # i.e. 16
 
         self.lr_base = params['learning_rate']  # TODO 0.0001 * 0.25
         self.bins_per_pixel = params['bins_per_pixel']  # TODO 6
@@ -67,6 +66,7 @@ class WTALayerBrain(object):
 
         self.num_layers = self.layer_start_times.shape[0]
 
+        self.rf_dim = self.input_im_dim  # i.e. 16
         self.input_feature_len = self.rf_dim * self.rf_dim * self.bins_per_pixel
 
         self.probs = []
@@ -114,11 +114,8 @@ class WTALayerBrain(object):
 
         self.last_input_im = input_pixels_1.copy()
 
-        error = np.sum(input_exp_1)
-
         remainder = input_exp_1.copy()
         reconstruction = np.zeros((1, self.input_feature_len))
-        rfs_active = np.zeros(self.num_rf)
 
         self.last_eff_frames[:] = np.nan
 
