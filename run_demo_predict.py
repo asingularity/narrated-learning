@@ -114,10 +114,10 @@ def get_brain_params():
         'image_dim_NxN_pixels': IM_DIM,
         'learning_rate': 0.001,
         'bins_per_pixel': 6,
-        'num_rf_per_wta_layer_per_hl': np.array([10, 5]),
-        'num_wta_layer_per_hl': np.array([6, 4]),
-        'input_time_steps_per_hl': np.array([1, 10]),
-        'layer_start_time_offset_per_hl': np.array([30000, 30000]), # np.array([300000, 300000])
+        'num_rf_per_wta_layer_per_hl': np.array([10, 10]),
+        'num_wta_layer_per_hl': np.array([6, 6]),
+        'input_time_steps_per_hl': np.array([1, 5]),
+        'layer_start_time_offset_per_hl': np.array([30000, 60000]), # np.array([300000, 300000])
         'enable_learning_off': True,
         'plot_interval_seconds': 30
     }
