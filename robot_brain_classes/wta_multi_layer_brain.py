@@ -27,6 +27,9 @@ class WTAMultiLayerBrain(object):
             need parameters per hyperlayer i.e. layer_start_times
             need to add input time steps parameter so that second hyperlayer can learn spatiotemporal
 
+        TODO next
+            add prediction: think through delays and processing of next layer, etc... how timing works out
+
         :param params:
         '''
 
@@ -409,16 +412,33 @@ class WTAMultiLayerBrain(object):
                                        np.zeros((self.input_im_dim, 2)), imr0, np.zeros((self.input_im_dim, 2)), imr1,)))
             ims_names_list.append('input, reconstruct, remainder_' + str(hl))
 
-        else:
-            # TODO (************************ ABOVE WON'T WORK FOR HL > 0:::!!!!!!!!!!!!!!!!!!!!!!!!
-            # TODO how to visualize for hl > 0 ?
+        # generic (all hyperlayers)
+        #   add generic visualization of all of a hyperlayer's weights: linear per RF, RFs (vertical) X wta-layers (horizontal)
 
-            # for layer_n in range(self.num_wta_layers_per_hl[hl]):
-            #
-            #     w = self.weights[hl][layer_n]
-            #
+        hl_weights = self.weights[hl]  # list len [num_wta_layers], of arrays shape: (num_rf, feature_len)
 
-            pass
+
+        w_im = None
+
+        for layer_n in range(self.num_wta_layers_per_hl[hl]):
+
+            layer_w = hl_weights[layer_n]  # (num_rf, feature_len)
+            layer_w = np.repeat(layer_w, 4, axis=0)
+
+            # stack the layers:
+            if w_im is None:
+                w_im = layer_w.copy()
+            else:
+                spacer = 0.5 * np.ones((2, layer_w.shape[1]))
+                w_im = np.vstack((w_im, spacer, layer_w))
+
+        # scale this image:
+        max_dim = max(w_im.shape[0], w_im.shape[1])
+        imscale = self.im_dim / max_dim  # 0.2: full table, 2.0
+        w_im = cv2.resize(w_im, dsize=(0, 0), fx=imscale, fy=imscale, interpolation=cv2.INTER_NEAREST)
+
+        ims_list.append(w_im)
+        ims_names_list.append('weights_hyperlayer_' + str(hl))
 
         return ims_list, ims_names_list
 
