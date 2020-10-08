@@ -28,7 +28,9 @@ class WTAMultiLayerBrain(object):
             need to add input time steps parameter so that second hyperlayer can learn spatiotemporal
 
         TODO next
+            look at distribution of activities / events: i.e. raster: does it look asyncronous vs. synchronous
             add prediction: think through delays and processing of next layer, etc... how timing works out
+            todo: try to do something segmentation-like
 
         :param params:
         '''
@@ -68,6 +70,8 @@ class WTAMultiLayerBrain(object):
         # how often in real seconds to print the plots (at a get_table_ims call)
         self.plot_interval = params['plot_interval_seconds']  # TODO 30
 
+        self.predict_time_steps = 2  # TODO make parameter
+
         # ************ derived parameters ************
 
         self.num_hl = len(self.num_wta_layers_per_hl)
@@ -89,6 +93,8 @@ class WTAMultiLayerBrain(object):
         hl_start_time = 0
         hl_input_state_dim = self.input_im_dim * self.input_im_dim * self.bins_per_pixel
 
+        self.activity_rasters = []
+
         print()
         for hl in range(self.num_hl):
             print()
@@ -102,16 +108,19 @@ class WTAMultiLayerBrain(object):
             # *** history for spatiotemporal RFs, input to next hl ***
 
             if hl == self.num_hl - 1:
-                steps_to_store = 1  # last hyperlayer; we don't have a use for storing this actually, currently
+                steps_to_store = max(self.predict_time_steps, 1)  # last hyperlayer; we don't have a use for storing this actually, currently
             else:
-                steps_to_store = self.input_time_steps_per_hl[hl + 1]
+                steps_to_store = max(self.predict_time_steps, self.input_time_steps_per_hl[hl + 1])
 
             output_state_dim = self.num_rf_per_wta_layer_per_hl[hl] * self.num_wta_layers_per_hl[hl]
 
             print('    output history: max_delay', steps_to_store, 'states_dim_list:', [output_state_dim])
             print()
             hl_output_history = StatesLimitedHistory(params={'max_delay': steps_to_store,
-                                                             'states_dim_list': [output_state_dim]})
+                                                             'states_dim_list': [output_state_dim],
+                                                             'store_extra_data': False})
+
+            self.activity_rasters.append(np.zeros((max_time, output_state_dim)))
 
             self.hl_output_histories.append(hl_output_history)
 
@@ -162,6 +171,25 @@ class WTAMultiLayerBrain(object):
         self.ax.get_xaxis().get_major_formatter().set_scientific(False)
         self.ax.get_yaxis().get_major_formatter().set_scientific(False)
 
+        # ************ predictive stuff ************
+
+        # all RFs in HL==1 -> all RFs in HL==0
+
+        num_rfs_hl_0 = self.num_rf_per_wta_layer_per_hl[0] * self.num_wta_layers_per_hl[0]
+        num_rfs_hl_1 = self.num_rf_per_wta_layer_per_hl[1] * self.num_wta_layers_per_hl[1]
+
+        self.pm = np.zeros((num_rfs_hl_1, num_rfs_hl_0))  # shape: (from RFs, to RFs) i.e. (HL==1, HL==0)
+        self.pm_lr = self.lr_base
+
+        self.predicted_hl_0_rf_activities = None
+
+        self.predicted_hl_0_rf_activies_history = StatesLimitedHistory(params={'max_delay': self.predict_time_steps,
+                                                                               'states_dim_list': [num_rfs_hl_0],
+                                                                               'store_extra_data': False})
+
+        self.input_im_history = StatesLimitedHistory(params={'max_delay': self.predict_time_steps,
+                                                             'states_dim_list': [self.input_im_dim * self.input_im_dim],
+                                                             'store_extra_data': False})
 
         if False:
             # ***************** OLD BAD *****************
@@ -217,7 +245,11 @@ class WTAMultiLayerBrain(object):
 
     def process_input(self, input_im):
         input_pixels_1 = input_im
-        input_arr_1 = input_pixels_1.flatten()[np.newaxis, :]
+        input_pixels_flat = input_pixels_1.flatten()
+
+        self.input_im_history.store_new_states(newest_states_list=[input_pixels_flat])
+
+        input_arr_1 = input_pixels_flat[np.newaxis, :]
         input_exp_1 = self._bin_pixels_expand_columns(arr=input_arr_1, num_bins_per_pixel=self.bins_per_pixel)
 
         self.last_input_im = input_pixels_1.copy()
@@ -233,6 +265,9 @@ class WTAMultiLayerBrain(object):
 
             if hl_output is not None:
                 assert hl_output.shape[0] > 1, hl_output.shape
+                tmp1 = np.nonzero(hl_output)[0]
+
+                self.activity_rasters[hl][self.t, tmp1] = 1
 
                 # history update with hl_output
 
@@ -255,6 +290,52 @@ class WTAMultiLayerBrain(object):
                     assert hl_input.shape[0] > 1, hl_input.shape
 
                     hl_input = hl_input[np.newaxis, :]
+
+                # predictive
+                if hl == 1 and self.t > 1:
+
+
+                    hl_0_rf_activities_current = self.hl_output_histories[0].get_state(state_index=0, delay=0)
+                    hl_1_rf_activities_past = self.hl_output_histories[1].get_state(state_index=0, delay=self.predict_time_steps)
+
+                    hl_1_rf_activities_current = self.hl_output_histories[1].get_state(state_index=0, delay=0)
+
+
+                    assert hl_0_rf_activities_current is not None
+                    assert hl_1_rf_activities_past is not None
+
+                    if np.count_nonzero(hl_0_rf_activities_current) > 0 and np.count_nonzero(hl_1_rf_activities_past) > 0:
+
+                        rows = np.nonzero(hl_1_rf_activities_past)[0].astype(np.int)
+                        cols = np.nonzero(hl_0_rf_activities_current)[0].astype(np.int)
+
+                        rows_exp = np.tile(rows, cols.shape[0])
+                        cols_exp = np.repeat(cols, rows.shape[0])
+
+                        # fix this; this is probably not computing the right thing
+                        #   should be better now
+                        # also, we are probably gonna have to look at prediction image to make sense of this
+                        # for that, we will need to compute the actual prediction; not just training input asabove
+                        #       meaning: use the prediction matrix on current hl_1 activities to make hl_0 activities prediction
+                        # also need to define prediction time steps ahead
+
+                        # what we want is: prob(l==0, present), |given| (l==1, past)
+
+                        pm_old = self.pm.copy()
+
+                        self.pm[rows, :] = (1.0 - self.pm_lr) * pm_old[rows, :] + self.pm_lr * 0.0
+                        self.pm[rows_exp, cols_exp] = (1.0 - self.pm_lr) * pm_old[rows_exp, cols_exp] + self.pm_lr * 1.0
+
+                        # TODO compute actual next-frame prediction
+
+                        # self.predict_time_steps use here!!!
+
+                        hl_0_probs = np.amax(self.pm[np.nonzero(hl_1_rf_activities_current)[0], :], axis=0)
+                        assert hl_0_probs.shape[0] == hl_0_rf_activities_current.shape[0], str((hl_0_probs.shape, hl_0_rf_activities_current.shape))
+
+                        self.predicted_hl_0_rf_activities = hl_0_probs
+                        self.predicted_hl_0_rf_activies_history.store_new_states(newest_states_list=[hl_0_probs])
+
             else:
                 hl_input = None
 
@@ -335,8 +416,6 @@ class WTAMultiLayerBrain(object):
 
     def get_table_ims(self):
 
-        # TODO need to decide how to visualize non-input hyperlayer
-
         ims_list = []
         ims_names_list = []
 
@@ -412,6 +491,62 @@ class WTAMultiLayerBrain(object):
                                        np.zeros((self.input_im_dim, 2)), imr0, np.zeros((self.input_im_dim, 2)), imr1,)))
             ims_names_list.append('input, reconstruct, remainder_' + str(hl))
 
+            # TODO now do prediction image!
+            # self.predicted_hl_0_rf_activities is prob, one per RF
+            # need to store a history of this! for proper analysis
+            # most straightforward way to predict: pick winner per wta-layer
+            # also need: the input image from the past, for comparison, to actual predicted input image
+
+            # assume:
+            #   prediction steps: tau
+            #   prediction@ t - tau, [should match], actual image @ t
+            # show:
+            #   prediction image @ t - tau
+            #   actual image @ t
+            #   actual image @ t - tau
+
+            prediction_past = self.predicted_hl_0_rf_activies_history.get_state(state_index=0, delay=self.predict_time_steps)
+            actual_past = self.input_im_history.get_state(state_index=0, delay=self.predict_time_steps).reshape((self.input_im_dim, self.input_im_dim))
+            actual_present = self.input_im_history.get_state(state_index=0, delay=0).reshape((self.input_im_dim, self.input_im_dim))
+
+            prediction_exp = np.zeros(self.input_im_dim * self.input_im_dim * self.bins_per_pixel)
+
+            k = 0
+            for layer_n in range(self.num_wta_layers_per_hl[hl]):
+                layer_w = self.weights[hl][layer_n]  # (num_rf, feature_len)
+
+                # TODO pick max RF -> 1, others -> 0 per wta-layer in prediction_past; or treat as weights directly
+
+                thing_to_add = None
+                max_k_val = -np.inf
+
+                for rf_i in range(layer_w.shape[0]):
+                    if prediction_past[k] > max_k_val:
+                        max_k_val = prediction_past[k]
+                        thing_to_add = layer_w[rf_i, :]
+                    k += 1
+
+                prediction_exp = prediction_exp + thing_to_add
+
+                # for rf_i  in range(layer_w.shape[0]):
+                #     prediction_exp += prediction_past[k] * layer_w[rf_i, :]
+                #
+                #     k += 1
+
+            prediction_exp[prediction_exp < 0] = 0
+            prediction_exp[prediction_exp > 1] = 1
+
+            arr, weights = self._collapse_binned_columns_to_pixels(arr_exp=prediction_exp[np.newaxis, :], num_bins_per_pixel=self.bins_per_pixel)
+            im0 = arr[0, :].reshape((self.input_im_dim, self.input_im_dim))
+            #im1 = weights[0, :].reshape((self.input_im_dim, self.input_im_dim))
+
+            predict_im_show = np.hstack((actual_present, 0.5 * np.ones((self.input_im_dim, 2)),
+                                         im0, 0.5 * np.ones((self.input_im_dim, 2)),
+                                         actual_past, 0.5 * np.ones((self.input_im_dim, 2))))
+
+            ims_list.append(predict_im_show)
+            ims_names_list.append('now, predict, past')
+
         # generic (all hyperlayers)
         #   add generic visualization of all of a hyperlayer's weights: linear per RF, RFs (vertical) X wta-layers (horizontal)
 
@@ -447,6 +582,15 @@ class WTAMultiLayerBrain(object):
         print('making plot')
         print()
 
+        print('prediction info:')
+        print('    min pm:', np.amin(self.pm))
+        print('    max pm:', np.amax(self.pm))
+        print('    mean pm:', np.mean(self.pm))
+        print('    sum pm:', np.sum(self.pm))
+        print()
+        #print(self.pm)
+        #print()
+
         for hl in range(self.num_hl):
             try:
                 self.ax.cla()
@@ -461,7 +605,18 @@ class WTAMultiLayerBrain(object):
 
                 self.ax.axvline(x=self.learning_off_time, color='r')
                 self.fig.savefig("rec_error_hyperlayer_" + str(hl) + ".png", dpi=100)
-                self.ax.cla()
+
+                # TODO fix this it isn't right!!!
+                #
+                # thing_to_plot = self.activity_rasters[hl][max(0, self.t-5000):self.t, :]
+                #
+                # #print('THING TO PLOT min', np.amin(thing_to_plot), ', max: ', np.amax(thing_to_plot), ', shape: ', thing_to_plot.shape)
+                #
+                # self.ax.cla()
+                # self.ax.plot(thing_to_plot, color='b', marker='.', linestyle='')
+                # self.ax.set_ylim([-1, self.num_wta_layers_per_hl[hl] * self.num_rf_per_wta_layer_per_hl[hl]])
+                # self.fig.savefig("activities_" + str(hl) + ".png", dpi=100)
+
             except:
                 print()
                 print('!!!!!!!! Error !!!!!!!!')

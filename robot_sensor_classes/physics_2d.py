@@ -88,7 +88,7 @@ class Physics2DSensor(object):
             self.space.remove(ball, ball.body)
             self.balls.remove(ball)
 
-        self.space.step(1 / 50.0)
+        self.space.step(1 / 100.0)
         return im
 
 
