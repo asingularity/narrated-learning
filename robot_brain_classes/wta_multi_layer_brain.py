@@ -72,6 +72,10 @@ class WTAMultiLayerBrain(object):
 
         self.predict_time_steps = 2  # TODO make parameter
 
+        # this one basically disables the "background" in the reconstruction / prediction images
+        # also shows weights instead of values in prediction image
+        self.enable_hack_skip_first_layer = True  # TODO make parameter
+
         # ************ derived parameters ************
 
         self.num_hl = len(self.num_wta_layers_per_hl)
@@ -361,6 +365,8 @@ class WTAMultiLayerBrain(object):
         remainder = hl_input.copy()
         reconstruction = np.zeros((1, input_feature_len))
 
+        reconstruction_no_first = np.zeros((1, input_feature_len))
+
         hl_output = None
 
         for layer_n in range(self.num_wta_layers_per_hl[hl]):
@@ -386,6 +392,9 @@ class WTAMultiLayerBrain(object):
 
                 reconstruction = reconstruction + self.weights[hl][layer_n][win_rf_index, :]
 
+                if self.enable_hack_skip_first_layer and layer_n > 0:
+                    reconstruction_no_first = reconstruction_no_first + self.weights[hl][layer_n][win_rf_index, :]
+
                 wta_layer_output = np.zeros(self.num_rf_per_wta_layer_per_hl[hl])
                 wta_layer_output[win_rf_index] = 1.0
 
@@ -402,9 +411,17 @@ class WTAMultiLayerBrain(object):
         reconstruction[reconstruction > 1] = 1
         reconstruction[reconstruction < 0] = 0
 
+        if self.enable_hack_skip_first_layer:
+            reconstruction_no_first[reconstruction_no_first > 1] = 1
+            reconstruction_no_first[reconstruction_no_first < 0] = 0
+
         if hl == 0:
             self.last_remainder_im = remainder.copy()
-            self.last_reconstruction_im = reconstruction.copy()
+
+            if self.enable_hack_skip_first_layer:
+                self.last_reconstruction_im = reconstruction_no_first.copy()
+            else:
+                self.last_reconstruction_im = reconstruction.copy()
 
         rec_error = np.sum(np.abs(reconstruction - hl_input))
         # sum_remainder = np.sum(np.abs(remainder))
@@ -511,8 +528,12 @@ class WTAMultiLayerBrain(object):
 
             prediction_exp = np.zeros(self.input_im_dim * self.input_im_dim * self.bins_per_pixel)
 
+            start_layer = 0
+            if self.enable_hack_skip_first_layer:
+                start_layer = 1
+
             k = 0
-            for layer_n in range(self.num_wta_layers_per_hl[hl]):
+            for layer_n in range(start_layer, self.num_wta_layers_per_hl[hl]):
                 layer_w = self.weights[hl][layer_n]  # (num_rf, feature_len)
 
                 # TODO pick max RF -> 1, others -> 0 per wta-layer in prediction_past; or treat as weights directly
@@ -537,8 +558,11 @@ class WTAMultiLayerBrain(object):
             prediction_exp[prediction_exp > 1] = 1
 
             arr, weights = self._collapse_binned_columns_to_pixels(arr_exp=prediction_exp[np.newaxis, :], num_bins_per_pixel=self.bins_per_pixel)
-            im0 = arr[0, :].reshape((self.input_im_dim, self.input_im_dim))
-            #im1 = weights[0, :].reshape((self.input_im_dim, self.input_im_dim))
+
+            if self.enable_hack_skip_first_layer:
+                im0 = weights[0, :].reshape((self.input_im_dim, self.input_im_dim))
+            else:
+                im0 = arr[0, :].reshape((self.input_im_dim, self.input_im_dim))
 
             predict_im_show = np.hstack((actual_present, 0.5 * np.ones((self.input_im_dim, 2)),
                                          im0, 0.5 * np.ones((self.input_im_dim, 2)),
@@ -546,6 +570,11 @@ class WTAMultiLayerBrain(object):
 
             ims_list.append(predict_im_show)
             ims_names_list.append('now, predict, past')
+
+        elif hl == 1:
+            pass
+
+            # TODO make images showing RFs for upper layer, reducing to multiple steps of (weight-averaged) spatial RFs
 
         # generic (all hyperlayers)
         #   add generic visualization of all of a hyperlayer's weights: linear per RF, RFs (vertical) X wta-layers (horizontal)
@@ -605,6 +634,9 @@ class WTAMultiLayerBrain(object):
 
                 self.ax.axvline(x=self.learning_off_time, color='r')
                 self.fig.savefig("rec_error_hyperlayer_" + str(hl) + ".png", dpi=100)
+
+                # TODO plot prediction error (also vs. current frame for reference!) same plot!
+                # TODO also maybe hack visualization to manually remove background RF for now (since multi-predict active anyways!!)
 
                 # TODO fix this it isn't right!!!
                 #
