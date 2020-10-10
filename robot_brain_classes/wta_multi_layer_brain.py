@@ -625,16 +625,16 @@ class WTAMultiLayerBrain(object):
 
                         k2 = 0
                         for prev_wta_ind in range(self.num_wta_layers_per_hl[hl - 1]):
-                            if (not self.enable_hack_skip_first_layer) or prev_wta_ind > 0:
 
-                                for prev_rf_ind in range(self.num_rf_per_wta_layer_per_hl[hl - 1]):
-
+                            for prev_rf_ind in range(self.num_rf_per_wta_layer_per_hl[hl - 1]):
+                                if (not self.enable_hack_skip_first_layer) or prev_wta_ind > 0:
                                     rf_tmp = self.weights[hl - 1][prev_wta_ind][prev_rf_ind, :]
                                     if rf_to_add is None:
-                                        rf_to_add = rf_weights[k2] * rf_tmp
+                                        rf_to_add = rf_weights_step[k2] * rf_tmp
                                     else:
-                                        rf_to_add = rf_to_add + rf_weights[k2] * rf_tmp
-                                    k2 += 1
+                                        rf_to_add = rf_to_add + rf_weights_step[k2] * rf_tmp
+                                k2 += 1
+
 
                         k += num_weights_step
 
