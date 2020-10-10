@@ -23,14 +23,16 @@ COLOR_ENABLED = False
 USE_VIDEO_IN = False
 
 if USE_VIDEO_IN:
-    assert False, 'Before enabling this mode, need to make video playback input able to take sub-image!'
-    IM_DIM = 128  # pixels, width & height
+    ENABLE_HACK_SKIP_FIRST_LAYER = False
 else:
-    IM_DIM = 16  # pixels, width & height
+    ENABLE_HACK_SKIP_FIRST_LAYER = True  # for bouncing balls, better viz
+
+IM_DIM = 16  # pixels, width & height
 
 
 # uses: IM_DIM
 def get_sensors_params():
+    # TODO before using, fix im_dim like below
     # params_video_playback = {
     #     'image_dim': IM_DIM,  # sensor class has to figure out subset & scale to achieve this dim
     #     'video_dir': '/srv/projects/NL-data/',
@@ -46,7 +48,9 @@ def get_sensors_params():
     # }
 
     params_video_playback = {
-        'image_dim': IM_DIM,  # sensor class has to figure out subset & scale to achieve this dim
+        'image_dim': 128,  # sensor class has to figure out subset & scale to achieve this dim
+        'output_image_dim': IM_DIM,  # output image dim
+        'output_image_start_RC': (50, 64),
         'video_dir': '/srv/projects/NL-data/',
         'video_filename': 'DSC_0446.MOV',  # 32300 frames
         # 'video_filename': 'P1033727.mp4',  # 3840x2160
@@ -114,12 +118,14 @@ def get_brain_params():
         'image_dim_NxN_pixels': IM_DIM,
         'learning_rate': 0.001,
         'bins_per_pixel': 6,
-        'num_rf_per_wta_layer_per_hl': np.array([20, 20]),
+        'num_rf_per_wta_layer_per_hl': np.array([20, 40]),
         'num_wta_layer_per_hl': np.array([6, 6]),
-        'input_time_steps_per_hl': np.array([1, 5]),
+        'input_time_steps_per_hl': np.array([1, 4]),
         'layer_start_time_offset_per_hl': np.array([60000, 4 * 60000]), # np.array([300000, 300000])
         'enable_learning_off': True,
-        'plot_interval_seconds': 30
+        'plot_interval_seconds': 30,
+        'enable_hack_skip_first_layer': ENABLE_HACK_SKIP_FIRST_LAYER,
+        'enable_generic_weights_viz': False
     }
 
     return params

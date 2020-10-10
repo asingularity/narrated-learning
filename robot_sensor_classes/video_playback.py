@@ -14,6 +14,9 @@ class VideoPlaybackSensor(object):
         self.preload_file = True
 
         self.image_dim = params['image_dim']
+        self.output_image_dim = params['output_image_dim']
+        self.output_image_start_RC = params['output_image_start_RC']
+
         self.video_dir = params['video_dir']
         self.video_filename = params['video_filename']
 
@@ -209,6 +212,15 @@ class VideoPlaybackSensor(object):
 
         assert sample_im.shape[0] == self.image_dim, (sample_im.shape[0], self.image_dim)
         assert sample_im.shape[1] == self.image_dim, (sample_im.shape[1], self.image_dim)
+
+        if self.output_image_dim is not None:
+            if self.output_image_start_RC is not None:
+                r0 = self.output_image_start_RC[0]
+                c0 = self.output_image_start_RC[1]
+                dim = self.output_image_dim
+                sample_im = sample_im[r0:r0+dim, c0:c0+dim]
+            else:
+                assert False, 'Unsupported! output_image_dim does not match image_dim, and no image_start_RC provided!'
 
         self.t += 1
 

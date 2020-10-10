@@ -70,11 +70,14 @@ class WTAMultiLayerBrain(object):
         # how often in real seconds to print the plots (at a get_table_ims call)
         self.plot_interval = params['plot_interval_seconds']  # TODO 30
 
-        self.predict_time_steps = 2  # TODO make parameter
+        self.predict_time_steps = 4  # TODO make parameter
 
         # this one basically disables the "background" in the reconstruction / prediction images
         # also shows weights instead of values in prediction image
-        self.enable_hack_skip_first_layer = True  # TODO make parameter
+        self.enable_hack_skip_first_layer = params['enable_hack_skip_first_layer']  # TODO make parameter
+
+        # enable "generic" weights viz; overall not very useful
+        self.enable_generic_weights_viz = params['enable_generic_weights_viz']
 
         # ************ derived parameters ************
 
@@ -289,7 +292,9 @@ class WTAMultiLayerBrain(object):
                     # set hl_input
                     hl_input = self.hl_output_histories[hl].get_state_sequence(state_index=0,
                                                                                delay_long=self.input_time_steps_per_hl[hl + 1] - 1,
-                                                                               delay_short=0).flatten()
+                                                                               delay_short=0)
+                    # print(hl_input.shape)  # (5, 120)  -> 5 is time steps for next layer, 120 is (num_rf==20) * (num_layers==6)
+                    hl_input = hl_input.flatten()
 
                     assert hl_input.shape[0] > 1, hl_input.shape
 
@@ -474,6 +479,9 @@ class WTAMultiLayerBrain(object):
                     im0 = arr[r_tmp, :].reshape((self.input_im_dim, self.input_im_dim))  # rf_dim
                     im1 = weights[r_tmp, :].reshape((self.input_im_dim, self.input_im_dim))
 
+                    # if np.amin(im1) < 0:
+                    #     print(np.amin(im1), np.amax(im1))
+
                     tmp2 = np.hstack((im0, im1))
 
                     if tmp_im is None:
@@ -529,11 +537,13 @@ class WTAMultiLayerBrain(object):
             prediction_exp = np.zeros(self.input_im_dim * self.input_im_dim * self.bins_per_pixel)
 
             start_layer = 0
+            k = 0
+
             if self.enable_hack_skip_first_layer:
                 start_layer = 1
 
-            k = 0
-            for layer_n in range(start_layer, self.num_wta_layers_per_hl[hl]):
+            for layer_n in range(0, self.num_wta_layers_per_hl[hl]):
+
                 layer_w = self.weights[hl][layer_n]  # (num_rf, feature_len)
 
                 # TODO pick max RF -> 1, others -> 0 per wta-layer in prediction_past; or treat as weights directly
@@ -547,7 +557,8 @@ class WTAMultiLayerBrain(object):
                         thing_to_add = layer_w[rf_i, :]
                     k += 1
 
-                prediction_exp = prediction_exp + thing_to_add
+                if layer_n >= start_layer:
+                    prediction_exp = prediction_exp + thing_to_add
 
                 # for rf_i  in range(layer_w.shape[0]):
                 #     prediction_exp += prediction_past[k] * layer_w[rf_i, :]
@@ -574,35 +585,77 @@ class WTAMultiLayerBrain(object):
         elif hl == 1:
             pass
 
-            # TODO make images showing RFs for upper layer, reducing to multiple steps of (weight-averaged) spatial RFs
+            # TODO work in progress
+            # make images showing RFs for upper layer, reducing to multiple steps of (weight-averaged) spatial RFs
+            #   idea: instead, we could i.e. show N "winning" sample input sequences for each RF
+            #       (this would be very noisy...)
+
+            if False:
+
+                for wta_layer in range(self.num_wta_layers_per_hl[hl]):
+                    arr, weights = self._collapse_binned_columns_to_pixels(arr_exp=self.weights[hl][wta_layer],
+                                                                           num_bins_per_pixel=self.bins_per_pixel)
+
+                    assert weights.shape[0] == self.num_rf_per_wta_layer_per_hl[hl]
+
+                    # compute for each RF in this second layer:
+                    for rf_ind in range(self.num_rf_per_wta_layer_per_hl[hl]):
+                        rf_weights = weights[rf_ind, :]
+
+                        # TODO what's not right here? only getting input from one WTA layer of previous hl!
+                        # rf_weights.shape[0]: 80, which is 20 (RFs) * 4 (time steps)
+
+                        k = 0
+                        # hstack by time delay
+
+                        for time_del in range(self.input_time_steps_per_hl[hl]):
+                            # now we need to weighted-add the hl==0 RFs, weighing with these corresponding RF weights
+                            # use same hack enable option to leave out rf 0
+                            num_weights_step = self.num_rf_per_wta_layer_per_hl[hl - 1]
+
+                            rf_weights_step = rf_weights[k:k + num_weights_step]
+
+                            #rfs_weighted_sum = self.weights[hl - 1][]
+
+                            k += num_weights_step
+
+                        assert k == rf_weights.shape[0], str((k, rf_weights.shape[0]))
+
+                        # vstack the RFs
+
+                    # hstack a large (half-RF size) spacer
+
+                    # hstack the WTA layers
 
         # generic (all hyperlayers)
-        #   add generic visualization of all of a hyperlayer's weights: linear per RF, RFs (vertical) X wta-layers (horizontal)
+        if self.enable_generic_weights_viz:
 
-        hl_weights = self.weights[hl]  # list len [num_wta_layers], of arrays shape: (num_rf, feature_len)
+            #   add generic visualization of all of a hyperlayer's weights: linear per RF, RFs (vertical) X wta-layers (horizontal)
+
+            hl_weights = self.weights[hl]  # list len [num_wta_layers], of arrays shape: (num_rf, feature_len)
 
 
-        w_im = None
+            w_im = None
 
-        for layer_n in range(self.num_wta_layers_per_hl[hl]):
+            for layer_n in range(self.num_wta_layers_per_hl[hl]):
 
-            layer_w = hl_weights[layer_n]  # (num_rf, feature_len)
-            layer_w = np.repeat(layer_w, 4, axis=0)
+                layer_w = hl_weights[layer_n]  # (num_rf, feature_len)
+                layer_w = np.repeat(layer_w, 4, axis=0)
 
-            # stack the layers:
-            if w_im is None:
-                w_im = layer_w.copy()
-            else:
-                spacer = 0.5 * np.ones((2, layer_w.shape[1]))
-                w_im = np.vstack((w_im, spacer, layer_w))
+                # stack the layers:
+                if w_im is None:
+                    w_im = layer_w.copy()
+                else:
+                    spacer = 0.5 * np.ones((2, layer_w.shape[1]))
+                    w_im = np.vstack((w_im, spacer, layer_w))
 
-        # scale this image:
-        max_dim = max(w_im.shape[0], w_im.shape[1])
-        imscale = self.im_dim / max_dim  # 0.2: full table, 2.0
-        w_im = cv2.resize(w_im, dsize=(0, 0), fx=imscale, fy=imscale, interpolation=cv2.INTER_NEAREST)
+            # scale this image:
+            max_dim = max(w_im.shape[0], w_im.shape[1])
+            imscale = self.im_dim / max_dim  # 0.2: full table, 2.0
+            w_im = cv2.resize(w_im, dsize=(0, 0), fx=imscale, fy=imscale, interpolation=cv2.INTER_NEAREST)
 
-        ims_list.append(w_im)
-        ims_names_list.append('weights_hyperlayer_' + str(hl))
+            ims_list.append(w_im)
+            ims_names_list.append('weights_hyperlayer_' + str(hl))
 
         return ims_list, ims_names_list
 
