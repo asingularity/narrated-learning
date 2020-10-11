@@ -80,7 +80,7 @@ class WTAMultiLayerBrain(object):
         # predictive parameters:
         # TODO make these parameters
         # how long to predict ahead
-        self.predict_time_steps = 4
+        self.predict_time_steps = 1
 
         # how many delayed lateral input time steps to use
         self.predict_lateral_input_time_steps = 4
@@ -321,6 +321,7 @@ class WTAMultiLayerBrain(object):
 
                             # self.predict_time_steps use here!!!
 
+                            # max is taken over columns; such that for every hl-0 "post", you store the max "pre" prob:
                             hl_0_probs = np.amax(self.pm[np.nonzero(hl_1_rf_activities_current)[0], :], axis=0)
                             assert hl_0_probs.shape[0] == hl_0_rf_activities_current.shape[0], str((hl_0_probs.shape, hl_0_rf_activities_current.shape))
 
