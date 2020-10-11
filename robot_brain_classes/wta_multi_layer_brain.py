@@ -110,7 +110,7 @@ class WTAMultiLayerBrain(object):
         hl_start_time = 0
         hl_input_state_dim = self.input_im_dim * self.input_im_dim * self.bins_per_pixel
 
-        self.activity_rasters = []
+        #elf.activity_rasters = []
 
         print()
         for hl in range(self.num_hl):
@@ -137,7 +137,8 @@ class WTAMultiLayerBrain(object):
                                                              'states_dim_list': [output_state_dim],
                                                              'store_extra_data': False})
 
-            self.activity_rasters.append(np.zeros((max_time, output_state_dim)))
+            # memory error:
+            #self.activity_rasters.append(np.zeros((max_time, output_state_dim)))
 
             self.hl_output_histories.append(hl_output_history)
 
@@ -254,7 +255,7 @@ class WTAMultiLayerBrain(object):
                 assert hl_output.shape[0] > 1, hl_output.shape
                 tmp1 = np.nonzero(hl_output)[0]
 
-                self.activity_rasters[hl][self.t, tmp1] = 1
+                #self.activity_rasters[hl][self.t, tmp1] = 1
 
                 # history update with hl_output
 
@@ -282,7 +283,7 @@ class WTAMultiLayerBrain(object):
 
                 # predictive
                 # OLD METHOD: DISABLED
-                if False:
+                if True:
                     if hl == 1 and self.t > 1:
 
 
@@ -322,7 +323,10 @@ class WTAMultiLayerBrain(object):
                             # self.predict_time_steps use here!!!
 
                             # max is taken over columns; such that for every hl-0 "post", you store the max "pre" prob:
+                            # TODO maybe this should actually be a sum, instead; to counter the multiple wta-layers where one post can make *multiple* valid / strong predictions in different wta-layers, that shouldn't be ignored
+                            #       i.e. we have order-dependence...
                             hl_0_probs = np.amax(self.pm[np.nonzero(hl_1_rf_activities_current)[0], :], axis=0)
+                            
                             assert hl_0_probs.shape[0] == hl_0_rf_activities_current.shape[0], str((hl_0_probs.shape, hl_0_rf_activities_current.shape))
 
                             self.predicted_hl_0_rf_activies_history.store_new_states(newest_states_list=[hl_0_probs])
@@ -332,60 +336,61 @@ class WTAMultiLayerBrain(object):
 
         # we do prediction and prediction learning on newest data, after processing and storing based on new input above
 
-        # training input:
+        if False:  # new way that doesn't work:
+            # training input:
 
-        # TODO might want to verify functionality of states limited history; in terms of storing more delays than needed etc.
+            # TODO might want to verify functionality of states limited history; in terms of storing more delays than needed etc.
 
-        lateral_predictive_input = self.hl_output_histories[0].get_state_sequence(state_index=0, delay_long=self.predict_time_steps + self.predict_lateral_input_time_steps - 1, delay_short=self.predict_time_steps).flatten()
-        feedback_predictive_input = self.hl_output_histories[1].get_state_sequence(state_index=0, delay_long=self.predict_time_steps + self.predict_feedback_input_time_steps - 1, delay_short=self.predict_time_steps).flatten()
-        hl_predictive_input = np.concatenate((lateral_predictive_input, feedback_predictive_input))
+            lateral_predictive_input = self.hl_output_histories[0].get_state_sequence(state_index=0, delay_long=self.predict_time_steps + self.predict_lateral_input_time_steps - 1, delay_short=self.predict_time_steps).flatten()
+            feedback_predictive_input = self.hl_output_histories[1].get_state_sequence(state_index=0, delay_long=self.predict_time_steps + self.predict_feedback_input_time_steps - 1, delay_short=self.predict_time_steps).flatten()
+            hl_predictive_input = np.concatenate((lateral_predictive_input, feedback_predictive_input))
 
-        # for every wta-layer of hl==0, train predictive RF on hl_predictive_input
-        hl_output_all = self.hl_output_histories[0].get_state(state_index=0, delay=0).flatten()  # get current state
+            # for every wta-layer of hl==0, train predictive RF on hl_predictive_input
+            hl_output_all = self.hl_output_histories[0].get_state(state_index=0, delay=0).flatten()  # get current state
 
-        # print(hl_output_all.shape, self.num_rf_per_wta_layer_per_hl[0], self.num_wta_layers_per_hl[0])
-        for layer_n in range(self.num_wta_layers_per_hl[0]):
-            hl_output = hl_output_all[layer_n * self.num_rf_per_wta_layer_per_hl[0]: (layer_n + 1) * self.num_rf_per_wta_layer_per_hl[0]]
-            # winner learns
+            # print(hl_output_all.shape, self.num_rf_per_wta_layer_per_hl[0], self.num_wta_layers_per_hl[0])
+            for layer_n in range(self.num_wta_layers_per_hl[0]):
+                hl_output = hl_output_all[layer_n * self.num_rf_per_wta_layer_per_hl[0]: (layer_n + 1) * self.num_rf_per_wta_layer_per_hl[0]]
+                # winner learns
 
-            cnt_nnz = np.count_nonzero(hl_output)
-            assert cnt_nnz == 0 or cnt_nnz == 1
+                cnt_nnz = np.count_nonzero(hl_output)
+                assert cnt_nnz == 0 or cnt_nnz == 1
 
-            if cnt_nnz > 0:
-                winner = np.argmax(hl_output)
+                if cnt_nnz > 0:
+                    winner = np.argmax(hl_output)
 
-                # predict_weights for a wta-layer: np.zeros((self.num_rf_per_wta_layer_per_hl[hl], lateral_input_dim + feedback_input_dim))
+                    # predict_weights for a wta-layer: np.zeros((self.num_rf_per_wta_layer_per_hl[hl], lateral_input_dim + feedback_input_dim))
 
-                # TODO incorporate learning off time!
-                # reference:
-                #   self.weights[hl][layer_n][win_rf_index, :] = (1.0 - lr) * self.weights[hl][layer_n][win_rf_index, :] + lr * remainder[0, :]
-                lr = self.lr_base
-                self.predict_weights[0][layer_n][winner, :] = (1.0 - lr) * self.predict_weights[0][layer_n][winner, :] + lr * hl_predictive_input[:]
+                    # TODO incorporate learning off time!
+                    # reference:
+                    #   self.weights[hl][layer_n][win_rf_index, :] = (1.0 - lr) * self.weights[hl][layer_n][win_rf_index, :] + lr * remainder[0, :]
+                    lr = self.lr_base
+                    self.predict_weights[0][layer_n][winner, :] = (1.0 - lr) * self.predict_weights[0][layer_n][winner, :] + lr * hl_predictive_input[:]
 
-        # now make real-time prediction:
-        lateral_predictive_input = self.hl_output_histories[0].get_state_sequence(state_index=0,
-                                                                                  delay_long=self.predict_lateral_input_time_steps - 1,
-                                                                                  delay_short=0).flatten()
-        feedback_predictive_input = self.hl_output_histories[1].get_state_sequence(state_index=0,
-                                                                                   delay_long=self.predict_feedback_input_time_steps - 1,
-                                                                                   delay_short=0).flatten()
-        hl_predictive_input = np.concatenate((lateral_predictive_input, feedback_predictive_input))
+            # now make real-time prediction:
+            lateral_predictive_input = self.hl_output_histories[0].get_state_sequence(state_index=0,
+                                                                                      delay_long=self.predict_lateral_input_time_steps - 1,
+                                                                                      delay_short=0).flatten()
+            feedback_predictive_input = self.hl_output_histories[1].get_state_sequence(state_index=0,
+                                                                                       delay_long=self.predict_feedback_input_time_steps - 1,
+                                                                                       delay_short=0).flatten()
+            hl_predictive_input = np.concatenate((lateral_predictive_input, feedback_predictive_input))
 
-        # make prediction using WTA over predictive RFs in each WTA-layer
-        # TODO how to properly incorporate self.enable_hack_skip_first_layer?
+            # make prediction using WTA over predictive RFs in each WTA-layer
+            # TODO how to properly incorporate self.enable_hack_skip_first_layer?
 
-        hl_0_prediction = np.zeros(self.num_wta_layers_per_hl[0] * self.num_rf_per_wta_layer_per_hl[0])
+            hl_0_prediction = np.zeros(self.num_wta_layers_per_hl[0] * self.num_rf_per_wta_layer_per_hl[0])
 
-        # iterate over all wta-layers of HL==0
-        for layer_n in range(self.num_wta_layers_per_hl[0]):
-            # for this layer: pick a winner based on highest eff value
-            eff_frame = np.sum(np.abs(self.predict_weights[0][layer_n] - hl_predictive_input), axis=1)
-            win_rf_index = np.argmin(eff_frame)
-            hl_0_prediction[layer_n * self.num_rf_per_wta_layer_per_hl[0] + win_rf_index] = 1
+            # iterate over all wta-layers of HL==0
+            for layer_n in range(self.num_wta_layers_per_hl[0]):
+                # for this layer: pick a winner based on highest eff value
+                eff_frame = np.sum(np.abs(self.predict_weights[0][layer_n] - hl_predictive_input), axis=1)
+                win_rf_index = np.argmin(eff_frame)
+                hl_0_prediction[layer_n * self.num_rf_per_wta_layer_per_hl[0] + win_rf_index] = 1
 
-        # from old code:
+            # from old code:
 
-        self.predicted_hl_0_rf_activies_history.store_new_states(newest_states_list=[hl_0_prediction])
+            self.predicted_hl_0_rf_activies_history.store_new_states(newest_states_list=[hl_0_prediction])
 
         self.t += 1
 
