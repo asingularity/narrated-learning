@@ -478,6 +478,15 @@ class WTAMultiLayerBrain(object):
 
         return hl_output
 
+    def get_recent_activities(self):
+
+        act = []
+        for hl in range(self.num_hl):
+            hl_act = np.zeros((self.num_wta_layers_per_hl[hl] * self.num_rf_per_wta_layer_per_hl[hl]))
+            for layer_n in range(self.num_wta_layers_per_hl[hl]):
+                hl_act[layer_n * self.num_rf_per_wta_layer_per_hl[hl]:(layer_n + 1) * self.num_rf_per_wta_layer_per_hl[hl]] = self.hl_output_histories[0].get_state(state_index=0, delay=0).flatten()[:]
+            act.append(hl_act)
+
     def get_table_ims(self):
 
         ims_list = []
