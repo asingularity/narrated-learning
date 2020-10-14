@@ -9,6 +9,7 @@ from robot_brain_classes.wta_multi_layer_brain import WTAMultiLayerBrain
 from robot_sensor_classes.video_playback import VideoPlaybackSensor
 from robot_sensor_classes.duo_playback import DuoPlaybackSensor
 from robot_sensor_classes.physics_2d import Physics2DSensor
+from robot_sensor_classes.stocks import StockDataSensor
 from visualizer_classes.segment_visualizer import SegmentVisualizer
 from sim_folder_manager import SimFolderManager
 import time
@@ -25,7 +26,7 @@ USE_VIDEO_IN = False
 if USE_VIDEO_IN:
     ENABLE_HACK_SKIP_FIRST_LAYER = False
 else:
-    ENABLE_HACK_SKIP_FIRST_LAYER = True  # for bouncing balls, better viz
+    ENABLE_HACK_SKIP_FIRST_LAYER = False  # for bouncing balls, better viz
 
 IM_DIM = 16  # pixels, width & height
 
@@ -116,12 +117,12 @@ def get_brain_params():
     params = {
         'image_dim_display': 1500,
         'image_dim_NxN_pixels': IM_DIM,
-        'learning_rate': 0.001,
-        'bins_per_pixel': 6,
-        'num_rf_per_wta_layer_per_hl': np.array([20, 80]),
+        'learning_rate': 0.0001,
+        'bins_per_pixel': 64,
+        'num_rf_per_wta_layer_per_hl': np.array([20, 20]),
         'num_wta_layer_per_hl': np.array([6, 12]),
         'input_time_steps_per_hl': np.array([1, 4]),
-        'layer_start_time_offset_per_hl': np.array([6000, 4 * 6000]) * 5, # np.array([300000, 300000])
+        'layer_start_time_offset_per_hl': np.array([6000, 6000]) * 10, # np.array([300000, 300000])
         'enable_learning_off': True,
         'plot_interval_seconds': 30,
         'enable_hack_skip_first_layer': ENABLE_HACK_SKIP_FIRST_LAYER,
@@ -152,7 +153,8 @@ def init_demo():
         robot_sensors = VideoPlaybackSensor(get_sensors_params())
         #robot_sensors = DuoPlaybackSensor(get_sensors_params())
     else:
-        robot_sensors = Physics2DSensor(get_sensors_params())
+        # robot_sensors = Physics2DSensor(get_sensors_params())
+        robot_sensors = StockDataSensor(get_sensors_params())
 
     return {
         #'robot_brain': WTALayerBrain(get_brain_params()),

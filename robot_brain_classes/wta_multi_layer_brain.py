@@ -107,6 +107,12 @@ class WTAMultiLayerBrain(object):
         self.weights = []
         self.predict_weights = []
 
+        # TODO how to store all 8 stock probs (future) per RF? and graph over time?
+        # ********** STOCKS **********
+        self.stock_prob_event_times = []
+        self.stock_prob_event_cumu_probs = []
+        self.stock_prob_event_indices = []
+
         hl_start_time = 0
         hl_input_state_dim = self.input_im_dim * self.input_im_dim * self.bins_per_pixel
 
@@ -156,6 +162,13 @@ class WTAMultiLayerBrain(object):
             print()
             hl_weights = []
             hl_predict_weights = []
+
+            # ********** STOCKS **********
+            hl_prob_event_times = []
+            hl_prob_event_cumu_probs = []
+            hl_prob_event_indices = []
+            hl_prob_index = 0
+
             for k in range(self.num_wta_layers_per_hl[hl]):
 
                 # initialize feedforward weights
@@ -179,6 +192,12 @@ class WTAMultiLayerBrain(object):
                 predictive_weights = np.zeros((self.num_rf_per_wta_layer_per_hl[hl], lateral_input_dim + feedback_input_dim))
                 hl_predict_weights.append(predictive_weights.copy())
                 print('    adding feedback weights for wta layer:', k, ', of shape (num rf per wta layer, lateral_input_dim + feedback_input_dim):', predictive_weights.shape)
+
+                # ********** STOCKS **********
+                hl_prob_event_times.append(np.zeros(self.num_rf_per_wta_layer_per_hl[hl], max_time))
+                hl_prob_event_cumu_probs.append(np.zeros(self.num_rf_per_wta_layer_per_hl[hl], max_time))
+                hl_prob_event_indices.append(np.zeros())
+
 
             self.weights.append(hl_weights)
             self.predict_weights.append(hl_predict_weights)
