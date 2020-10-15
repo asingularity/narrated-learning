@@ -88,6 +88,9 @@ class WTAMultiLayerBrain(object):
         # how many delayed feedback input time steps to use
         self.predict_feedback_input_time_steps = 1
 
+        # for initializing arrays
+        max_time = 10000000
+
         # ************ derived parameters ************
 
         self.num_hl = len(self.num_wta_layers_per_hl)
@@ -95,8 +98,6 @@ class WTAMultiLayerBrain(object):
         assert len(self.num_rf_per_wta_layer_per_hl) == self.num_hl
         assert len(self.num_wta_layers_per_hl) == self.num_hl
         assert len(self.layer_start_time_offset_per_hl) == self.num_hl
-
-        max_time = 10000000
 
         # ************ initialize hyperlayers ************
 
@@ -482,10 +483,11 @@ class WTAMultiLayerBrain(object):
 
         act = []
         for hl in range(self.num_hl):
-            hl_act = np.zeros((self.num_wta_layers_per_hl[hl] * self.num_rf_per_wta_layer_per_hl[hl]))
-            for layer_n in range(self.num_wta_layers_per_hl[hl]):
-                hl_act[layer_n * self.num_rf_per_wta_layer_per_hl[hl]:(layer_n + 1) * self.num_rf_per_wta_layer_per_hl[hl]] = self.hl_output_histories[0].get_state(state_index=0, delay=0).flatten()[:]
-            act.append(hl_act)
+
+            ass = self.hl_output_histories[hl].get_state(state_index=0, delay=0).flatten()
+            assert ass.shape[0] == self.num_wta_layers_per_hl[hl] * self.num_rf_per_wta_layer_per_hl[hl], ass.shape
+            act.append(ass)
+        return act
 
     def get_table_ims(self):
 

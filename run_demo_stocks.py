@@ -117,11 +117,11 @@ def get_brain_params():
     params = {
         'image_dim_display': 1500,
         'image_dim_NxN_pixels': IM_DIM,
-        'learning_rate': 0.0001,
-        'bins_per_pixel': 64,
-        'num_rf_per_wta_layer_per_hl': np.array([20, 20]),
-        'num_wta_layer_per_hl': np.array([6, 6]),
-        'input_time_steps_per_hl': np.array([1, 4]),
+        'learning_rate': 0.0001,  # 0.0001
+        'bins_per_pixel': 64,  # 64
+        'num_rf_per_wta_layer_per_hl': np.array([20, 1]),  # try 80 as well
+        'num_wta_layer_per_hl': np.array([6, 2]),
+        'input_time_steps_per_hl': np.array([1, 1]),
         'layer_start_time_offset_per_hl': np.array([6000, 6000]) * 10, # np.array([300000, 300000])
         'enable_learning_off': True,
         'plot_interval_seconds': 30,
@@ -172,19 +172,27 @@ def run_demo(demo_components):
 
     random.seed(1233)
 
+    act = None
+    last_time = 0
+
     while True:
 
         # reference
         # a = np.dot(np.random.random((200, 200)), np.random.random((200, 200)))
 
-        im = robot_sensors.read_input()
+        # TODO clean this up; we are using this class for stocks as a general interface (in, and out):
+        im = robot_sensors.read_input(last_activities=act)
 
         robot_brain.process_input(input_im=im)
 
-        # act = robot_brain.
+        act = robot_brain.get_recent_activities()
 
         visualizer.visualize(input_im=im,
                              segment_brain=robot_brain)  # So it can call .get_table_ims() only sometimes
+
+        if time.time() - last_time > 60:
+            robot_sensors.print_ratios()
+            last_time = time.time()
 
     robot_brain.save_model(models_save_folder=sim_folder_manager.get_models_save_folder())
 

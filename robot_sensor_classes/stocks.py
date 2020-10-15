@@ -2,11 +2,20 @@ import cv2
 from os import listdir
 from os.path import isfile, join
 import subprocess
+import random
+random.seed(0)
 from datetime import datetime, date, time
 import math
 import numpy as np
-np.set_printoptions(suppress=True)
+import sys
+np.set_printoptions(suppress=True, precision=4, threshold=sys.maxsize)
 import pickle
+import matplotlib
+matplotlib.use('Agg')
+matplotlib.rcParams['agg.path.chunksize'] = 10000
+import matplotlib.pyplot as plt
+from math import log
+from matplotlib.pyplot import cm
 
 
 class DataSource(object):
@@ -355,8 +364,23 @@ class DataSource(object):
 
 class StockDataSensor(object):
     def __init__(self, params):
+
+        self.fig = plt.figure(figsize=(40, 20))
+        self.ax = self.fig.add_subplot(1, 1, 1)
+        self.ax.cla()
+        self.ax.get_xaxis().get_major_formatter().set_scientific(False)
+        self.ax.get_yaxis().get_major_formatter().set_scientific(False)
+
+
         self.image_dim = params['image_dim']
         self.return_type = params['return_type']
+
+        # TODO make parameter
+        # for initializing arrays
+        self.max_time = 2000000
+
+        # TODO make parameter
+        self.override_with_random_walk = True
 
         self.DATA_FOLDER = '/srv/projects/financial/data'
         self.TEMP_FOLDER = '/srv/projects/financial/temp'
@@ -379,16 +403,62 @@ class StockDataSensor(object):
         if plot_on:
             data_source.plot_data(self.TEMP_FOLDER)
 
-
         #data_source.save_to_mat(TEMP_FOLDER)
         print()
         print (data_source.get_all_data_bid().shape)  # (8, 1801800)
 
         self.dat = data_source.get_all_data_bid()
 
+        if self.override_with_random_walk:
+            self.dat = self._create_random_walk_like(real_dat=self.dat.copy())
+
+        self.num_stocks = self.dat.shape[0]
+
+        # TODO CLEANUP ******** HACK ********
+        self.num_act_per_rf = None
+        self.probs_per_rf_stock = None
+        self.sum_per_rf_stock = None
+        self.num_rf = None
+
+
+        self.all_ratios = None
+
         self.t = 0
 
-    def read_input(self):
+
+    def _create_random_walk_like(self, real_dat):
+        print()
+        print('creating random walk...')
+        random_dat = np.zeros_like(real_dat)
+
+        random_dat[:, 0] = np.random.random(real_dat.shape[0]) * 100
+
+        for t in range(1, real_dat.shape[1]):
+            new_dat = random_dat[:, t - 1] + np.random.random(real_dat.shape[0]) * 0.01 - 0.005
+            new_dat[new_dat < 1] = 1
+
+            random_dat[:, t] = new_dat
+
+        print()
+        print('plotting random walk...')
+        # plot the random walk data for all stocks
+        colors = ['r', 'b', 'g', 'k']
+        ck = 0
+        self.ax.cla()
+        for k in range(random_dat.shape[0]):
+            self.ax.plot(random_dat[k, 0:real_dat.shape[1]], c=colors[ck], marker='.')
+            ck += 1
+            if ck == 4:
+                ck = 0
+
+        self.fig.savefig("random_walk_data" + ".png", dpi=100)
+
+        print()
+        print('done random walk.')
+
+        return random_dat
+
+    def read_input(self, last_activities):
 
         if self.t > self.dat.shape[1] - 1:
             print()
@@ -397,17 +467,23 @@ class StockDataSensor(object):
             print()
             exit(1)
 
-        self.delta_t = 16
+        self.delta_t = 320 * 2
 
         t_in_day = self.t % 23400
 
         # assumed given timescale
         max_change = 0.005
 
-        if self.t == 0:
-            self.t = self.delta_t + self.image_dim + 1
+        #if self.t == 0:
+        #    self.t = self.delta_t + self.image_dim + 1
 
-        if self.t > self.delta_t + self.image_dim:
+        if t_in_day == 0:
+            self.t += self.delta_t + self.image_dim + 1
+            t_in_day = self.t % 23400
+
+        # if self.t > self.delta_t + self.image_dim:
+        if t_in_day > self.delta_t + self.image_dim:
+
             # preprocessing
             #   make sure scaled to [0, 1]
             #   make sure square image of image_dim
@@ -430,6 +506,30 @@ class StockDataSensor(object):
 
             #im = 0.5 * np.ones((self.image_dim, self.image_dim), self.return_type)
 
+            if last_activities is not None:
+                hl_0_act = last_activities[0]
+
+                if self.num_act_per_rf is None:
+
+                    self.num_rf = hl_0_act.shape[0]
+
+                    self.probs_per_rf_stock = np.ones((self.num_rf, self.num_stocks))
+                    self.sum_per_rf_stock = np.zeros((self.num_rf, self.num_stocks))
+
+                    self.num_act_per_rf = np.zeros(self.num_rf)
+
+                    self.all_ratios = np.ones((self.num_rf, self.num_stocks, self.max_time))
+
+                ratios_future = np.divide(self.dat[:, self.t + self.delta_t * 1], self.dat[:, self.t])
+
+                act_indices = np.nonzero(hl_0_act)[0]
+
+                self.num_act_per_rf[act_indices] += 1
+                self.sum_per_rf_stock[act_indices, :] += ratios_future
+                self.probs_per_rf_stock[act_indices, :] *= ratios_future
+
+                self.all_ratios[:, :, self.t] = self.probs_per_rf_stock[:, :]
+
         else:
             assert False
             im = 0.5 * np.ones((self.image_dim, self.image_dim), self.return_type)
@@ -438,8 +538,58 @@ class StockDataSensor(object):
 
         return im
 
+    def print_ratios(self):
 
+        if self.num_rf is not None:
+            print()
+            print('RATIOS')
+            #print('COMPUTING MEAN')
+            #print('sum per rf per stock')
+            # print(self.sum_per_rf_stock)
+            mean_ratios_per_rf = np.divide(self.sum_per_rf_stock, self.num_act_per_rf[:, np.newaxis])
 
+            print()
+            print('mean per rf:')
+            print(mean_ratios_per_rf)
+            print()
+            # print('prob per rf:')
+            # print(self.probs_per_rf_stock)
+            # print()
+            # print('num per rf:')
+            # print(self.num_act_per_rf)
+            # print()
+
+            self.ax.cla()
+            color = iter(cm.rainbow(np.linspace(0, 1, self.num_rf * self.num_stocks)))
+            #print('AFUAFASFASASF')
+            #print(np.linspace(0, 1, self.num_rf * self.num_stocks))
+
+            colors = ['r', 'g', 'b', 'k']
+            k = 0
+
+            plot_all = True
+
+            if plot_all:
+                for rf in range(self.num_rf):
+                    for st in range(self.num_stocks):
+                        c = next(color)
+                        #print(c)
+                        self.ax.plot(self.all_ratios[rf, st, 0:self.t], c=colors[k], marker='.')
+
+                        k += 1
+                        if k > 3:
+                            k = 0
+            else:
+                highest = np.unravel_index(np.argmax(self.all_ratios[:, :, self.t - 1]), (self.num_rf, self.num_stocks))
+                print(highest)
+                self.ax.plot(self.all_ratios[highest[0], highest[1], 0:self.t], c=colors[k], marker='.')
+
+                k += 1
+                highest = np.unravel_index(np.argmin(self.all_ratios[:, :, self.t - 1]), (self.num_rf, self.num_stocks))
+                print(highest)
+                self.ax.plot(self.all_ratios[highest[0], highest[1], 0:self.t], c=colors[k], marker='.')
+
+            self.fig.savefig("all_prods" + ".png", dpi=100)
 
 def main():
     sensor = StockDataSensor(params={
