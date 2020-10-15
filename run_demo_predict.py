@@ -6,6 +6,7 @@ np.random.seed(6)
 
 from robot_brain_classes.wta_layer_brain import WTALayerBrain
 from robot_brain_classes.wta_multi_layer_brain import WTAMultiLayerBrain
+from robot_brain_classes.wta_iterative_brain import WTAIterativeBrain
 from robot_sensor_classes.video_playback import VideoPlaybackSensor
 from robot_sensor_classes.duo_playback import DuoPlaybackSensor
 from robot_sensor_classes.physics_2d import Physics2DSensor
@@ -99,7 +100,7 @@ def get_sim_folder_manager_params():
 
 def get_brain_params():
 
-    # # WTALayerBrain
+    # # WTALayerBrain: DEPRECATED
     # params = {
     #     'image_dim_display': 1500,
     #     'image_dim_NxN_pixels': IM_DIM,
@@ -113,16 +114,32 @@ def get_brain_params():
     # }
 
     # WTAMultiLayerBrain
+    # params = {
+    #     'image_dim_display': 1500,
+    #     'image_dim_NxN_pixels': IM_DIM,
+    #     'learning_rate': 0.001,
+    #     'bins_per_pixel': 6,
+    #     'num_rf_per_wta_layer_per_hl': np.array([20, 80]),
+    #     'num_wta_layer_per_hl': np.array([6, 12]),
+    #     'input_time_steps_per_hl': np.array([1, 4]),
+    #     'layer_start_time_offset_per_hl': np.array([6000, 4 * 6000]) * 5, # np.array([300000, 300000])
+    #     'enable_learning_off': True,
+    #     'plot_interval_seconds': 30,
+    #     'enable_hack_skip_first_layer': ENABLE_HACK_SKIP_FIRST_LAYER,
+    #     'enable_generic_weights_viz': False
+    # }
+
+    # WTAIterativeBrain
     params = {
         'image_dim_display': 1500,
         'image_dim_NxN_pixels': IM_DIM,
         'learning_rate': 0.001,
         'bins_per_pixel': 6,
-        'num_rf_per_wta_layer_per_hl': np.array([20, 80]),
-        'num_wta_layer_per_hl': np.array([6, 12]),
+        'num_rf_per_hl': np.array([20, 20]),
+        'num_iter_per_input': 6,
         'input_time_steps_per_hl': np.array([1, 4]),
-        'layer_start_time_offset_per_hl': np.array([6000, 4 * 6000]) * 5, # np.array([300000, 300000])
-        'enable_learning_off': True,
+        'start_time_per_hl': np.array([0, 200000]),
+        'learning_off_time': 1000000,
         'plot_interval_seconds': 30,
         'enable_hack_skip_first_layer': ENABLE_HACK_SKIP_FIRST_LAYER,
         'enable_generic_weights_viz': False
@@ -156,7 +173,8 @@ def init_demo():
 
     return {
         #'robot_brain': WTALayerBrain(get_brain_params()),
-        'robot_brain': WTAMultiLayerBrain(get_brain_params()),
+        #'robot_brain': WTAMultiLayerBrain(get_brain_params()),
+        'robot_brain': WTAIterativeBrain(get_brain_params()),
         'robot_sensors': robot_sensors,
         'visualizer': SegmentVisualizer(get_visualizer_params()),
         'sim_folder_manager': SimFolderManager(get_sim_folder_manager_params())
