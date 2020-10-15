@@ -160,22 +160,23 @@ class WTAIterativeBrain(object):
         self.ax.get_yaxis().get_major_formatter().set_scientific(False)
 
         # ************ predictive stuff ************
-
-        # all RFs in HL==1 -> all RFs in HL==0
-
-        num_rfs_hl_0 = self.num_rf_per_hl[0]
-        num_rfs_hl_1 = self.num_rf_per_hl[1]
-
-        self.pm = np.zeros((num_rfs_hl_1, num_rfs_hl_0))  # shape: (from RFs, to RFs) i.e. (HL==1, HL==0)
-        self.pm_lr = self.lr_base
-
-        self.predicted_hl_0_rf_activies_history = StatesLimitedHistory(params={'max_delay': self.predict_time_steps,
-                                                                               'states_dim_list': [num_rfs_hl_0],
-                                                                               'store_extra_data': False})
-
         self.input_im_history = StatesLimitedHistory(params={'max_delay': self.predict_time_steps,
                                                              'states_dim_list': [self.input_im_dim * self.input_im_dim],
                                                              'store_extra_data': False})
+
+        if self.num_hl > 1:
+            # all RFs in HL==1 -> all RFs in HL==0
+
+            num_rfs_hl_0 = self.num_rf_per_hl[0]
+            num_rfs_hl_1 = self.num_rf_per_hl[1]
+
+            self.pm = np.zeros((num_rfs_hl_1, num_rfs_hl_0))  # shape: (from RFs, to RFs) i.e. (HL==1, HL==0)
+            self.pm_lr = self.lr_base
+
+            self.predicted_hl_0_rf_activies_history = StatesLimitedHistory(params={'max_delay': self.predict_time_steps,
+                                                                                   'states_dim_list': [num_rfs_hl_0],
+                                                                                   'store_extra_data': False})
+
 
     def process_input(self, input_im):
         input_pixels_1 = input_im
@@ -438,15 +439,6 @@ class WTAIterativeBrain(object):
         print()
         print('making plot')
         print()
-
-        print('prediction info:')
-        print('    min pm:', np.amin(self.pm))
-        print('    max pm:', np.amax(self.pm))
-        print('    mean pm:', np.mean(self.pm))
-        print('    sum pm:', np.sum(self.pm))
-        print()
-        #print(self.pm)
-        #print()
 
         for hl in range(self.num_hl):
             try:
