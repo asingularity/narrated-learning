@@ -384,12 +384,13 @@ class WTAIterativeBrain(object):
         ims_names_list = []
 
         if hl == 0:
+            tmp_im_all = None
             tmp_im = None
 
             arr, weights = self._collapse_binned_columns_to_pixels(arr_exp=self.weights[hl],
                                                                    num_bins_per_pixel=self.bins_per_pixel)
 
-            for r_tmp in range(weights.shape[0]):
+            for r_tmp in range(weights.shape[0]):  # per rf
 
                 im0 = arr[r_tmp, :].reshape((self.input_im_dim, self.input_im_dim))  # rf_dim
                 im1 = weights[r_tmp, :].reshape((self.input_im_dim, self.input_im_dim))
@@ -402,10 +403,20 @@ class WTAIterativeBrain(object):
                 if tmp_im is None:
                     tmp_im = tmp2.copy()
                 else:
-                    tmp3 = np.zeros((2, tmp_im.shape[1]))
+                    tmp3 = 0.5 * np.ones((2, tmp_im.shape[1]))
                     tmp_im = np.vstack((tmp_im, tmp3, tmp2))
 
-            tmp_all_im = tmp_im
+                if r_tmp > 0 and (r_tmp + 1) % 10 == 0:
+                    if tmp_im_all is None:
+                        tmp_im_all = tmp_im.copy()
+                    else:
+                        spacer = 0.5 * np.ones((tmp_im_all.shape[0], 3))
+                        tmp_im_all = np.hstack((tmp_im_all, spacer, tmp_im))
+
+                    tmp_im = None
+
+
+            tmp_all_im = tmp_im_all
 
             max_dim = max(tmp_all_im.shape[0], tmp_all_im.shape[1])
             imscale = self.im_dim / max_dim  # 0.2: full table, 2.0
