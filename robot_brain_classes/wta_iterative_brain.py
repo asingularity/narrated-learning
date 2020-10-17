@@ -159,6 +159,10 @@ class WTAIterativeBrain(object):
         self.ax.get_xaxis().get_major_formatter().set_scientific(False)
         self.ax.get_yaxis().get_major_formatter().set_scientific(False)
 
+        self.last_activities = []
+        for hl in range(self.num_hl):
+            self.last_activities.append(None)
+
         # ************ predictive stuff ************
         self.input_im_history = StatesLimitedHistory(params={'max_delay': self.predict_time_steps,
                                                              'states_dim_list': [self.input_im_dim * self.input_im_dim],
@@ -302,6 +306,7 @@ class WTAIterativeBrain(object):
         hl_output = np.zeros(self.num_rf_per_hl[hl])
 
         rfs_valid = np.ones(self.num_rf_per_hl[hl])
+        self.last_activities[hl] = np.zeros(self.num_rf_per_hl[hl])
 
         allow_reselect = True  # for this, set self.num_iter to be high
 
@@ -321,6 +326,7 @@ class WTAIterativeBrain(object):
                 eff_frame = np.sum(np.abs(self.weights[hl][valid_indices, :] - remainder), axis=1)
                 win_rf_index = valid_indices[np.argmin(eff_frame)]
 
+            self.last_activities[hl][win_rf_index] += 1
             # print('iter', iter_i, 'win_rf', win_rf_index)
             lr = self.lr_base
 
@@ -419,10 +425,26 @@ class WTAIterativeBrain(object):
                 im0 = arr[r_tmp, :].reshape((self.input_im_dim, self.input_im_dim))  # rf_dim
                 im1 = weights[r_tmp, :].reshape((self.input_im_dim, self.input_im_dim))
 
+                active_count = self.last_activities[hl][r_tmp]
+                im_active_count = np.zeros((self.input_im_dim, self.input_im_dim))
+
+                # font
+                font = cv2.FONT_HERSHEY_SIMPLEX
+                # org
+                org = (2, im_active_count.shape[1] - 2)
+                # fontScale
+                fontScale = 0.4
+                # Blue color in BGR
+                color = (255, 255, 255)
+                # Line thickness of 2 px
+                thickness = 1
+                # Using cv2.putText() method
+                im_active_count = cv2.putText(im_active_count, str(int(active_count)), org, font, fontScale, color, thickness, cv2.LINE_AA)
+
                 # if np.amin(im1) < 0:
                 #     print(np.amin(im1), np.amax(im1))
 
-                tmp2 = np.hstack((im0, im1))
+                tmp2 = np.hstack((im0, im1, im_active_count))
 
                 if tmp_im is None:
                     tmp_im = tmp2.copy()
