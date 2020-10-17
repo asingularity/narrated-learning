@@ -487,10 +487,115 @@ class WTAIterativeBrain(object):
             # TODO need prediction image!!!
 
         # TODO need hl==1 image!!!
+        elif hl == 1:
+
+            tmp_im_all_v = None
+            tmp_im_all_w = None
+
+            tmp_im_v = None
+            tmp_im_w = None
+
+            for rf_ind in range(self.num_rf_per_hl[hl]):
+                # get sequence image for this RF:
+                v_seq_im, w_seq_im = self._get_hl_1_sequence_im(rf_weights=self.weights[hl][rf_ind, :])
+
+                if tmp_im_v is None:
+                    tmp_im_v = v_seq_im.copy()
+                    tmp_im_w = w_seq_im.copy()
+                else:
+                    tmp3_v = 0.5 * np.ones((2, tmp_im_v.shape[1]))
+                    tmp_im_v = np.vstack((tmp_im_v, tmp3_v, v_seq_im))
+
+                    tmp3_w = 0.5 * np.ones((2, tmp_im_w.shape[1]))
+                    tmp_im_w = np.vstack((tmp_im_w, tmp3_w, w_seq_im))
+
+                if rf_ind > 0 and (rf_ind + 1) % 10 == 0:
+                    if tmp_im_all_v is None:
+                        tmp_im_all_v = tmp_im_v.copy()
+                        tmp_im_all_w = tmp_im_w.copy()
+                    else:
+                        spacer = 0.5 * np.ones((tmp_im_all_v.shape[0], 6))
+                        tmp_im_all_v = np.hstack((tmp_im_all_v, spacer, tmp_im_v))
+                        tmp_im_all_w = np.hstack((tmp_im_all_w, spacer, tmp_im_w))
+
+                    tmp_im_v = None
+                    tmp_im_w = None
+
+            hl_1_im_v = tmp_im_all_v
+            hl_1_im_w = tmp_im_all_w
+
+            # scale this image:
+            max_dim = max(hl_1_im_v.shape[0], hl_1_im_v.shape[1])
+            imscale = self.im_dim / max_dim  # 0.2: full table, 2.0
+            hl_1_im_v = cv2.resize(hl_1_im_v, dsize=(0, 0), fx=imscale, fy=imscale, interpolation=cv2.INTER_NEAREST)
+
+            max_dim = max(hl_1_im_w.shape[0], hl_1_im_w.shape[1])
+            imscale = self.im_dim / max_dim  # 0.2: full table, 2.0
+            hl_1_im_w = cv2.resize(hl_1_im_w, dsize=(0, 0), fx=imscale, fy=imscale, interpolation=cv2.INTER_NEAREST)
+
+            ims_list.append(hl_1_im_v)
+            ims_names_list.append('v_RF_weights_hyperlayer_' + str(hl))
+
+            ims_list.append(hl_1_im_w)
+            ims_names_list.append('w_RF_weights_hyperlayer_' + str(hl))
 
         # no generic for now
 
         return ims_list, ims_names_list
+
+
+    def _get_hl_1_sequence_im(self, rf_weights):
+        '''
+
+        for an rf with these weights, get hstack sequence of delayed RF sums of hl==0 layer
+        i.e. deconstruct temporal RF into delay-step spatial components manually, by weight
+
+        :param rf_weights:
+        :return:
+        '''
+
+        hl = 1  # this function is only for hl==1
+
+        k = 0
+
+        im_t_delay_hstack_v = None
+        im_t_delay_hstack_w = None
+
+        for time_del in range(self.input_time_steps_per_hl[hl]):
+            # now we need to weighted-add the hl==0 RFs, weighing with these corresponding RF weights
+            # use same hack enable option to leave out rf 0
+            num_weights_step = self.num_rf_per_hl[hl - 1]
+
+            rf_weights_step = rf_weights[k:k + num_weights_step]
+            rf_to_add = None
+
+            k2 = 0
+
+            for prev_rf_ind in range(self.num_rf_per_hl[hl - 1]):
+                #if (not self.enable_hack_skip_first_layer) or prev_wta_ind > 0:
+                rf_tmp = self.weights[hl - 1][prev_rf_ind, :]
+                if rf_to_add is None:
+                    rf_to_add = rf_weights_step[k2] * rf_tmp
+                else:
+                    rf_to_add = rf_to_add + rf_weights_step[k2] * rf_tmp
+                k2 += 1
+
+            k += num_weights_step
+
+            # hstack by time delay
+            tmp_im_v, tmp_im_w = self._collapse_binned_columns_to_pixels(arr_exp=rf_to_add[np.newaxis, :], num_bins_per_pixel=self.bins_per_pixel)
+            tmp_im_v = tmp_im_v.reshape((self.input_im_dim, self.input_im_dim))
+            tmp_im_w = tmp_im_w.reshape((self.input_im_dim, self.input_im_dim))
+
+            if im_t_delay_hstack_v is None:
+                im_t_delay_hstack_v = tmp_im_v.copy()
+                im_t_delay_hstack_w = tmp_im_w.copy()
+            else:
+                spacer = 0.5 * np.ones((tmp_im_v.shape[0], 2))
+                im_t_delay_hstack_v = np.hstack((im_t_delay_hstack_v, spacer, tmp_im_v))
+                im_t_delay_hstack_w = np.hstack((im_t_delay_hstack_w, spacer, tmp_im_w))
+
+        return im_t_delay_hstack_v, im_t_delay_hstack_w
 
     def _do_plots(self):
         print()
