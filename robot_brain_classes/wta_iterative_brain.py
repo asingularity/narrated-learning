@@ -303,15 +303,28 @@ class WTAIterativeBrain(object):
 
         rfs_valid = np.ones(self.num_rf_per_hl[hl])
 
+        allow_reselect = True  # for this, set self.num_iter to be high
+
+        # error_thresh = 20
+        # print()
+        # print('t', self.t)
+        # print()
+        # print('*** STARTING ***')
+        # print()
         for iter_i in range(self.num_iter):
             valid_indices = np.nonzero(rfs_valid)[0]
 
-            eff_frame = np.sum(np.abs(self.weights[hl][valid_indices, :] - remainder), axis=1)
-            win_rf_index = valid_indices[np.argmin(eff_frame)]
+            if allow_reselect:
+                eff_frame = np.sum(np.abs(self.weights[hl] - remainder), axis=1)
+                win_rf_index = np.argmin(eff_frame)
+            else:
+                eff_frame = np.sum(np.abs(self.weights[hl][valid_indices, :] - remainder), axis=1)
+                win_rf_index = valid_indices[np.argmin(eff_frame)]
 
+            # print('iter', iter_i, 'win_rf', win_rf_index)
             lr = self.lr_base
 
-            if self.t < self.learning_off_time:
+            if self.t < self.learning_off_time and rfs_valid[win_rf_index] == 1:
                 self.weights[hl][win_rf_index, :] = (1.0 - lr) * self.weights[hl][win_rf_index, :] + lr * remainder[0, :]
 
             remainder = remainder - self.weights[hl][win_rf_index, :]
@@ -319,10 +332,21 @@ class WTAIterativeBrain(object):
             reconstruction = reconstruction + self.weights[hl][win_rf_index, :]
 
             # TODO get rid of this; there is no "hack first layer" for this model
-            reconstruction_no_first = reconstruction
+#            reconstruction_no_first = reconstruction
+            if rfs_valid[win_rf_index]:
+                reconstruction_no_first = reconstruction_no_first + self.weights[hl][win_rf_index, :]
 
             rfs_valid[win_rf_index] = 0
             hl_output[win_rf_index] = 1.0
+
+            #rec_error = np.sum(np.abs(reconstruction - hl_input))
+
+            #if rec_error < error_thresh:
+                #print('reached error thresh!')
+            #    break
+            #else:
+            #    pass
+            #    #print(np.nonzero(rfs_valid==0)[0])
 
         reconstruction[reconstruction > 1] = 1
         reconstruction[reconstruction < 0] = 0

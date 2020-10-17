@@ -136,7 +136,7 @@ def get_brain_params():
         'learning_rate': 0.001,
         'bins_per_pixel': 6,
         'num_rf_per_hl': np.array([120]),  # , 20]),
-        'num_iter_per_input': 6,
+        'num_iter_per_input': 10,
         'input_time_steps_per_hl': np.array([1]),  #, 4]),
         'start_time_per_hl': np.array([0]),  # , 200000]),
         'learning_off_time': 200000, #1000000,
