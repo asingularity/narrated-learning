@@ -50,7 +50,7 @@ class WTAIterativeBrain(object):
 
         # this enables turning the learning off after the logical time (based on layer start time offset per hl)
         #       at implied last+1 "start" time
-        self.learning_off_time = params['learning_off_time']  # TODO sum of above + some more
+        self.learning_off_time_per_hl = params['learning_off_time_per_hl']  # TODO sum of above + some more
 
         # how often in real seconds to print the plots (at a get_table_ims call)
         self.plot_interval = params['plot_interval_seconds']  # TODO 30
@@ -70,7 +70,7 @@ class WTAIterativeBrain(object):
 
         # predictive parameters:
         # how long to predict ahead
-        self.predict_time_steps = 1
+        self.predict_time_steps = 2
 
         # how many delayed lateral input time steps to use
         self.predict_lateral_input_time_steps = 4
@@ -80,10 +80,12 @@ class WTAIterativeBrain(object):
 
         # ************ derived parameters ************
 
-        assert self.learning_off_time < max_time
-        assert self.learning_off_time > self.start_time_per_hl[-1]
-
         self.num_hl = len(self.num_rf_per_hl)
+
+        for hl in range(self.num_hl):
+            assert self.learning_off_time_per_hl[hl] < max_time
+            assert self.learning_off_time_per_hl[hl] > self.start_time_per_hl[hl]
+
         for hl in range(1, self.num_hl):
             assert self.start_time_per_hl[hl] > self.start_time_per_hl[hl - 1]
             assert self.num_rf_per_hl[hl] % 10 == 0, 'num rfs must be divisible by 10! for plotting purposes'
@@ -143,7 +145,7 @@ class WTAIterativeBrain(object):
         print('start times per hl:')
         print(self.start_time_per_hl)
         print()
-        print('learning off time: ', self.learning_off_time)
+        print('learning off times: ', self.learning_off_time_per_hl)
         print()
 
         # ************ other ************
@@ -330,7 +332,7 @@ class WTAIterativeBrain(object):
             # print('iter', iter_i, 'win_rf', win_rf_index)
             lr = self.lr_base
 
-            if self.t < self.learning_off_time and rfs_valid[win_rf_index] == 1:
+            if self.t < self.learning_off_time_per_hl[hl] and rfs_valid[win_rf_index] == 1:
                 self.weights[hl][win_rf_index, :] = (1.0 - lr) * self.weights[hl][win_rf_index, :] + lr * remainder[0, :]
 
             remainder = remainder - self.weights[hl][win_rf_index, :]
@@ -486,6 +488,10 @@ class WTAIterativeBrain(object):
 
             # TODO need prediction image!!!
 
+            predict_im_show = self._get_predict_im()
+            ims_list.append(predict_im_show)
+            ims_names_list.append('now, predict, past')
+
         # TODO need hl==1 image!!!
         elif hl == 1:
 
@@ -543,6 +549,65 @@ class WTAIterativeBrain(object):
 
         return ims_list, ims_names_list
 
+    def _get_predict_im(self):
+        # most straightforward way to predict: pick winner per wta-layer
+        # also need: the input image from the past, for comparison, to actual predicted input image
+
+        # assume:
+        #   prediction steps: tau
+        #   prediction@ t - tau, [should match], actual image @ t
+        # show:
+        #   prediction image @ t - tau
+        #   actual image @ t
+        #   actual image @ t - tau
+
+        prediction_past = self.predicted_hl_0_rf_activies_history.get_state(state_index=0, delay=self.predict_time_steps)
+        actual_past = self.input_im_history.get_state(state_index=0, delay=self.predict_time_steps).reshape((self.input_im_dim, self.input_im_dim))
+        actual_present = self.input_im_history.get_state(state_index=0, delay=0).reshape((self.input_im_dim, self.input_im_dim))
+
+        prediction_exp = np.zeros(self.input_im_dim * self.input_im_dim * self.bins_per_pixel)
+
+        k = 0
+
+        layer_w = self.weights[0]   # (num_rf, feature_len)
+
+        # TODO pick max RF -> 1, others -> 0 per wta-layer in prediction_past; or treat as weights directly
+
+        thing_to_add = None
+        max_k_val = -np.inf
+
+        #print(prediction_past.shape, layer_w.shape)
+
+        # TODO instead of sum here, could (should?) try maximum: nontrivial!
+        # what we have: prob (one number),                      per RF
+        #               weights of pixel-bins in feature space, per RF
+        #
+
+        prediction_exp = np.sum(np.multiply(prediction_past[1::, np.newaxis], layer_w[1::, :]), axis=0)
+        #print(prediction_exp.shape)
+        #exit(1)
+        #for rf_i in range(layer_w.shape[0]):
+        #    prediction_exp = prediction_exp + thing_to_add
+
+            # for rf_i  in range(layer_w.shape[0]):
+            #     prediction_exp += prediction_past[k] * layer_w[rf_i, :]
+            #
+            #     k += 1
+
+        prediction_exp[prediction_exp < 0] = 0
+        prediction_exp[prediction_exp > 1] = 1
+
+        arr, weights = self._collapse_binned_columns_to_pixels(arr_exp=prediction_exp[np.newaxis, :], num_bins_per_pixel=self.bins_per_pixel)
+
+        im0_v = arr[0, :].reshape((self.input_im_dim, self.input_im_dim))
+        im0_w = weights[0, :].reshape((self.input_im_dim, self.input_im_dim))
+
+        predict_im_show = np.hstack((actual_present, 0.5 * np.ones((self.input_im_dim, 2)),
+                                     im0_v, 0.5 * np.ones((self.input_im_dim, 2)),
+                                     im0_w, 0.5 * np.ones((self.input_im_dim, 2)),
+                                     actual_past, 0.5 * np.ones((self.input_im_dim, 2))))
+
+        return predict_im_show
 
     def _get_hl_1_sequence_im(self, rf_weights):
         '''
@@ -613,7 +678,7 @@ class WTAIterativeBrain(object):
 
                 self.ax.axvline(x=self.start_time_per_hl[hl], color='g')
 
-                self.ax.axvline(x=self.learning_off_time, color='r')
+                self.ax.axvline(x=self.learning_off_time_per_hl[hl], color='r')
                 self.fig.savefig("rec_error_hyperlayer_" + str(hl) + ".png", dpi=100)
 
                 # TODO plot prediction error (also vs. current frame for reference!) same plot!
