@@ -133,7 +133,7 @@ def get_brain_params():
 
     # WTAIterativeBrain
     params = {
-        'image_dim_display': 2400,
+        'image_dim_display': 2700,
         'image_dim_NxN_pixels': IM_DIM,
         'learning_rate': LEARN_RATE,
         'bins_per_pixel': 6,
@@ -154,12 +154,12 @@ def get_visualizer_params():
     params = {
         'color_enabled': COLOR_ENABLED,
         'fps_display_interval': 6,
-        'image_display_secs_fast': 8,  # 8 for good speed
+        'image_display_secs_fast': 10,  # 8 for good speed
         'waitKey_time_fast': 1,  # 1, 100, 5000
-        'image_display_secs_slow': 0, #0.001,  # 0: every frame
+        'image_display_secs_slow': 0.02, #0.001,  # 0: every frame
         'waitKey_time_slow': 1,  # 1, 100, 5000  #
         'scale_camera_factor': 1,
-        'auto_switch_to_slow_disp_time': 2000000, #50000,  # TODO re-introduce later for when training is done
+        'auto_switch_to_slow_disp_time': 250000, #50000,  # TODO re-introduce later for when training is done
         'init_fast': True  # start with "fast" display
     }
     return params
