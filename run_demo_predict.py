@@ -25,8 +25,10 @@ USE_VIDEO_IN = False
 
 if USE_VIDEO_IN:
     ENABLE_HACK_SKIP_FIRST_LAYER = False
+    LEARN_RATE = 0.0001
 else:
-    ENABLE_HACK_SKIP_FIRST_LAYER = True  # for bouncing balls, better viz
+    ENABLE_HACK_SKIP_FIRST_LAYER = True  # THIS IS DEPRECATED AND UNUSED NOW; for bouncing balls, better viz
+    LEARN_RATE = 0.001
 
 IM_DIM = 16  # pixels, width & height
 
@@ -131,11 +133,11 @@ def get_brain_params():
 
     # WTAIterativeBrain
     params = {
-        'image_dim_display': 1500,
+        'image_dim_display': 2400,
         'image_dim_NxN_pixels': IM_DIM,
-        'learning_rate': 0.001,
+        'learning_rate': LEARN_RATE,
         'bins_per_pixel': 6,
-        'num_rf_per_hl': np.array([120, 240]),  # , 20]),
+        'num_rf_per_hl': np.array([120, 480]),  # , 20]),
         'num_iter_per_input': 10,
         'input_time_steps_per_hl': np.array([1, 4]),  #, 4]),
         'start_time_per_hl': np.array([0, 50000]),  # , 50000]),
@@ -152,7 +154,7 @@ def get_visualizer_params():
     params = {
         'color_enabled': COLOR_ENABLED,
         'fps_display_interval': 6,
-        'image_display_secs_fast': 8,
+        'image_display_secs_fast': 8,  # 8 for good speed
         'waitKey_time_fast': 1,  # 1, 100, 5000
         'image_display_secs_slow': 0, #0.001,  # 0: every frame
         'waitKey_time_slow': 1,  # 1, 100, 5000  #

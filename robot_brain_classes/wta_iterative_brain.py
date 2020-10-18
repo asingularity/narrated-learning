@@ -437,7 +437,7 @@ class WTAIterativeBrain(object):
                 # fontScale
                 fontScale = 0.4
                 # Blue color in BGR
-                color = (255, 255, 255)
+                color = (40, 40, 40)
                 # Line thickness of 2 px
                 thickness = 1
                 # Using cv2.putText() method
@@ -583,7 +583,7 @@ class WTAIterativeBrain(object):
         #               weights of pixel-bins in feature space, per RF
         #
 
-        prediction_exp = np.sum(np.multiply(prediction_past[1::, np.newaxis], layer_w[1::, :]), axis=0)
+        prediction_exp = np.amax(np.multiply(prediction_past[1::, np.newaxis], layer_w[1::, :]), axis=0)
         #print(prediction_exp.shape)
         #exit(1)
         #for rf_i in range(layer_w.shape[0]):
@@ -601,6 +601,8 @@ class WTAIterativeBrain(object):
 
         im0_v = arr[0, :].reshape((self.input_im_dim, self.input_im_dim))
         im0_w = weights[0, :].reshape((self.input_im_dim, self.input_im_dim))
+
+        im0_w = (im0_w - np.amin(im0_w)) * 1.0 / (np.amax(im0_w) - np.amin(im0_w))
 
         predict_im_show = np.hstack((actual_present, 0.5 * np.ones((self.input_im_dim, 2)),
                                      im0_v, 0.5 * np.ones((self.input_im_dim, 2)),
