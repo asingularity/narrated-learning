@@ -163,7 +163,7 @@ class WTAIterativeBrain(object):
 
         self.last_activities = []
         for hl in range(self.num_hl):
-            self.last_activities.append(None)
+            self.last_activities.append(np.zeros(self.num_rf_per_hl[hl]))
 
         # ************ predictive stuff ************
         self.input_im_history = StatesLimitedHistory(params={'max_delay': self.predict_time_steps,
@@ -310,7 +310,7 @@ class WTAIterativeBrain(object):
         rfs_valid = np.ones(self.num_rf_per_hl[hl])
         self.last_activities[hl] = np.zeros(self.num_rf_per_hl[hl])
 
-        allow_reselect = True  # for this, set self.num_iter to be high
+        allow_reselect = False  # for this, set self.num_iter to be high
 
         # error_thresh = 20
         # print()
@@ -333,10 +333,11 @@ class WTAIterativeBrain(object):
             lr = self.lr_base
 
             if self.t < self.learning_off_time_per_hl[hl] and rfs_valid[win_rf_index] == 1:
+                #self.weights[hl][win_rf_index, :] = (1.0 - lr) * self.weights[hl][win_rf_index, :] + lr * hl_input[0, :]
                 self.weights[hl][win_rf_index, :] = (1.0 - lr) * self.weights[hl][win_rf_index, :] + lr * remainder[0, :]
 
             remainder = remainder - self.weights[hl][win_rf_index, :]
-
+            #print('hl', hl, 'iter_i', iter_i, 'rem', np.min(remainder), np.max(remainder), 'w', np.min( self.weights[hl][win_rf_index, :]), np.max( self.weights[hl][win_rf_index, :]))
             reconstruction = reconstruction + self.weights[hl][win_rf_index, :]
 
             # TODO get rid of this; there is no "hack first layer" for this model
@@ -355,6 +356,8 @@ class WTAIterativeBrain(object):
             #else:
             #    pass
             #    #print(np.nonzero(rfs_valid==0)[0])
+
+        #print(np.amax(reconstruction), np.amin(reconstruction))
 
         reconstruction[reconstruction > 1] = 1
         reconstruction[reconstruction < 0] = 0
@@ -427,31 +430,50 @@ class WTAIterativeBrain(object):
                 im0 = arr[r_tmp, :].reshape((self.input_im_dim, self.input_im_dim))  # rf_dim
                 im1 = weights[r_tmp, :].reshape((self.input_im_dim, self.input_im_dim))
 
+                # im1 = 0.5 * (im1 + 1)
+
                 active_count = self.last_activities[hl][r_tmp]
                 im_active_count = np.zeros((self.input_im_dim, self.input_im_dim))
 
-                # font
-                font = cv2.FONT_HERSHEY_SIMPLEX
-                # org
-                org = (2, im_active_count.shape[1] - 2)
-                # fontScale
-                fontScale = 0.4
-                # Blue color in BGR
-                color = (40, 40, 40)
-                # Line thickness of 2 px
-                thickness = 1
-                # Using cv2.putText() method
-                im_active_count = cv2.putText(im_active_count, str(int(active_count)), org, font, fontScale, color, thickness, cv2.LINE_AA)
+                include_active_count_im = False
+                if include_active_count_im:
+                    # font
+                    font = cv2.FONT_HERSHEY_SIMPLEX
+                    # org
+                    org = (2, im_active_count.shape[1] - 2)
+                    # fontScale
+                    fontScale = 0.4
+                    # Blue color in BGR
+                    color = (40, 40, 40)
+                    # Line thickness of 2 px
+                    thickness = 1
+                    # Using cv2.putText() method
+                    im_active_count = cv2.putText(im_active_count, str(int(active_count)), org, font, fontScale, color, thickness, cv2.LINE_AA)
 
-                # if np.amin(im1) < 0:
-                #     print(np.amin(im1), np.amax(im1))
+                    # if np.amin(im1) < 0:
+                    #     print(np.amin(im1), np.amax(im1))
 
-                tmp2 = np.hstack((im0, im1, im_active_count))
+                    tmp2 = np.hstack((im0, im1, im_active_count))
+                else:
+                    tmp2 = np.hstack((im0, im1))
 
                 if tmp_im is None:
+                    if active_count > 0:
+                        tmp2[:, 0] = 0.8
+                        tmp2[:, -1] = 0.8
+                        tmp2[0, :] = 0.8
+                        tmp2[-1, :] = 0.8
                     tmp_im = tmp2.copy()
                 else:
-                    tmp3 = 0.5 * np.ones((2, tmp_im.shape[1]))
+                    if active_count > 0:
+                        tmp2[:, 0] = 0.8
+                        tmp2[:, -1] = 0.8
+                        tmp2[0, :] = 0.8
+                        tmp2[-1, :] = 0.8
+                        tmp3 = 0.2 * np.ones((2, tmp_im.shape[1]))
+                    else:
+                        tmp3 = 0.2 * np.ones((2, tmp_im.shape[1]))
+
                     tmp_im = np.vstack((tmp_im, tmp3, tmp2))
 
                 if r_tmp > 0 and (r_tmp + 1) % 10 == 0:
@@ -504,15 +526,43 @@ class WTAIterativeBrain(object):
             for rf_ind in range(self.num_rf_per_hl[hl]):
                 # get sequence image for this RF:
                 v_seq_im, w_seq_im = self._get_hl_1_sequence_im(rf_weights=self.weights[hl][rf_ind, :])
+                active_count = self.last_activities[hl][rf_ind]
 
                 if tmp_im_v is None:
+                    if active_count > 0:
+                        v_seq_im[:, 0] = 0.8
+                        v_seq_im[:, -1] = 0.8
+                        v_seq_im[0, :] = 0.8
+                        v_seq_im[-1, :] = 0.8
+
+                        w_seq_im[:, 0] = 0.8
+                        w_seq_im[:, -1] = 0.8
+                        w_seq_im[0, :] = 0.8
+                        w_seq_im[-1, :] = 0.8
+
                     tmp_im_v = v_seq_im.copy()
                     tmp_im_w = w_seq_im.copy()
                 else:
-                    tmp3_v = 0.5 * np.ones((2, tmp_im_v.shape[1]))
+
+                    if active_count > 0:
+                        v_seq_im[:, 0] = 0.8
+                        v_seq_im[:, -1] = 0.8
+                        v_seq_im[0, :] = 0.8
+                        v_seq_im[-1, :] = 0.8
+
+                        w_seq_im[:, 0] = 0.8
+                        w_seq_im[:, -1] = 0.8
+                        w_seq_im[0, :] = 0.8
+                        w_seq_im[-1, :] = 0.8
+
+                        tmp3_v = 0.2 * np.ones((2, tmp_im_v.shape[1]))
+                        tmp3_w = 0.2 * np.ones((2, tmp_im_w.shape[1]))
+                    else:
+                        tmp3_v = 0.2 * np.ones((2, tmp_im_v.shape[1]))
+                        tmp3_w = 0.2 * np.ones((2, tmp_im_w.shape[1]))
+
                     tmp_im_v = np.vstack((tmp_im_v, tmp3_v, v_seq_im))
 
-                    tmp3_w = 0.5 * np.ones((2, tmp_im_w.shape[1]))
                     tmp_im_w = np.vstack((tmp_im_w, tmp3_w, w_seq_im))
 
                 if rf_ind > 0 and (rf_ind + 1) % 10 == 0:
@@ -583,7 +633,11 @@ class WTAIterativeBrain(object):
         #               weights of pixel-bins in feature space, per RF
         #
 
-        prediction_exp = np.amax(np.multiply(prediction_past[1::, np.newaxis], layer_w[1::, :]), axis=0)
+        # PREDICTION WORKS BETTER WITH THIS:
+        # prediction_exp = np.amax(np.multiply(prediction_past[0::, np.newaxis], layer_w[1::, :]), axis=0)
+
+        prediction_exp = np.amax(np.multiply(prediction_past[0::, np.newaxis], layer_w[0::, :]), axis=0)
+
         #print(prediction_exp.shape)
         #exit(1)
         #for rf_i in range(layer_w.shape[0]):
@@ -653,6 +707,8 @@ class WTAIterativeBrain(object):
             tmp_im_v, tmp_im_w = self._collapse_binned_columns_to_pixels(arr_exp=rf_to_add[np.newaxis, :], num_bins_per_pixel=self.bins_per_pixel)
             tmp_im_v = tmp_im_v.reshape((self.input_im_dim, self.input_im_dim))
             tmp_im_w = tmp_im_w.reshape((self.input_im_dim, self.input_im_dim))
+
+            # tmp_im_w = 0.5 * (tmp_im_w + 1)
 
             if im_t_delay_hstack_v is None:
                 im_t_delay_hstack_v = tmp_im_v.copy()

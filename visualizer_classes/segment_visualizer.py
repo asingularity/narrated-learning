@@ -66,6 +66,7 @@ class SegmentVisualizer(object):
             logging.info('FPS: ' + str(fps) + ', frames: ' + str(self.frames))
             self.fps_frames = 0
             self.last_FPS_time = time.time()
+            cv2.waitKey(1)
         self.fps_frames += 1
 
     def _display_raycast_image(self, raycast_image):
