@@ -318,32 +318,34 @@ class WTAIterativeBrain(object):
         # print()
         # print('*** STARTING ***')
         # print()
-        for iter_i in range(self.num_iter):
-            valid_indices = np.nonzero(rfs_valid)[0]
 
-            if allow_reselect:
-                eff_frame = np.sum(np.abs(self.weights[hl] - remainder), axis=1)
-                win_rf_index = np.argmin(eff_frame)
-            else:
-                eff_frame = np.sum(np.abs(self.weights[hl][valid_indices, :] - remainder), axis=1)
-                win_rf_index = valid_indices[np.argmin(eff_frame)]
+        assert self.num_rf_per_hl[hl] / self.num_iter == int( self.num_rf_per_hl[hl] / self.num_iter )
+
+        num_rf_per_iter = int(self.num_rf_per_hl[hl] / self.num_iter)
+
+        for iter_i in range(self.num_iter):
+            valid_indices = np.arange(iter_i * num_rf_per_iter, (iter_i + 1)* num_rf_per_iter)
+
+            # if allow_reselect:
+            #     eff_frame = np.sum(np.abs(self.weights[hl] - remainder), axis=1)
+            #     win_rf_index = np.argmin(eff_frame)
+            # else:
+
+            eff_frame = np.sum(np.abs(self.weights[hl][valid_indices, :] - remainder), axis=1)
+            win_rf_index = valid_indices[np.argmin(eff_frame)]
 
             self.last_activities[hl][win_rf_index] += 1
             # print('iter', iter_i, 'win_rf', win_rf_index)
             lr = self.lr_base
 
-            if self.t < self.learning_off_time_per_hl[hl] and rfs_valid[win_rf_index] == 1:
+            if self.t < self.learning_off_time_per_hl[hl]:
                 #self.weights[hl][win_rf_index, :] = (1.0 - lr) * self.weights[hl][win_rf_index, :] + lr * hl_input[0, :]
                 self.weights[hl][win_rf_index, :] = (1.0 - lr) * self.weights[hl][win_rf_index, :] + lr * remainder[0, :]
 
             remainder = remainder - self.weights[hl][win_rf_index, :]
             #print('hl', hl, 'iter_i', iter_i, 'rem', np.min(remainder), np.max(remainder), 'w', np.min( self.weights[hl][win_rf_index, :]), np.max( self.weights[hl][win_rf_index, :]))
             reconstruction = reconstruction + self.weights[hl][win_rf_index, :]
-
-            # TODO get rid of this; there is no "hack first layer" for this model
-#            reconstruction_no_first = reconstruction
-            if rfs_valid[win_rf_index]:
-                reconstruction_no_first = reconstruction_no_first + self.weights[hl][win_rf_index, :]
+            reconstruction_no_first = reconstruction
 
             rfs_valid[win_rf_index] = 0
             hl_output[win_rf_index] = 1.0

@@ -27,7 +27,7 @@ if USE_VIDEO_IN:
     ENABLE_HACK_SKIP_FIRST_LAYER = False
     LEARN_RATE = 0.0001
 else:
-    ENABLE_HACK_SKIP_FIRST_LAYER = True  # THIS IS DEPRECATED AND UNUSED NOW; for bouncing balls, better viz
+    ENABLE_HACK_SKIP_FIRST_LAYER = False  # THIS IS DEPRECATED AND UNUSED NOW; for bouncing balls, better viz
     LEARN_RATE = 0.001
 
 IM_DIM = 16  # pixels, width & height
@@ -116,38 +116,39 @@ def get_brain_params():
     # }
 
     # WTAMultiLayerBrain
-    # params = {
-    #     'image_dim_display': 1500,
-    #     'image_dim_NxN_pixels': IM_DIM,
-    #     'learning_rate': 0.001,
-    #     'bins_per_pixel': 6,
-    #     'num_rf_per_wta_layer_per_hl': np.array([20, 80]),
-    #     'num_wta_layer_per_hl': np.array([6, 12]),
-    #     'input_time_steps_per_hl': np.array([1, 4]),
-    #     'layer_start_time_offset_per_hl': np.array([6000, 4 * 6000]) * 5, # np.array([300000, 300000])
-    #     'enable_learning_off': True,
-    #     'plot_interval_seconds': 30,
-    #     'enable_hack_skip_first_layer': ENABLE_HACK_SKIP_FIRST_LAYER,
-    #     'enable_generic_weights_viz': False
-    # }
-
-    # WTAIterativeBrain
-    params = {
-        'image_dim_display': 2200,  # 2700: full on laptop
+    multilayer_brain_params = {
+        'image_dim_display': 1500,
         'image_dim_NxN_pixels': IM_DIM,
-        'learning_rate': LEARN_RATE,
+        'learning_rate': 0.001,
         'bins_per_pixel': 6,
-        'num_rf_per_hl': np.array([120, 240]),  # , 20]),
-        'num_iter_per_input': 6,
-        'input_time_steps_per_hl': np.array([1, 4]),  #, 4]),
-        'start_time_per_hl': np.array([0, 50000]),  # , 50000]),
-        'learning_off_time_per_hl': [150000, 250000], #1000000,
+        'num_rf_per_wta_layer_per_hl': np.array([20, 80]),
+        'num_wta_layer_per_hl': np.array([6, 12]),
+        'input_time_steps_per_hl': np.array([1, 4]),
+        'layer_start_time_offset_per_hl': np.array([6000, 4 * 6000]) * 5, # np.array([300000, 300000])
+        'enable_learning_off': True,
         'plot_interval_seconds': 30,
         'enable_hack_skip_first_layer': ENABLE_HACK_SKIP_FIRST_LAYER,
         'enable_generic_weights_viz': False
     }
 
-    return params
+    # WTAIterativeBrain
+    iterative_brain_params = {
+        'image_dim_display': 2200,  # 2700: full on laptop
+        'image_dim_NxN_pixels': IM_DIM,
+        'learning_rate': LEARN_RATE,
+        'bins_per_pixel': 6,
+        'num_rf_per_hl': np.array([120, 480]),  # , 20]),
+        'num_iter_per_input': 6,
+        'input_time_steps_per_hl': np.array([1, 4]),  #, 4]),
+        'start_time_per_hl': np.array([0, 50000]),  # , 50000]),
+        'learning_off_time_per_hl': [1000000, 2000000], #1000000,
+        'plot_interval_seconds': 30,
+        'enable_hack_skip_first_layer': ENABLE_HACK_SKIP_FIRST_LAYER,
+        'enable_generic_weights_viz': False
+    }
+
+    #return multilayer_brain_params
+    return iterative_brain_params
 
 
 def get_visualizer_params():
@@ -159,7 +160,7 @@ def get_visualizer_params():
         'image_display_secs_slow': 0.02, #0.001,  # 0: every frame
         'waitKey_time_slow': 1,  # 1, 100, 5000  #
         'scale_camera_factor': 1,
-        'auto_switch_to_slow_disp_time': 250000, #50000,  # TODO re-introduce later for when training is done
+        'auto_switch_to_slow_disp_time': None, #250000, #50000,  # TODO re-introduce later for when training is done
         'init_fast': True  # start with "fast" display
     }
     return params
@@ -174,7 +175,7 @@ def init_demo():
         robot_sensors = Physics2DSensor(get_sensors_params())
 
     return {
-        #'robot_brain': WTALayerBrain(get_brain_params()),
+        # *** DEPRECATED *** 'robot_brain': WTALayerBrain(get_brain_params()),
         #'robot_brain': WTAMultiLayerBrain(get_brain_params()),
         'robot_brain': WTAIterativeBrain(get_brain_params()),
         'robot_sensors': robot_sensors,
