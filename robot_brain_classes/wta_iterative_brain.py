@@ -605,42 +605,64 @@ class WTAIterativeBrain(object):
         actual_present = self.input_im_history.get_state(state_index=0, delay=0).reshape((self.input_im_dim, self.input_im_dim))
 
         prediction_of_hl_0 = self.predicted_hl_0_rf_activies_history.get_state(state_index=0, delay=self.predict_time_steps)  # this is in the past
-
-        prediction_exp = np.zeros(self.input_im_dim * self.input_im_dim * self.bins_per_pixel)
-
+        # print(prediction_of_hl_0.shape)  # (120,)
         layer_w = self.weights[0]   # (num_rf, feature_len)
 
-        if False:  # TODO work in progress
-            # two ways to get prediction image:
-            # (1) choose a "winner" per wta-layer or wta-group, based on prediction strength
-            #       add only the "winning" RF to the prediction image
-            # (2) sum all RFs by their prediction weight
+        # two ways to get prediction image:
+        # (1) choose a "winner" per wta-layer or wta-group, based on prediction strength
+        #       add only the "winning" RF to the prediction image
+        # (2) sum all RFs by their prediction weight
 
-            thing_to_add = None
-            max_k_val = -np.inf
+        prediction_exp_method_1 = np.zeros(self.input_im_dim * self.input_im_dim * self.bins_per_pixel)
+        prediction_exp_method_2 = np.zeros(self.input_im_dim * self.input_im_dim * self.bins_per_pixel)
 
-            for rf_i in range(layer_w.shape[0]):
-               prediction_exp = prediction_exp + thing_to_add
+        thing_to_add = None
+        max_k_val = -np.inf
 
-                # for rf_i  in range(layer_w.shape[0]):
-                #     prediction_exp += prediction_past[k] * layer_w[rf_i, :]
-                #
-                #     k += 1
+        # method 1:
+        num_rf_per_iter = int(self.num_rf_per_hl[0] / self.num_iter[0])
+        predictions_grouped = prediction_of_hl_0.reshape((self.num_iter[0], num_rf_per_iter))
+        win_rf_indices = np.arange(self.num_iter[0]) * num_rf_per_iter + np.argmax(predictions_grouped, axis=1)
+        prediction_exp_method_1[:] = np.sum(layer_w[win_rf_indices, :], axis=0)
 
-        prediction_exp[prediction_exp < 0] = 0
-        prediction_exp[prediction_exp > 1] = 1
+        # method 2:
+        prediction_exp_method_2[:] = np.sum(np.multiply(prediction_of_hl_0[:, np.newaxis], layer_w), axis=0)
+        # for rf_i in range(layer_w.shape[0]):
+        #    prediction_exp = prediction_exp + thing_to_add
+        #
+        #     # for rf_i  in range(layer_w.shape[0]):
+        #     #     prediction_exp += prediction_past[k] * layer_w[rf_i, :]
+        #     #
+        #     #     k += 1
 
-        arr, weights = self._collapse_binned_columns_to_pixels(arr_exp=prediction_exp[np.newaxis, :], num_bins_per_pixel=self.bins_per_pixel)
+        # TODO return image for both methods:
 
-        im0_v = arr[0, :].reshape((self.input_im_dim, self.input_im_dim))
-        im0_w = weights[0, :].reshape((self.input_im_dim, self.input_im_dim))
+        prediction_exp_method_1[prediction_exp_method_1 < 0] = 0
+        prediction_exp_method_1[prediction_exp_method_1 > 1] = 1
 
-        im0_w = (im0_w - np.amin(im0_w)) * 1.0 / (np.amax(im0_w) - np.amin(im0_w))
+        prediction_exp_method_2[prediction_exp_method_2 < 0] = 0
+        prediction_exp_method_2[prediction_exp_method_2 > 1] = 1
 
-        predict_im_show = np.hstack((actual_present, 0.5 * np.ones((self.input_im_dim, 2)),
-                                     im0_v, 0.5 * np.ones((self.input_im_dim, 2)),
-                                     im0_w, 0.5 * np.ones((self.input_im_dim, 2)),
-                                     actual_past, 0.5 * np.ones((self.input_im_dim, 2))))
+        predict_im_show = None
+
+        for prediction_exp in [prediction_exp_method_1, prediction_exp_method_2]:
+            arr, weights = self._collapse_binned_columns_to_pixels(arr_exp=prediction_exp[np.newaxis, :], num_bins_per_pixel=self.bins_per_pixel)
+
+            im0_v = arr[0, :].reshape((self.input_im_dim, self.input_im_dim))
+            im0_w = weights[0, :].reshape((self.input_im_dim, self.input_im_dim))
+
+            # im0_w = (im0_w - np.amin(im0_w)) * 1.0 / (np.amax(im0_w) - np.amin(im0_w))
+
+            predict_im_tmp = np.hstack((actual_present, 0.5 * np.ones((self.input_im_dim, 2)),
+                                        im0_v, 0.5 * np.ones((self.input_im_dim, 2)),
+                                        im0_w, 0.5 * np.ones((self.input_im_dim, 2)),
+                                        actual_past, 0.5 * np.ones((self.input_im_dim, 2))))
+
+            if predict_im_show is None:
+                predict_im_show = predict_im_tmp.copy()
+            else:
+                spacer = 0.2 * np.ones((3, predict_im_show.shape[1]))
+                predict_im_show = np.vstack((predict_im_show, spacer, predict_im_tmp))
 
         return predict_im_show
 

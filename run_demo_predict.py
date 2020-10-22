@@ -133,7 +133,7 @@ def get_brain_params():
 
     # WTAIterativeBrain
     iterative_brain_params = {
-        'image_dim_display': 2200,  # 2700: full on laptop
+        'image_dim_display': 3000,  # 2700: full on laptop
         'image_dim_NxN_pixels': IM_DIM,
         'learning_rate': LEARN_RATE,
         'bins_per_pixel': 6,
