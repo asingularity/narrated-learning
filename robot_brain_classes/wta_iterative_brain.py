@@ -266,8 +266,7 @@ class WTAIterativeBrain(object):
                             pm_old = self.pm.copy()
 
                             self.pm[rows, :] = (1.0 - self.pm_lr) * pm_old[rows, :] + self.pm_lr * 0.0
-                            self.pm[rows_exp, cols_exp] = (1.0 - self.pm_lr) * pm_old[
-                                rows_exp, cols_exp] + self.pm_lr * 1.0
+                            self.pm[rows_exp, cols_exp] = (1.0 - self.pm_lr) * pm_old[rows_exp, cols_exp] + self.pm_lr * 1.0
 
                             # TODO compute actual next-frame prediction
 
@@ -319,11 +318,11 @@ class WTAIterativeBrain(object):
         # print('*** STARTING ***')
         # print()
 
-        assert self.num_rf_per_hl[hl] / self.num_iter == int( self.num_rf_per_hl[hl] / self.num_iter )
+        assert self.num_rf_per_hl[hl] / self.num_iter[hl] == int( self.num_rf_per_hl[hl] / self.num_iter[hl] )
 
-        num_rf_per_iter = int(self.num_rf_per_hl[hl] / self.num_iter)
+        num_rf_per_iter = int(self.num_rf_per_hl[hl] / self.num_iter[hl])
 
-        for iter_i in range(self.num_iter):
+        for iter_i in range(self.num_iter[hl]):
             valid_indices = np.arange(iter_i * num_rf_per_iter, (iter_i + 1)* num_rf_per_iter)
 
             # if allow_reselect:
@@ -338,7 +337,7 @@ class WTAIterativeBrain(object):
             # print('iter', iter_i, 'win_rf', win_rf_index)
             lr = self.lr_base
 
-            if self.t < self.learning_off_time_per_hl[hl]:
+            if self.t < self.learning_off_time_per_hl[hl] and (hl==0 or self.t > self.start_time_per_hl[hl] + 120000 * iter_i):
                 #self.weights[hl][win_rf_index, :] = (1.0 - lr) * self.weights[hl][win_rf_index, :] + lr * hl_input[0, :]
                 self.weights[hl][win_rf_index, :] = (1.0 - lr) * self.weights[hl][win_rf_index, :] + lr * remainder[0, :]
 
@@ -349,17 +348,6 @@ class WTAIterativeBrain(object):
 
             rfs_valid[win_rf_index] = 0
             hl_output[win_rf_index] = 1.0
-
-            #rec_error = np.sum(np.abs(reconstruction - hl_input))
-
-            #if rec_error < error_thresh:
-                #print('reached error thresh!')
-            #    break
-            #else:
-            #    pass
-            #    #print(np.nonzero(rfs_valid==0)[0])
-
-        #print(np.amax(reconstruction), np.amin(reconstruction))
 
         reconstruction[reconstruction > 1] = 1
         reconstruction[reconstruction < 0] = 0
@@ -567,7 +555,7 @@ class WTAIterativeBrain(object):
 
                     tmp_im_w = np.vstack((tmp_im_w, tmp3_w, w_seq_im))
 
-                if rf_ind > 0 and (rf_ind + 1) % 10 == 0:
+                if rf_ind > 0 and (rf_ind + 1) % 20 == 0:
                     if tmp_im_all_v is None:
                         tmp_im_all_v = tmp_im_v.copy()
                         tmp_im_all_w = tmp_im_w.copy()
@@ -613,42 +601,31 @@ class WTAIterativeBrain(object):
         #   actual image @ t
         #   actual image @ t - tau
 
-        prediction_past = self.predicted_hl_0_rf_activies_history.get_state(state_index=0, delay=self.predict_time_steps)
         actual_past = self.input_im_history.get_state(state_index=0, delay=self.predict_time_steps).reshape((self.input_im_dim, self.input_im_dim))
         actual_present = self.input_im_history.get_state(state_index=0, delay=0).reshape((self.input_im_dim, self.input_im_dim))
 
-        prediction_exp = np.zeros(self.input_im_dim * self.input_im_dim * self.bins_per_pixel)
+        prediction_of_hl_0 = self.predicted_hl_0_rf_activies_history.get_state(state_index=0, delay=self.predict_time_steps)  # this is in the past
 
-        k = 0
+        prediction_exp = np.zeros(self.input_im_dim * self.input_im_dim * self.bins_per_pixel)
 
         layer_w = self.weights[0]   # (num_rf, feature_len)
 
-        # TODO pick max RF -> 1, others -> 0 per wta-layer in prediction_past; or treat as weights directly
+        if False:  # TODO work in progress
+            # two ways to get prediction image:
+            # (1) choose a "winner" per wta-layer or wta-group, based on prediction strength
+            #       add only the "winning" RF to the prediction image
+            # (2) sum all RFs by their prediction weight
 
-        thing_to_add = None
-        max_k_val = -np.inf
+            thing_to_add = None
+            max_k_val = -np.inf
 
-        #print(prediction_past.shape, layer_w.shape)
+            for rf_i in range(layer_w.shape[0]):
+               prediction_exp = prediction_exp + thing_to_add
 
-        # TODO instead of sum here, could (should?) try maximum: nontrivial!
-        # what we have: prob (one number),                      per RF
-        #               weights of pixel-bins in feature space, per RF
-        #
-
-        # PREDICTION WORKS BETTER WITH THIS:
-        # prediction_exp = np.amax(np.multiply(prediction_past[0::, np.newaxis], layer_w[1::, :]), axis=0)
-
-        prediction_exp = np.amax(np.multiply(prediction_past[0::, np.newaxis], layer_w[0::, :]), axis=0)
-
-        #print(prediction_exp.shape)
-        #exit(1)
-        #for rf_i in range(layer_w.shape[0]):
-        #    prediction_exp = prediction_exp + thing_to_add
-
-            # for rf_i  in range(layer_w.shape[0]):
-            #     prediction_exp += prediction_past[k] * layer_w[rf_i, :]
-            #
-            #     k += 1
+                # for rf_i  in range(layer_w.shape[0]):
+                #     prediction_exp += prediction_past[k] * layer_w[rf_i, :]
+                #
+                #     k += 1
 
         prediction_exp[prediction_exp < 0] = 0
         prediction_exp[prediction_exp > 1] = 1
