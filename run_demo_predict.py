@@ -133,13 +133,13 @@ def get_brain_params():
 
     # WTAIterativeBrain
     iterative_brain_params = {
-        'image_dim_display': 3000,  # 2700: full on laptop
+        'image_dim_display': 2700,  # 2700: full on laptop, 3000: full on desktop
         'image_dim_NxN_pixels': IM_DIM,
         'learning_rate': LEARN_RATE,
         'bins_per_pixel': 6,
-        'num_rf_per_hl': np.array([120, 2 * 480]),  # , 20]),
-        'num_iter_per_input': [6, 12],
-        'input_time_steps_per_hl': np.array([1, 4]),  #, 4]),
+        'num_rf_per_hl': np.array([240, 2 * 480]),  # , 20]),
+        'num_iter_per_input': [12, 12],
+        'input_time_steps_per_hl': np.array([1, 3]),  #, 4]),
         'start_time_per_hl': np.array([0, 50000]),  # , 50000]),
         'learning_off_time_per_hl': [1000000, 2000000], #1000000,
         'plot_interval_seconds': 30,

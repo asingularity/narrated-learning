@@ -70,10 +70,10 @@ class WTAIterativeBrain(object):
 
         # predictive parameters:
         # how long to predict ahead
-        self.predict_time_steps = 2
+        self.predict_time_steps = 1
 
         # how many delayed lateral input time steps to use
-        self.predict_lateral_input_time_steps = 4
+        self.predict_lateral_input_time_steps = 1
 
         # how many delayed feedback input time steps to use
         self.predict_feedback_input_time_steps = 1
@@ -99,6 +99,11 @@ class WTAIterativeBrain(object):
         self.mean_rec_error = []
         self.weights = []
         self.predict_weights = []
+
+        self.predict_error = []
+        self.predict_error_reference = []
+        self.mean_predict_error = []
+        self.mean_predict_error_reference = []
 
         hl_start_time = 0
         hl_input_state_dim = self.input_im_dim * self.input_im_dim * self.bins_per_pixel
@@ -138,6 +143,11 @@ class WTAIterativeBrain(object):
             if hl < self.num_hl - 1:
                 # next layer's input state dim
                 hl_input_state_dim = output_state_dim * self.input_time_steps_per_hl[hl + 1]
+
+                self.predict_error.append(np.zeros(max_time))
+                self.predict_error_reference.append(np.zeros(max_time))
+                self.mean_predict_error.append(np.zeros(max_time))
+                self.mean_predict_error_reference.append(np.zeros(max_time))
 
         print()
         print('Initialized!')
@@ -238,6 +248,9 @@ class WTAIterativeBrain(object):
                     if hl == 1 and self.t > 1:
 
                         hl_0_rf_activities_current = self.hl_output_histories[0].get_state(state_index=0, delay=0)
+                        hl_0_rf_activities_past = self.hl_output_histories[0].get_state(state_index=0,
+                                                                                        delay=self.predict_time_steps)
+
                         hl_1_rf_activities_past = self.hl_output_histories[1].get_state(state_index=0,
                                                                                         delay=self.predict_time_steps)
 
@@ -275,12 +288,35 @@ class WTAIterativeBrain(object):
                             # max is taken over columns; such that for every hl-0 "post", you store the max "pre" prob:
                             # TODO maybe this should actually be a sum, instead; to counter the multiple wta-layers where one post can make *multiple* valid / strong predictions in different wta-layers, that shouldn't be ignored
                             #       i.e. we have order-dependence...
+
+                            # standard:
                             hl_0_probs = np.amax(self.pm[np.nonzero(hl_1_rf_activities_current)[0], :], axis=0)
+
+                            # experiment (worse):
+                            # hl_0_probs = np.sum(self.pm[np.nonzero(hl_1_rf_activities_current)[0], :], axis=0)
 
                             assert hl_0_probs.shape[0] == hl_0_rf_activities_current.shape[0], str(
                                 (hl_0_probs.shape, hl_0_rf_activities_current.shape))
 
-                            self.predicted_hl_0_rf_activies_history.store_new_states(newest_states_list=[hl_0_probs])
+                            num_rf_per_iter = int(self.num_rf_per_hl[0] / self.num_iter[0])
+                            predictions_grouped = hl_0_probs.reshape((self.num_iter[0], num_rf_per_iter))
+                            win_rf_indices = np.arange(self.num_iter[0]) * num_rf_per_iter + np.argmax(predictions_grouped, axis=1)
+
+                            hl_0_prediction = np.zeros(self.num_rf_per_hl[0])
+                            hl_0_prediction[win_rf_indices] = 1.0
+
+                            self.predicted_hl_0_rf_activies_history.store_new_states(newest_states_list=[hl_0_prediction])
+
+                            # retrieve old prediction and store errors and reference errors
+                            prediction_past = self.predicted_hl_0_rf_activies_history.get_state(state_index=0, delay=self.predict_time_steps)
+
+                            predict_error = np.sum(np.abs(hl_0_rf_activities_current - prediction_past))
+                            predict_error_reference = np.sum(np.abs(hl_0_rf_activities_past - prediction_past))
+
+                            self.predict_error[0][self.t] = predict_error
+                            self.predict_error_reference[0][self.t] = predict_error_reference
+                            self.mean_predict_error[0][self.t] = np.mean(self.predict_error[0][max(0, self.t - self.mean_fr):self.t])
+                            self.mean_predict_error_reference[0][self.t] = np.mean(self.predict_error_reference[0][max(0, self.t - self.mean_fr):self.t])
 
         # we do prediction and prediction learning on newest data, after processing and storing based on new input above
 
@@ -739,6 +775,15 @@ class WTAIterativeBrain(object):
 
                 self.ax.axvline(x=self.learning_off_time_per_hl[hl], color='r')
                 self.fig.savefig("rec_error_hyperlayer_" + str(hl) + ".png", dpi=100)
+
+                if hl < self.num_hl - 1:
+                    self.ax.cla()
+                    #self.ax.plot(self.predict_error[hl][0:self.t], color='g')
+                    self.ax.plot(self.mean_predict_error[hl][0:self.t], color='r')
+
+                    #self.ax.plot(self.predict_error_reference[hl][0:self.t], color='k')
+                    self.ax.plot(self.mean_predict_error_reference[hl][0:self.t], color='b')
+                    self.fig.savefig("predict_errors" + str(hl) + ".png", dpi=100)
 
                 # TODO plot prediction error (also vs. current frame for reference!) same plot!
                 # TODO also maybe hack visualization to manually remove background RF for now (since multi-predict active anyways!!)
