@@ -373,7 +373,7 @@ class WTAIterativeBrain(object):
             # print('iter', iter_i, 'win_rf', win_rf_index)
             lr = self.lr_base
 
-            if self.t < self.learning_off_time_per_hl[hl] and (hl==0 or self.t > self.start_time_per_hl[hl] + 120000 * iter_i):
+            if self.t < self.learning_off_time_per_hl[hl] and (hl==0 or self.t > self.start_time_per_hl[hl] + 30000 * iter_i):
                 #self.weights[hl][win_rf_index, :] = (1.0 - lr) * self.weights[hl][win_rf_index, :] + lr * hl_input[0, :]
                 self.weights[hl][win_rf_index, :] = (1.0 - lr) * self.weights[hl][win_rf_index, :] + lr * remainder[0, :]
 

@@ -138,10 +138,10 @@ def get_brain_params():
         'learning_rate': LEARN_RATE,
         'bins_per_pixel': 6,
         'num_rf_per_hl': np.array([240, 2 * 480]),  # , 20]),
-        'num_iter_per_input': [12, 12],
+        'num_iter_per_input': [12, 48],
         'input_time_steps_per_hl': np.array([1, 3]),  #, 4]),
         'start_time_per_hl': np.array([0, 50000]),  # , 50000]),
-        'learning_off_time_per_hl': [1000000, 2000000], #1000000,
+        'learning_off_time_per_hl': [1000000, 3000000], #1000000,
         'plot_interval_seconds': 30,
         'enable_hack_skip_first_layer': ENABLE_HACK_SKIP_FIRST_LAYER,
         'enable_generic_weights_viz': False
