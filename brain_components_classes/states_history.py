@@ -105,7 +105,7 @@ class StatesLimitedHistory(object):
             else:
                 return None
 
-    def get_state_sequence(self, state_index, delay_long, delay_short):
+    def get_state_sequence(self, state_index, delay_long, delay_short, oldest_first=True):
         # TODO this could be more efficient: just two lookups instead!
 
         if self.active:
@@ -114,7 +114,12 @@ class StatesLimitedHistory(object):
             assert delay_short <= delay_long
 
             state_seq = []
-            for delay in range(delay_long, delay_short - 1, -1):
+            if oldest_first:
+                del_range = range(delay_long, delay_short - 1, -1)
+            else:
+                del_range = range(delay_short, delay_long + 1)
+
+            for delay in del_range:
                 assert self.t_mod < self.max_delay
                 # t_mod is where most recent data point is stored
 
@@ -139,3 +144,35 @@ class StatesLimitedHistory(object):
             return newest_states_list
         else:
             return None
+
+
+
+if __name__ == '__main__':
+    tmp = StatesLimitedHistory(params={'max_delay': 10,
+                                       'states_dim_list': [3],
+                                       'store_extra_data': False})
+
+    np.random.seed(0)
+    print()
+    for t in range(20):
+        rand_data = np.random.random(3)
+
+        print('t', t, 'data', rand_data)
+        tmp.store_new_states(newest_states_list=[rand_data])
+
+    print()
+    tmp_data = tmp.get_state_sequence(state_index=0, delay_long=9, delay_short=0, oldest_first=False)
+    print(tmp_data)
+
+    print()
+    tmp_data = tmp.get_state(state_index=0, delay=0)
+    print(tmp_data)
+    print()
+    tmp_data = tmp.get_state(state_index=0, delay=9)
+    print(tmp_data)
+
+
+
+
+
+

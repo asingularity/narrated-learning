@@ -42,8 +42,10 @@ class WTAIterativeBrain(object):
         self.num_iter = params['num_iter_per_input']  # TODO one number (all hyperlayers); can theoretically be more than RFs but probably want less
 
         # how many time steps, i.e. delay values, of the previous hl's output to use as input to the next hl
-        self.input_time_steps_per_hl = params['input_time_steps_per_hl']  # TODO  np.array([1, 10])
+        self.input_time_steps_per_hl = params['input_num_time_steps_per_hl']  # TODO  np.array([1, 10])
         assert self.input_time_steps_per_hl[0] == 1, 'we do not support more than 1 input time step for first hl; see process_input function'
+
+        self.input_delta_time_steps_per_hl = params['input_delta_time_steps_per_hl']
 
         # when to start each hyperlayer
         self.start_time_per_hl = params['start_time_per_hl']  # TODO np.array([0, 300000])
@@ -63,20 +65,14 @@ class WTAIterativeBrain(object):
         self.enable_generic_weights_viz = params['enable_generic_weights_viz']
         assert self.enable_generic_weights_viz is False, 'generic weights viz not implemented for this one (only WTAMultiLayerBrain)'
 
+        # predictive parameters:
+        # how long to predict ahead
+        self.predict_time_steps = params['predict_ahead_time']
+
         # TODO make these parameters
 
         # for initializing arrays
         max_time = 10000000
-
-        # predictive parameters:
-        # how long to predict ahead
-        self.predict_time_steps = 1
-
-        # how many delayed lateral input time steps to use
-        self.predict_lateral_input_time_steps = 1
-
-        # how many delayed feedback input time steps to use
-        self.predict_feedback_input_time_steps = 1
 
         # ************ derived parameters ************
 
@@ -118,9 +114,9 @@ class WTAIterativeBrain(object):
             # *** history for spatiotemporal RFs, input to next hl ***
 
             if hl == self.num_hl - 1:
-                steps_to_store = max(self.predict_time_steps, 1) + self.predict_lateral_input_time_steps + self.predict_feedback_input_time_steps # last hyperlayer; we don't have a use for storing this actually, currently
+                steps_to_store = max(self.predict_time_steps, 1) # last hyperlayer; we don't have a use for storing this actually, currently
             else:
-                steps_to_store = max(self.predict_time_steps, self.input_time_steps_per_hl[hl + 1]) + self.predict_lateral_input_time_steps + self.predict_feedback_input_time_steps
+                steps_to_store = max(self.predict_time_steps, self.input_delta_time_steps_per_hl[hl + 1] * self.input_time_steps_per_hl[hl + 1]) + self.predict_time_steps
 
             output_state_dim = self.num_rf_per_hl[hl]
 
@@ -234,9 +230,17 @@ class WTAIterativeBrain(object):
                     # input for next layer: get history based on spatiotemporal history time steps
                     # set hl_input
                     hl_input = self.hl_output_histories[hl].get_state_sequence(state_index=0,
-                                                                               delay_long=self.input_time_steps_per_hl[hl + 1] - 1,
-                                                                               delay_short=0)
-                    hl_input = hl_input.flatten()
+                                                                               delay_long=self.input_delta_time_steps_per_hl[hl + 1] * self.input_time_steps_per_hl[hl + 1] - 1,
+                                                                               delay_short=0,
+                                                                               oldest_first=False)
+
+                    # hl_input:
+                    #   [oldest data     ]
+                    #   [...             ]
+                    #   [most recent data]
+
+                    time_steps_take = np.arange(self.input_time_steps_per_hl[hl + 1]) * self.input_delta_time_steps_per_hl[hl + 1]
+                    hl_input = hl_input[time_steps_take, :].flatten()
 
                     assert hl_input.shape[0] > 1, hl_input.shape
 
@@ -591,7 +595,7 @@ class WTAIterativeBrain(object):
 
                     tmp_im_w = np.vstack((tmp_im_w, tmp3_w, w_seq_im))
 
-                if rf_ind > 0 and (rf_ind + 1) % 20 == 0:
+                if rf_ind > 0 and (rf_ind + 1) % 40 == 0:
                     if tmp_im_all_v is None:
                         tmp_im_all_v = tmp_im_v.copy()
                         tmp_im_all_w = tmp_im_w.copy()
