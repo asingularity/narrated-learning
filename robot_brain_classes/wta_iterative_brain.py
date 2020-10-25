@@ -362,6 +362,8 @@ class WTAIterativeBrain(object):
 
         num_rf_per_iter = int(self.num_rf_per_hl[hl] / self.num_iter[hl])
 
+        delta_t_start_per_iter = 30000
+
         for iter_i in range(self.num_iter[hl]):
             valid_indices = np.arange(iter_i * num_rf_per_iter, (iter_i + 1)* num_rf_per_iter)
 
@@ -377,7 +379,7 @@ class WTAIterativeBrain(object):
             # print('iter', iter_i, 'win_rf', win_rf_index)
             lr = self.lr_base
 
-            if self.t < self.learning_off_time_per_hl[hl] and (hl==0 or self.t > self.start_time_per_hl[hl] + 30000 * iter_i):
+            if self.t < self.learning_off_time_per_hl[hl] and (hl==0 or self.t > self.start_time_per_hl[hl] + delta_t_start_per_iter * iter_i):
                 #self.weights[hl][win_rf_index, :] = (1.0 - lr) * self.weights[hl][win_rf_index, :] + lr * hl_input[0, :]
                 self.weights[hl][win_rf_index, :] = (1.0 - lr) * self.weights[hl][win_rf_index, :] + lr * remainder[0, :]
 
@@ -389,7 +391,7 @@ class WTAIterativeBrain(object):
             rfs_valid[win_rf_index] = 0
 
             # so that prediction is computed correctly, don't consider RF activated until after it has started learning:
-            if hl==0 or self.t > self.start_time_per_hl[hl] + 30000 * iter_i:
+            if hl==0 or self.t > self.start_time_per_hl[hl] + delta_t_start_per_iter * iter_i:
                 hl_output[win_rf_index] = 1.0
 
         reconstruction[reconstruction > 1] = 1
