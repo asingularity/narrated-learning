@@ -21,6 +21,16 @@ class Physics2DSensor(object):
 
         print('image dim:', self.image_dim)
 
+        if 'take_subimage_factor' in params:
+            self.take_subimage_factor = params['take_subimage_factor']
+        else:
+            self.take_subimage_factor = None
+
+        self.orig_image_dim = self.image_dim
+
+        if self.take_subimage_factor is not None:
+            self.image_dim = int(self.image_dim * self.take_subimage_factor)
+
         factor = self.image_dim / 800.0
 
         # TODO make this a demo parameter
@@ -31,7 +41,6 @@ class Physics2DSensor(object):
         self.min_steps_between_balls = 0  # 20
         self.mass = 10  #* factor
         self.gravity = -90 * 10
-
         assert params['return_type'] is np.float32 or params['return_type'] is np.float64
         self.return_type = params['return_type']
 
@@ -89,6 +98,17 @@ class Physics2DSensor(object):
             self.balls.remove(ball)
 
         self.space.step(1 / 100.0)
+
+        if self.take_subimage_factor is not None:
+            #im = im[im.shape[0] - self.orig_image_dim::, im.shape[0] - self.orig_image_dim::]
+            # take center
+            start_r = int(self.orig_image_dim / 2)
+            start_c = start_r
+            dim = self.orig_image_dim
+            im = im[start_r:start_r + dim, start_c:start_c + dim]
+
+        assert im.shape[0] == self.orig_image_dim and im.shape[1] == self.orig_image_dim
+
         return im
 
 

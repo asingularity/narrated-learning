@@ -32,7 +32,7 @@ else:
 
 IM_DIM = 16  # pixels, width & height
 
-DISABLE_BRAIN = False  # for testing input by itself
+DISABLE_BRAIN = False  # for testing input by itself; also starts slow display
 
 # uses: IM_DIM
 def get_sensors_params():
@@ -69,6 +69,7 @@ def get_sensors_params():
 
     params_physics_2d = {
         'image_dim': IM_DIM,  # sensor class has to figure out subset & scale to achieve this dim
+        'take_subimage_factor': 4,  # (None for don't use). Use an image this factor larger for same simulation (i.e. higher res sim), and take a sub-image of that larger image. this changes the input!
         'return_type': np.float32  # 32 or 64
     }
 
@@ -164,7 +165,7 @@ def get_visualizer_params():
         'waitKey_time_slow': 100,  # 1, 100, 5000  #
         'scale_camera_factor': 1,
         'auto_switch_to_slow_disp_time': None, #250000, #50000,  # TODO re-introduce later for when training is done
-        'init_fast': True  # start with "fast" display
+        'init_fast': not DISABLE_BRAIN  # start with "fast" display if brain is enabled
     }
     return params
 

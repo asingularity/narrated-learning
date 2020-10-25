@@ -387,7 +387,10 @@ class WTAIterativeBrain(object):
             reconstruction_no_first = reconstruction
 
             rfs_valid[win_rf_index] = 0
-            hl_output[win_rf_index] = 1.0
+
+            # so that prediction is computed correctly, don't consider RF activated until after it has started learning:
+            if hl==0 or self.t > self.start_time_per_hl[hl] + 30000 * iter_i:
+                hl_output[win_rf_index] = 1.0
 
         reconstruction[reconstruction > 1] = 1
         reconstruction[reconstruction < 0] = 0
