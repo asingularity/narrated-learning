@@ -99,7 +99,7 @@ class SegmentVisualizer(object):
                     self.image_display_secs = self.image_display_secs_fast
                     self.waitKey_time = self.waitKey_time_fast
 
-    def visualize(self, input_im, segment_brain):
+    def visualize(self, input_im, segment_brain, disable_brain):
         '''
 
         :param input_im:
@@ -114,13 +114,12 @@ class SegmentVisualizer(object):
             display_now = (time.time() - self.last_image_display_time > self.image_display_secs)
 
             if display_now:
+                if not disable_brain:
+                    table_ims, table_ims_names = segment_brain.get_table_ims()
 
-                table_ims, table_ims_names = segment_brain.get_table_ims()
-
-                for k in range(len(table_ims)):
-                    if table_ims[k] is not None:
-                        cv2.imshow(table_ims_names[k], table_ims[k])
-
+                    for k in range(len(table_ims)):
+                        if table_ims[k] is not None:
+                            cv2.imshow(table_ims_names[k], table_ims[k])
 
                 if input_im is not None:
                     self._display_raycast_image(raycast_image=input_im)

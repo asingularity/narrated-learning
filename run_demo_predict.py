@@ -32,6 +32,7 @@ else:
 
 IM_DIM = 16  # pixels, width & height
 
+DISABLE_BRAIN = False  # for testing input by itself
 
 # uses: IM_DIM
 def get_sensors_params():
@@ -160,7 +161,7 @@ def get_visualizer_params():
         'image_display_secs_fast': 10,  # 8 for good speed
         'waitKey_time_fast': 1,  # 1, 100, 5000
         'image_display_secs_slow': 0.02, #0.001,  # 0: every frame
-        'waitKey_time_slow': 1,  # 1, 100, 5000  #
+        'waitKey_time_slow': 100,  # 1, 100, 5000  #
         'scale_camera_factor': 1,
         'auto_switch_to_slow_disp_time': None, #250000, #50000,  # TODO re-introduce later for when training is done
         'init_fast': True  # start with "fast" display
@@ -200,10 +201,12 @@ def run_demo(demo_components):
 
         im = robot_sensors.read_input()
 
-        robot_brain.process_input(input_im=im)
+        if not DISABLE_BRAIN:
+            robot_brain.process_input(input_im=im)
 
         visualizer.visualize(input_im=im,
-                             segment_brain=robot_brain)  # So it can call .get_table_ims() only sometimes
+                             segment_brain=robot_brain,
+                             disable_brain=DISABLE_BRAIN)  # So it can call .get_table_ims() only sometimes
 
     robot_brain.save_model(models_save_folder=sim_folder_manager.get_models_save_folder())
 
