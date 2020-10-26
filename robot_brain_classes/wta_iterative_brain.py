@@ -6,6 +6,7 @@ import random
 import pickle
 from math import sqrt
 from brain_components_classes.states_history import StatesLimitedHistory
+from cython_eff import compute_eff
 
 from utils.one_time_messages import OneTimeMessages
 
@@ -189,7 +190,6 @@ class WTAIterativeBrain(object):
                                                                                    'states_dim_list': [num_rfs_hl_0],
                                                                                    'store_extra_data': False})
 
-
     def process_input(self, input_im):
         input_pixels_1 = input_im
         input_pixels_flat = input_pixels_1.flatten()
@@ -367,15 +367,22 @@ class WTAIterativeBrain(object):
         for iter_i in range(self.num_iter[hl]):
             valid_indices = np.nonzero(rfs_valid)[0] #np.arange(iter_i * num_rf_per_iter, (iter_i + 1)* num_rf_per_iter)
 
-            # if allow_reselect:
-            #     eff_frame = np.sum(np.abs(self.weights[hl] - remainder), axis=1)
-            #     win_rf_index = np.argmin(eff_frame)
-            # else:
+            # BUG:
+            # eff_frame = np.divide(np.sum(np.abs(self.weights[hl][valid_indices, :] - remainder), axis=1), np.sum(self.weights[hl][valid_indices, :]))
 
-            #eff_frame = np.sum(np.abs(self.weights[hl][valid_indices, :] - remainder), axis=1)
+            use_cython = True
+            if use_cython:
+                # cython version:
+                w = self.weights[hl]  #[valid_indices, :]
+                rem = remainder
+                eff_frame = np.zeros(self.num_rf_per_hl[hl])
+                # sum_w = np.zeros(self.num_rf_per_hl[hl])
 
-            eff_frame = np.divide(np.sum(np.abs(self.weights[hl][valid_indices, :] - remainder), axis=1),
-                                  np.sum(self.weights[hl][valid_indices, :]))
+                compute_eff(w, rem, eff_frame)
+                eff_frame = eff_frame[valid_indices]
+                #eff_frame = np.divide(eff_frame[valid_indices], sum_w[valid_indices])
+            else:
+                eff_frame = np.sum(np.abs(self.weights[hl][valid_indices, :] - remainder), axis=1)
 
             win_rf_index = valid_indices[np.argmin(eff_frame)]
 
@@ -846,7 +853,7 @@ class WTAIterativeBrain(object):
         # print('bins', bins.shape, bins)
         bin_indices = np.digitize(arr, bins) - 1  # same shape as arr; which bin, per pixel
         # print('bin_indices', bin_indices.shape, bin_indices)
-        arr_exp = np.zeros((arr.shape[0], arr.shape[1] * num_bins_per_pixel), np.float32)
+        arr_exp = np.zeros((arr.shape[0], arr.shape[1] * num_bins_per_pixel))
         # print('arr_exp', arr_exp.shape)
 
         # term1 = np.tile(self.num_bins_per_pixel * np.arange(arr.shape[1]), 2)  # can't remember why this is np.tile(..., 2)

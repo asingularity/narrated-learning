@@ -10,7 +10,7 @@ class StatesHistory(object):
         self.states_dim_list = params['states_dim_list']
         self.state_arrays_list = []
         for k in range(len(self.states_dim_list)):
-            self.state_arrays_list.append(np.zeros((self.max_history_length, self.states_dim_list[k])).astype(np.float32))
+            self.state_arrays_list.append(np.zeros((self.max_history_length, self.states_dim_list[k])).astype(np.float64))
         self.t = 0
 
     def store_new_states(self, newest_states_list):
@@ -56,7 +56,7 @@ class StatesLimitedHistory(object):
         if self.states_dim_list[0] > 0:
             self.active = True
             for k in range(len(self.states_dim_list)):
-                self.state_arrays_list.append(np.zeros((self.max_delay, self.states_dim_list[k])).astype(np.float32))
+                self.state_arrays_list.append(np.zeros((self.max_delay, self.states_dim_list[k])).astype(np.float64))
                 if self.store_extra_data:
                     self.extra_data_list.append([None] * self.max_delay)
         self.t_mod = 0

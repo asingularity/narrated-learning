@@ -69,8 +69,8 @@ def get_sensors_params():
 
     params_physics_2d = {
         'image_dim': IM_DIM,  # sensor class has to figure out subset & scale to achieve this dim
-        'take_subimage_factor': 4,  # (None for don't use). Use an image this factor larger for same simulation (i.e. higher res sim), and take a sub-image of that larger image. this changes the input!
-        'return_type': np.float32  # 32 or 64
+        'take_subimage_factor': None, # 4,  # (None for don't use). Use an image this factor larger for same simulation (i.e. higher res sim), and take a sub-image of that larger image. this changes the input!
+        'return_type': np.float64  # 32 or 64
     }
 
     params_duo_playback = {
@@ -121,7 +121,7 @@ def get_brain_params():
     multilayer_brain_params = {
         'image_dim_display': 1500,
         'image_dim_NxN_pixels': IM_DIM,
-        'learning_rate': 0.001,
+        'learning_rate': 0.001 * 0.5,
         'bins_per_pixel': 6,
         'num_rf_per_wta_layer_per_hl': np.array([20, 80]),
         'num_wta_layer_per_hl': np.array([6, 12]),
@@ -186,6 +186,7 @@ def init_demo():
         'visualizer': SegmentVisualizer(get_visualizer_params()),
         'sim_folder_manager': SimFolderManager(get_sim_folder_manager_params())
     }
+
 
 def run_demo(demo_components):
     robot_brain = demo_components['robot_brain']
