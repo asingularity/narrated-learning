@@ -362,17 +362,21 @@ class WTAIterativeBrain(object):
 
         num_rf_per_iter = int(self.num_rf_per_hl[hl] / self.num_iter[hl])
 
-        delta_t_start_per_iter = 30000
+        delta_t_start_per_iter = 0  # 30000
 
         for iter_i in range(self.num_iter[hl]):
-            valid_indices = np.arange(iter_i * num_rf_per_iter, (iter_i + 1)* num_rf_per_iter)
+            valid_indices = np.nonzero(rfs_valid)[0] #np.arange(iter_i * num_rf_per_iter, (iter_i + 1)* num_rf_per_iter)
 
             # if allow_reselect:
             #     eff_frame = np.sum(np.abs(self.weights[hl] - remainder), axis=1)
             #     win_rf_index = np.argmin(eff_frame)
             # else:
 
-            eff_frame = np.sum(np.abs(self.weights[hl][valid_indices, :] - remainder), axis=1)
+            #eff_frame = np.sum(np.abs(self.weights[hl][valid_indices, :] - remainder), axis=1)
+
+            eff_frame = np.divide(np.sum(np.abs(self.weights[hl][valid_indices, :] - remainder), axis=1),
+                                  np.sum(self.weights[hl][valid_indices, :]))
+
             win_rf_index = valid_indices[np.argmin(eff_frame)]
 
             self.last_activities[hl][win_rf_index] += 1
