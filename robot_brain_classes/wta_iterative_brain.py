@@ -75,6 +75,8 @@ class WTAIterativeBrain(object):
         # for initializing arrays
         max_time = 10000000
 
+        self.use_negative_input = False  # instead of zero, set non-inputs to -1 for all layers
+
         # ************ derived parameters ************
 
         self.num_hl = len(self.num_rf_per_hl)
@@ -344,7 +346,10 @@ class WTAIterativeBrain(object):
 
         reconstruction_no_first = np.zeros((1, input_feature_len))
 
-        hl_output = np.zeros(self.num_rf_per_hl[hl])
+        if self.use_negative_input:
+            hl_output = -np.ones(self.num_rf_per_hl[hl])
+        else:
+            hl_output = np.zeros(self.num_rf_per_hl[hl])
 
         rfs_valid = np.ones(self.num_rf_per_hl[hl])
         self.last_activities[hl] = np.zeros(self.num_rf_per_hl[hl])
@@ -362,10 +367,18 @@ class WTAIterativeBrain(object):
 
         num_rf_per_iter = int(self.num_rf_per_hl[hl] / self.num_iter[hl])
 
-        delta_t_start_per_iter = 0  # 30000
+        use_wta_groups = True  # vs. iterative
+
+        if use_wta_groups:
+            delta_t_start_per_iter = 30000
+        else:
+            delta_t_start_per_iter = 0
 
         for iter_i in range(self.num_iter[hl]):
-            valid_indices = np.nonzero(rfs_valid)[0] #np.arange(iter_i * num_rf_per_iter, (iter_i + 1)* num_rf_per_iter)
+            if use_wta_groups:
+                valid_indices = np.arange(iter_i * num_rf_per_iter, (iter_i + 1)* num_rf_per_iter)
+            else:
+                valid_indices = np.nonzero(rfs_valid)[0]
 
             # BUG:
             # eff_frame = np.divide(np.sum(np.abs(self.weights[hl][valid_indices, :] - remainder), axis=1), np.sum(self.weights[hl][valid_indices, :]))
@@ -391,8 +404,12 @@ class WTAIterativeBrain(object):
             lr = self.lr_base
 
             if self.t < self.learning_off_time_per_hl[hl] and (hl==0 or self.t > self.start_time_per_hl[hl] + delta_t_start_per_iter * iter_i):
-                #self.weights[hl][win_rf_index, :] = (1.0 - lr) * self.weights[hl][win_rf_index, :] + lr * hl_input[0, :]
                 self.weights[hl][win_rf_index, :] = (1.0 - lr) * self.weights[hl][win_rf_index, :] + lr * remainder[0, :]
+                #per_weight_lr = lr * np.abs(self.weights[hl][win_rf_index, :])
+                #per_weight_lr[per_weight_lr < 0.1 * lr] = 0.1 * lr
+                #self.weights[hl][win_rf_index, :] = np.multiply((1.0 - per_weight_lr), self.weights[hl][win_rf_index, :]) + np.multiply(per_weight_lr, remainder[0, :])
+
+                #print(win_rf_index, np.amin(self.weights[hl][win_rf_index, :]), np.amax(self.weights[hl][win_rf_index, :]), np.amin(per_weight_lr), np.amax(per_weight_lr))
 
             remainder = remainder - self.weights[hl][win_rf_index, :]
             #print('hl', hl, 'iter_i', iter_i, 'rem', np.min(remainder), np.max(remainder), 'w', np.min( self.weights[hl][win_rf_index, :]), np.max( self.weights[hl][win_rf_index, :]))
@@ -641,9 +658,87 @@ class WTAIterativeBrain(object):
             ims_list.append(hl_1_im_w)
             ims_names_list.append('w_RF_weights_hyperlayer_' + str(hl))
 
+            # reconstruction (of sequence)
+            hl_1_rf_activities_current = self.hl_output_histories[1].get_state(state_index=0, delay=0)
+            hl_1_rf_indices = np.nonzero(hl_1_rf_activities_current)[0]
+
+            hl_1_rec = self._get_hl_1_reconstruction(hl_1_rf_indices)
+
+            if hl_1_rec is not None:
+                ims_list.append(hl_1_rec)
+                ims_names_list.append('hl-1-reconstruction')
+
         # no generic for now
 
         return ims_list, ims_names_list
+
+    def _get_hl_1_reconstruction(self, hl_1_rf_indices):
+
+        hl = 1
+
+        rf_sums_per_del = [None] * self.input_time_steps_per_hl[hl]
+
+        if len(hl_1_rf_indices) == 0:
+            return None
+
+        for rf_ind in hl_1_rf_indices:
+
+            rf_weights = self.weights[hl][rf_ind, :]
+            k = 0
+
+            for time_del in range(self.input_time_steps_per_hl[hl]):
+                num_weights_step = self.num_rf_per_hl[hl - 1]
+
+                rf_weights_step = rf_weights[k:k + num_weights_step]
+                rf_to_add = None
+
+                k2 = 0
+
+                for prev_rf_ind in range(self.num_rf_per_hl[hl - 1]):
+                    # if (not self.enable_hack_skip_first_layer) or prev_wta_ind > 0:
+                    rf_tmp = self.weights[hl - 1][prev_rf_ind, :]
+                    if rf_to_add is None:
+                        rf_to_add = rf_weights_step[k2] * rf_tmp
+                    else:
+                        rf_to_add = rf_to_add + rf_weights_step[k2] * rf_tmp
+                    k2 += 1
+
+                k += num_weights_step
+
+                if rf_sums_per_del[time_del] is None:
+                    rf_sums_per_del[time_del] = rf_to_add
+                else:
+                    rf_sums_per_del[time_del] += rf_to_add
+
+        im_t_delay_hstack_v = None
+        im_t_delay_hstack_w = None
+
+        actual_sequence = None
+
+        for time_del in range(self.input_time_steps_per_hl[hl]):
+            rf_sums_im = rf_sums_per_del[time_del]
+            rf_sums_im = rf_sums_im * 1.0 / np.amax(rf_sums_im)
+
+            tmp_im_v, tmp_im_w = self._collapse_binned_columns_to_pixels(arr_exp=rf_sums_im[np.newaxis, :], num_bins_per_pixel=self.bins_per_pixel)
+            tmp_im_v = tmp_im_v.reshape((self.input_im_dim, self.input_im_dim))
+            tmp_im_w = tmp_im_w.reshape((self.input_im_dim, self.input_im_dim))
+
+            actual_past = self.input_im_history.get_state(state_index=0, delay=time_del).reshape((self.input_im_dim, self.input_im_dim))
+
+            if im_t_delay_hstack_v is None:
+                im_t_delay_hstack_v = tmp_im_v.copy()
+                im_t_delay_hstack_w = tmp_im_w.copy()
+                actual_sequence = actual_past.copy()
+            else:
+                spacer = 0.5 * np.ones((tmp_im_v.shape[0], 2))
+                im_t_delay_hstack_v = np.hstack((im_t_delay_hstack_v, spacer, tmp_im_v))
+                im_t_delay_hstack_w = np.hstack((im_t_delay_hstack_w, spacer, tmp_im_w))
+                actual_sequence = np.hstack((actual_sequence, spacer, actual_past))
+
+        im_t_delay_rec = np.vstack((im_t_delay_hstack_v, 0.5 * np.ones((2, im_t_delay_hstack_v.shape[1])), im_t_delay_hstack_w, 0.5 * np.ones((2, im_t_delay_hstack_v.shape[1])), actual_sequence))
+
+        return im_t_delay_rec
+
 
     def _get_predict_im(self):
         # most straightforward way to predict: pick winner per wta-layer
@@ -722,6 +817,9 @@ class WTAIterativeBrain(object):
 
         return predict_im_show
 
+
+
+
     def _get_hl_1_sequence_im(self, rf_weights):
         '''
 
@@ -788,12 +886,12 @@ class WTAIterativeBrain(object):
                 self.ax.plot(self.rec_error[hl][0:self.t], color='r')
                 self.ax.plot(self.mean_rec_error[hl][0:self.t], color='b')
 
-                for k in [10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160, 170]:
-                    self.ax.axhline(y=k, color='g')
+                #for k in [10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160, 170]:
+                #    self.ax.axhline(y=k, color='g')
 
-                self.ax.axvline(x=self.start_time_per_hl[hl], color='g')
+                #self.ax.axvline(x=self.start_time_per_hl[hl], color='g')
+                #self.ax.axvline(x=self.learning_off_time_per_hl[hl], color='r')
 
-                self.ax.axvline(x=self.learning_off_time_per_hl[hl], color='r')
                 self.fig.savefig("rec_error_hyperlayer_" + str(hl) + ".png", dpi=100)
 
                 if hl < self.num_hl - 1:
@@ -853,7 +951,11 @@ class WTAIterativeBrain(object):
         # print('bins', bins.shape, bins)
         bin_indices = np.digitize(arr, bins) - 1  # same shape as arr; which bin, per pixel
         # print('bin_indices', bin_indices.shape, bin_indices)
-        arr_exp = np.zeros((arr.shape[0], arr.shape[1] * num_bins_per_pixel))
+        if self.use_negative_input:
+            arr_exp = -np.ones((arr.shape[0], arr.shape[1] * num_bins_per_pixel))
+        else:
+            arr_exp = np.zeros((arr.shape[0], arr.shape[1] * num_bins_per_pixel))
+
         # print('arr_exp', arr_exp.shape)
 
         # term1 = np.tile(self.num_bins_per_pixel * np.arange(arr.shape[1]), 2)  # can't remember why this is np.tile(..., 2)
