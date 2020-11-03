@@ -192,6 +192,13 @@ class WTAIterativeBrain(object):
                                                                                    'states_dim_list': [num_rfs_hl_0],
                                                                                    'store_extra_data': False})
 
+        self.m_d = []
+        self.lr_m_d = self.lr_base
+        for hl in range(self.num_hl):
+            # measure determinacy
+            self.m_d.append(np.zeros(self.num_rf_per_hl[hl]))
+
+
     def process_input(self, input_im):
         input_pixels_1 = input_im
         input_pixels_flat = input_pixels_1.flatten()
@@ -390,8 +397,9 @@ class WTAIterativeBrain(object):
                 rem = remainder
                 eff_frame = np.zeros(self.num_rf_per_hl[hl])
                 # sum_w = np.zeros(self.num_rf_per_hl[hl])
-
                 compute_eff(w, rem, eff_frame)
+                eff_frame_all = eff_frame.copy()
+
                 eff_frame = eff_frame[valid_indices]
                 #eff_frame = np.divide(eff_frame[valid_indices], sum_w[valid_indices])
             else:
@@ -399,8 +407,39 @@ class WTAIterativeBrain(object):
 
             win_rf_index = valid_indices[np.argmin(eff_frame)]
 
+            # actual error used in WTA:
+            # eff_fr = eff_frame_all[win_rf_index]
+
+            # actual error recomputed:
+            # eff_fr = np.sum(np.abs(self.weights[hl][win_rf_index, :] - remainder))
+
+            # normalized error:
+            # normalize to compute determinacy (not average dist, which is what this is)
+            sum_w = np.sum(np.abs(self.weights[hl][win_rf_index, :])) + 1e-9
+            sum_err = np.sum(np.abs(self.weights[hl][win_rf_index, :] - remainder))
+            #eff_fr = sum_err
+            # this is not right at all; error can be huge if weight is small but input is large:
+            #eff_fr = abs(sum_w - np.sum(np.abs(self.weights[hl][win_rf_index, :] - remainder))) / sum_w
+
+            prod_w_in = np.multiply(self.weights[hl][win_rf_index, :], remainder)
+            # prod_w_in[prod_w_in < 0] = 0
+            eff_fr = np.sum(prod_w_in) / sum_w
+
+            # above is a good measure
+            # TODO next steps:
+            #   try to use that as selectin mechanism
+            #   try to incorporate into iterative method (as opposed to wta groups)
+            #   try improving how it should affect learning (to optimize for this measure)
+            #   try (again) to remove from remainder the intent of the learning once RF weights maxed, not just what is currently learned
+
+            #print(eff_fr, eff_fr2)
+
+
             self.last_activities[hl][win_rf_index] += 1
             # print('iter', iter_i, 'win_rf', win_rf_index)
+
+            # TODO something like this (unclear the effect):
+            # lr = max(self.lr_base * pow(eff_fr, 2), 0.05 * self.lr_base)
             lr = self.lr_base
 
             if self.t < self.learning_off_time_per_hl[hl] and (hl==0 or self.t > self.start_time_per_hl[hl] + delta_t_start_per_iter * iter_i):
@@ -410,6 +449,8 @@ class WTAIterativeBrain(object):
                 #self.weights[hl][win_rf_index, :] = np.multiply((1.0 - per_weight_lr), self.weights[hl][win_rf_index, :]) + np.multiply(per_weight_lr, remainder[0, :])
 
                 #print(win_rf_index, np.amin(self.weights[hl][win_rf_index, :]), np.amax(self.weights[hl][win_rf_index, :]), np.amin(per_weight_lr), np.amax(per_weight_lr))
+
+            self.m_d[hl][win_rf_index] = (1.0 - self.lr_m_d) * self.m_d[hl][win_rf_index] + self.lr_m_d * eff_fr
 
             remainder = remainder - self.weights[hl][win_rf_index, :]
             #print('hl', hl, 'iter_i', iter_i, 'rem', np.min(remainder), np.max(remainder), 'w', np.min( self.weights[hl][win_rf_index, :]), np.max( self.weights[hl][win_rf_index, :]))
@@ -451,6 +492,14 @@ class WTAIterativeBrain(object):
         # TODO or we could return not a binary, but a number, like a "rate"
 
     def get_table_ims(self):
+        print()
+        print('*******************')
+        print()
+        for hl in range(2):
+            print('hl', hl)
+            print()
+            print(self.m_d[hl])
+            print()
 
         ims_list = []
         ims_names_list = []
