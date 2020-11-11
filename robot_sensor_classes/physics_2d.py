@@ -34,7 +34,7 @@ class Physics2DSensor(object):
         factor = self.image_dim / 800.0
 
         # TODO make this a demo parameter
-        self.num_balls_max = 1
+        self.num_balls_max = 3
         # TODO should work when ball smaller as well
         self.ball_radius = 2 * 50 * factor
         self.init_velocity_scale = 5 * 30 * factor

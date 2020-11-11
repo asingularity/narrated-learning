@@ -7,6 +7,7 @@ np.random.seed(6)
 from robot_brain_classes.wta_layer_brain import WTALayerBrain
 from robot_brain_classes.wta_multi_layer_brain import WTAMultiLayerBrain
 from robot_brain_classes.wta_iterative_brain import WTAIterativeBrain
+from robot_brain_classes.wta_determinate_brain import WTADeterminateBrain
 from robot_sensor_classes.video_playback import VideoPlaybackSensor
 from robot_sensor_classes.duo_playback import DuoPlaybackSensor
 from robot_sensor_classes.physics_2d import Physics2DSensor
@@ -24,11 +25,9 @@ COLOR_ENABLED = False
 USE_VIDEO_IN = False
 
 if USE_VIDEO_IN:
-    ENABLE_HACK_SKIP_FIRST_LAYER = False
     LEARN_RATE = 0.0001
 else:
-    ENABLE_HACK_SKIP_FIRST_LAYER = False  # THIS IS DEPRECATED AND UNUSED NOW; for bouncing balls, better viz
-    LEARN_RATE = 0.001
+    LEARN_RATE = 0.001 * 0.25
 
 IM_DIM = 16  # pixels, width & height
 
@@ -129,7 +128,7 @@ def get_brain_params():
         'layer_start_time_offset_per_hl': np.array([6000, 4 * 6000]) * 5, # np.array([300000, 300000])
         'enable_learning_off': True,
         'plot_interval_seconds': 30,
-        'enable_hack_skip_first_layer': ENABLE_HACK_SKIP_FIRST_LAYER,
+        'enable_hack_skip_first_layer': False,
         'enable_generic_weights_viz': False
     }
 
@@ -139,15 +138,14 @@ def get_brain_params():
         'image_dim_NxN_pixels': IM_DIM,
         'learning_rate': LEARN_RATE,
         'bins_per_pixel': 6,
-        'num_rf_per_hl': np.array([240, 480]),  # np.array([240, 2 * 480])
-        'num_iter_per_input': [3, 3],  # [12, 3],  # [12, 48]
-        'input_num_time_steps_per_hl': np.array([1, 3]),
-        'input_delta_time_steps_per_hl': np.array([1, 5]),
+        'num_rf_per_hl': np.array([240]),  #, 480]),  # np.array([240, 2 * 480])
+        'num_iter_per_input': [3],  #, 3],  # [12, 3],  # [12, 48]
+        'input_num_time_steps_per_hl': np.array([1]),  #, 3]),
+        'input_delta_time_steps_per_hl': np.array([1]),  #, 5]),
         'predict_ahead_time': 5,
-        'start_time_per_hl': np.array([0, 50000]),
-        'learning_off_time_per_hl': [1000000, 3000000],
+        'start_time_per_hl': np.array([0]),  #50000]),
+        'learning_off_time_per_hl': [300000],  #, 3000000],
         'plot_interval_seconds': 30,
-        'enable_hack_skip_first_layer': ENABLE_HACK_SKIP_FIRST_LAYER,
         'enable_generic_weights_viz': False
     }
 
@@ -181,7 +179,8 @@ def init_demo():
     return {
         # *** DEPRECATED *** 'robot_brain': WTALayerBrain(get_brain_params()),
         #'robot_brain': WTAMultiLayerBrain(get_brain_params()),
-        'robot_brain': WTAIterativeBrain(get_brain_params()),
+        #'robot_brain': WTAIterativeBrain(get_brain_params()),
+        'robot_brain': WTADeterminateBrain(get_brain_params()),
         'robot_sensors': robot_sensors,
         'visualizer': SegmentVisualizer(get_visualizer_params()),
         'sim_folder_manager': SimFolderManager(get_sim_folder_manager_params())
