@@ -202,6 +202,12 @@ class WTADeterminateBrain(object):
             # measure determinacy
             self.m_d.append(np.zeros(self.num_rf_per_hl[hl]))
 
+        # raster
+        self.raster_history = []
+        self.raster_history.append(np.zeros((self.input_im_dim * self.input_im_dim * self.bins_per_pixel, max_time), np.uint8))
+        for hl in range(self.num_hl):
+            self.raster_history.append(np.zeros((self.num_rf_per_hl[0], max_time), np.uint8))
+
 
     def process_input(self, input_im):
         input_pixels_1 = input_im
@@ -211,6 +217,9 @@ class WTADeterminateBrain(object):
 
         input_arr_1 = input_pixels_flat[np.newaxis, :]
         input_exp_1 = self._bin_pixels_expand_columns(arr=input_arr_1, num_bins_per_pixel=self.bins_per_pixel)
+
+        nnz_raster = np.nonzero(input_exp_1.flatten())[0]
+        self.raster_history[0][nnz_raster, self.t] = 1
 
         self.last_input_im = input_pixels_1.copy()
 
@@ -223,7 +232,9 @@ class WTADeterminateBrain(object):
                 hl_output = self._process_hyperlayer(hl_input=hl_input, hl=hl)
 
                 assert hl_output.shape[0] > 1, hl_output.shape
-                tmp1 = np.nonzero(hl_output)[0]
+                nnz_raster = np.nonzero(hl_output)[0]
+
+                self.raster_history[hl + 1][nnz_raster, self.t] = 1
 
                 # self.activity_rasters[hl][self.t, tmp1] = 1
 
@@ -261,7 +272,8 @@ class WTADeterminateBrain(object):
 
                 # predictive
                 # OLD METHOD: DISABLED
-                if True:
+                make_prediction = False
+                if make_prediction:
                     if hl == 1 and self.t > 1:
 
                         hl_0_rf_activities_current = self.hl_output_histories[0].get_state(state_index=0, delay=0)
@@ -370,7 +382,21 @@ class WTADeterminateBrain(object):
             # choose which RF best reduces reconstruction error for remainder
             #   ie compute hypothetical remainder given subtracting this RF from current remainder, for all the remaining RFs
 
-            w = self.weights[hl]  # [valid_indices, :]
+            w = self.weights[hl].copy()  # [valid_indices, :]
+
+            # c0 = w <= -0.5
+            # c1 = np.logical_and(w > -0.5, w <= 0.0)
+            # c2 = np.logical_and(w > 0.0, w <= 0.5)
+            # c3 = w > 0.5
+            #
+            # w[np.nonzero(c0)] = -1.0
+            # w[np.nonzero(c1)] = 0.0
+            # w[np.nonzero(c2)] = 0.0
+            # w[np.nonzero(c3)] = 1.0
+
+            #w[w <= 0.5] = 0.0
+            #w[w > 0.5] = 1.0
+
             rem = remainder
             hypothetical_remainder_sums = np.zeros(self.num_rf_per_hl[hl])
 
@@ -384,21 +410,30 @@ class WTADeterminateBrain(object):
             win_rf_index = valid_indices[tmp_argmin]
             win_remainder_sum = hypothetical_remainder_sums[tmp_argmin]
 
-            if win_remainder_sum > np.sum(np.abs(remainder)):
+            if win_remainder_sum >= np.sum(np.abs(remainder)):
+
                 # if adding the "best" RF would be worse than current remainder; break and don't add this RF
+
+                #if hl == 1:
+                #    print('BREAK win_remainder_sum: ', win_remainder_sum, 'remainder sum:', np.sum(np.abs(remainder)))
+
                 break
 
             self.last_activities[hl][win_rf_index] += 1
             hl_output[win_rf_index] = 1
-            
+
             # that RF learns on inputs that it contributed to for remainder
             if self.start_time_per_hl[hl] <= self.t < self.learning_off_time_per_hl[hl]:
                 lr = self.lr_base
                 self.weights[hl][win_rf_index, :] = (1.0 - lr) * self.weights[hl][win_rf_index, :] + lr * remainder[0, :]
 
+                #per_weight_lr = lr * np.abs(self.weights[hl][win_rf_index, :])
+                #per_weight_lr[per_weight_lr < 0.1 * lr] = 0.1 * lr
+                #self.weights[hl][win_rf_index, :] = np.multiply((1.0 - per_weight_lr), self.weights[hl][win_rf_index, :]) + np.multiply(per_weight_lr, remainder[0, :])
+
             # re-compute remainder
-            remainder = remainder - self.weights[hl][win_rf_index, :]
-            reconstruction = reconstruction + self.weights[hl][win_rf_index, :]
+            remainder = remainder - w[win_rf_index, :]
+            reconstruction = reconstruction + w[win_rf_index, :]
 
             # if uncommented: can't choose this one again
             # rfs_valid[win_rf_index] = 0
@@ -407,7 +442,21 @@ class WTADeterminateBrain(object):
         if self.start_time_per_hl[hl] <= self.t < self.learning_off_time_per_hl[hl]:
             lr = 0.1 * self.lr_base
             no_active_rf_indices = np.nonzero(self.last_activities[hl] == 0)
+
+            if hl==1:
+                pass
+                # print('*', np.amin(remainder), np.amax(remainder), np.count_nonzero(remainder), remainder.shape)
+
+                # 0.0 1.0 66 (1, 720)
+                # 0.0 1.0 71 (1, 720)
+                # 0.0 1.0 70 (1, 720)
+                # 0.0 1.0 72 (1, 720)
+
             self.weights[hl][no_active_rf_indices, :] = (1.0 - lr) * self.weights[hl][no_active_rf_indices, :] + lr * remainder[0, :]
+
+            #per_weight_lr = lr * np.abs(self.weights[hl][no_active_rf_indices, :])
+            #per_weight_lr[per_weight_lr < 0.1 * lr] = 0.1 * lr
+            #self.weights[hl][no_active_rf_indices, :] = np.multiply((1.0 - per_weight_lr), self.weights[hl][no_active_rf_indices, :]) + np.multiply(per_weight_lr, remainder[0, :])
 
         reconstruction[reconstruction > 1] = 1
         reconstruction[reconstruction < 0] = 0
@@ -425,136 +474,20 @@ class WTADeterminateBrain(object):
         self.num_rfs_active[hl][self.t] = np.count_nonzero(self.last_activities[hl])
         self.mean_num_rfs_active[hl][self.t] = np.mean(self.num_rfs_active[hl][max(0, self.t - self.mean_fr):self.t])
 
+        #if hl == 1:
+        #    print(int(np.sum(hl_output)))
+
         return hl_output
 
-
-
-        # OLD:
-        if False:
-            assert self.num_rf_per_hl[hl] / self.num_iter[hl] == int(self.num_rf_per_hl[hl] / self.num_iter[hl])
-
-            num_rf_per_iter = int(self.num_rf_per_hl[hl] / self.num_iter[hl])
-
-            use_wta_groups = True  # vs. iterative
-
-            if use_wta_groups:
-                delta_t_start_per_iter = 30000
-            else:
-                delta_t_start_per_iter = 0
-
-            for iter_i in range(self.num_iter[hl]):
-                if use_wta_groups:
-                    valid_indices = np.arange(iter_i * num_rf_per_iter, (iter_i + 1) * num_rf_per_iter)
-                else:
-                    valid_indices = np.nonzero(rfs_valid)[0]
-
-                # BUG:
-                # eff_frame = np.divide(np.sum(np.abs(self.weights[hl][valid_indices, :] - remainder), axis=1), np.sum(self.weights[hl][valid_indices, :]))
-
-                use_cython = True
-                if use_cython:
-                    # cython version:
-                    w = self.weights[hl]  # [valid_indices, :]
-                    rem = remainder
-                    eff_frame = np.zeros(self.num_rf_per_hl[hl])
-                    # sum_w = np.zeros(self.num_rf_per_hl[hl])
-                    compute_eff(w, rem, eff_frame)
-                    eff_frame_all = eff_frame.copy()
-
-                    eff_frame = eff_frame[valid_indices]
-                    # eff_frame = np.divide(eff_frame[valid_indices], sum_w[valid_indices])
-                else:
-                    eff_frame = np.sum(np.abs(self.weights[hl][valid_indices, :] - remainder), axis=1)
-
-                win_rf_index = valid_indices[np.argmin(eff_frame)]
-
-                # actual error used in WTA:
-                # eff_fr = eff_frame_all[win_rf_index]
-
-                # actual error recomputed:
-                # eff_fr = np.sum(np.abs(self.weights[hl][win_rf_index, :] - remainder))
-
-                # normalized error:
-                # normalize to compute determinacy (not average dist, which is what this is)
-                sum_w = np.sum(np.abs(self.weights[hl][win_rf_index, :])) + 1e-9
-                sum_err = np.sum(np.abs(self.weights[hl][win_rf_index, :] - remainder))
-                # eff_fr = sum_err
-                # this is not right at all; error can be huge if weight is small but input is large:
-                # eff_fr = abs(sum_w - np.sum(np.abs(self.weights[hl][win_rf_index, :] - remainder))) / sum_w
-
-                prod_w_in = np.multiply(self.weights[hl][win_rf_index, :], remainder)
-                # prod_w_in[prod_w_in < 0] = 0
-                eff_fr = np.sum(prod_w_in) / sum_w
-
-                # above is a good measure
-                # TODO next steps:
-                #   try to use that as selectin mechanism
-                #   try to incorporate into iterative method (as opposed to wta groups)
-                #   try improving how it should affect learning (to optimize for this measure)
-                #   try (again) to remove from remainder the intent of the learning once RF weights maxed, not just what is currently learned
-
-                # print(eff_fr, eff_fr2)
-
-
-                self.last_activities[hl][win_rf_index] += 1
-                # print('iter', iter_i, 'win_rf', win_rf_index)
-
-                # TODO something like this (unclear the effect):
-                # lr = max(self.lr_base * pow(eff_fr, 2), 0.05 * self.lr_base)
-                lr = self.lr_base
-
-                if self.t < self.learning_off_time_per_hl[hl] and (hl == 0 or self.t > self.start_time_per_hl[hl] + delta_t_start_per_iter * iter_i):
-                    self.weights[hl][win_rf_index, :] = (1.0 - lr) * self.weights[hl][win_rf_index, :] + lr * remainder[0, :]
-                    # per_weight_lr = lr * np.abs(self.weights[hl][win_rf_index, :])
-                    # per_weight_lr[per_weight_lr < 0.1 * lr] = 0.1 * lr
-                    # self.weights[hl][win_rf_index, :] = np.multiply((1.0 - per_weight_lr), self.weights[hl][win_rf_index, :]) + np.multiply(per_weight_lr, remainder[0, :])
-
-                    # print(win_rf_index, np.amin(self.weights[hl][win_rf_index, :]), np.amax(self.weights[hl][win_rf_index, :]), np.amin(per_weight_lr), np.amax(per_weight_lr))
-
-                self.m_d[hl][win_rf_index] = (1.0 - self.lr_m_d) * self.m_d[hl][win_rf_index] + self.lr_m_d * eff_fr
-
-                remainder = remainder - self.weights[hl][win_rf_index, :]
-                # print('hl', hl, 'iter_i', iter_i, 'rem', np.min(remainder), np.max(remainder), 'w', np.min( self.weights[hl][win_rf_index, :]), np.max( self.weights[hl][win_rf_index, :]))
-                reconstruction = reconstruction + self.weights[hl][win_rf_index, :]
-                reconstruction_no_first = reconstruction
-
-                rfs_valid[win_rf_index] = 0
-
-                # so that prediction is computed correctly, don't consider RF activated until after it has started learning:
-                if hl == 0 or self.t > self.start_time_per_hl[hl] + delta_t_start_per_iter * iter_i:
-                    hl_output[win_rf_index] = 1.0
-
-            reconstruction[reconstruction > 1] = 1
-            reconstruction[reconstruction < 0] = 0
-
-            if hl == 0:
-                self.last_remainder_im = remainder.copy()
-
-                self.last_reconstruction_im = reconstruction.copy()
-
-            rec_error = np.sum(np.abs(reconstruction - hl_input))
-            # sum_remainder = np.sum(np.abs(remainder))
-
-            self.rec_error[hl][self.t] = rec_error
-            self.mean_rec_error[hl][self.t] = np.mean(self.rec_error[hl][max(0, self.t - self.mean_fr):self.t])
-
-            return hl_output
-
-            # TODO return an array with binary output per RF: did it appear at least once
-            # TODO we may not allow one RF to be active more than once; no longer technically correct reconstruction then...
-            #   without counting the "number"
-            # TODO or we could return not a binary, but a number, like a "rate"
-
-
     def get_table_ims(self):
-        print()
-        print('*******************')
-        print()
-        for hl in range(self.num_hl):
-            print('hl', hl)
-            print()
-            print(self.m_d[hl])
-            print()
+        # print()
+        # print('*******************')
+        # print()
+        # for hl in range(self.num_hl):
+        #     print('hl', hl)
+        #     print()
+        #     print(self.m_d[hl])
+        #     print()
 
         ims_list = []
         ims_names_list = []
@@ -982,6 +915,15 @@ class WTADeterminateBrain(object):
         print('making plot')
         print()
 
+        # raster of input
+        self.ax.cla()
+        # how many to display for input? all of them (1536) is too much for this plot
+        num_rf = 480  # self.raster_history[0].shape[0]
+        raster_plot = np.transpose(np.multiply(self.raster_history[0][0:num_rf, max(0, self.t - 200):self.t], 1 + np.arange(num_rf)[:, np.newaxis]))
+        t = np.arange(raster_plot.shape[0])
+        self.ax.plot(t, raster_plot, color='b', marker='.', linestyle='')
+        self.fig.savefig("raster_input" + ".png", dpi=100)
+
         for hl in range(self.num_hl):
             try:
                 self.ax.cla()
@@ -1000,6 +942,14 @@ class WTADeterminateBrain(object):
                 self.ax.plot(self.mean_num_rfs_active[hl][0:self.t])
                 self.fig.savefig("num_rfs_active_" + str(hl) + ".png", dpi=100)
 
+                self.ax.cla()
+                num_rf = self.raster_history[hl + 1].shape[0]
+                raster_plot = np.transpose(np.multiply(self.raster_history[hl + 1][0:num_rf, max(0, self.t - 200):self.t],
+                                                       np.arange(num_rf)[:, np.newaxis]))
+                t = np.arange(raster_plot.shape[0])
+                self.ax.plot(t, raster_plot, color='b', marker='.', linestyle='')
+                self.fig.savefig("raster_layer_" + str(hl) + ".png", dpi=100)
+
                 if hl < self.num_hl - 1:
                     self.ax.cla()
                     # self.ax.plot(self.predict_error[hl][0:self.t], color='g')
@@ -1013,7 +963,7 @@ class WTADeterminateBrain(object):
                     # TODO also maybe hack visualization to manually remove background RF for now (since multi-predict active anyways!!)
 
                     # TODO fix this it isn't right!!!
-                    #
+                                        #
                     # thing_to_plot = self.activity_rasters[hl][max(0, self.t-5000):self.t, :]
                     #
                     # #print('THING TO PLOT min', np.amin(thing_to_plot), ', max: ', np.amax(thing_to_plot), ', shape: ', thing_to_plot.shape)

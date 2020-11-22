@@ -138,13 +138,13 @@ def get_brain_params():
         'image_dim_NxN_pixels': IM_DIM,
         'learning_rate': LEARN_RATE,
         'bins_per_pixel': 6,
-        'num_rf_per_hl': np.array([240]),  #, 480]),  # np.array([240, 2 * 480])
-        'num_iter_per_input': [3],  #, 3],  # [12, 3],  # [12, 48]
-        'input_num_time_steps_per_hl': np.array([1]),  #, 3]),
-        'input_delta_time_steps_per_hl': np.array([1]),  #, 5]),
+        'num_rf_per_hl': np.array([240, 240]),  #, 480]),  # np.array([240, 2 * 480])
+        'num_iter_per_input': [None, None],  # DEPRECATED
+        'input_num_time_steps_per_hl': np.array([1, 3]),  #, 3]),
+        'input_delta_time_steps_per_hl': np.array([1, 5]),  #, 5]),
         'predict_ahead_time': 5,
-        'start_time_per_hl': np.array([0]),  #50000]),
-        'learning_off_time_per_hl': [300000],  #, 3000000],
+        'start_time_per_hl': np.array([0, 10000]),  #50000]),
+        'learning_off_time_per_hl': [10000, 5000000],  # 200000, ...
         'plot_interval_seconds': 30,
         'enable_generic_weights_viz': False
     }
