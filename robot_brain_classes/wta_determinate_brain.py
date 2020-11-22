@@ -379,29 +379,13 @@ class WTADeterminateBrain(object):
 
         while True:
 
-            # choose which RF best reduces reconstruction error for remainder
-            #   ie compute hypothetical remainder given subtracting this RF from current remainder, for all the remaining RFs
-
             w = self.weights[hl].copy()  # [valid_indices, :]
-
-            # c0 = w <= -0.5
-            # c1 = np.logical_and(w > -0.5, w <= 0.0)
-            # c2 = np.logical_and(w > 0.0, w <= 0.5)
-            # c3 = w > 0.5
-            #
-            # w[np.nonzero(c0)] = -1.0
-            # w[np.nonzero(c1)] = 0.0
-            # w[np.nonzero(c2)] = 0.0
-            # w[np.nonzero(c3)] = 1.0
-
-            #w[w <= 0.5] = 0.0
-            #w[w > 0.5] = 1.0
 
             rem = remainder
             hypothetical_remainder_sums = np.zeros(self.num_rf_per_hl[hl])
 
-            # is abs(a - b) ==  abs(b - a) always?
-            #   yes
+            # choose which RF best reduces reconstruction error for remainder
+            # first compute hypothetical remainder given subtract this RF from current remainder; for all remaining RFs
             compute_eff(w, rem, hypothetical_remainder_sums)
 
             valid_indices = np.nonzero(rfs_valid)[0]
@@ -411,12 +395,7 @@ class WTADeterminateBrain(object):
             win_remainder_sum = hypothetical_remainder_sums[tmp_argmin]
 
             if win_remainder_sum >= np.sum(np.abs(remainder)):
-
                 # if adding the "best" RF would be worse than current remainder; break and don't add this RF
-
-                #if hl == 1:
-                #    print('BREAK win_remainder_sum: ', win_remainder_sum, 'remainder sum:', np.sum(np.abs(remainder)))
-
                 break
 
             self.last_activities[hl][win_rf_index] += 1
@@ -426,10 +405,6 @@ class WTADeterminateBrain(object):
             if self.start_time_per_hl[hl] <= self.t < self.learning_off_time_per_hl[hl]:
                 lr = self.lr_base
                 self.weights[hl][win_rf_index, :] = (1.0 - lr) * self.weights[hl][win_rf_index, :] + lr * remainder[0, :]
-
-                #per_weight_lr = lr * np.abs(self.weights[hl][win_rf_index, :])
-                #per_weight_lr[per_weight_lr < 0.1 * lr] = 0.1 * lr
-                #self.weights[hl][win_rf_index, :] = np.multiply((1.0 - per_weight_lr), self.weights[hl][win_rf_index, :]) + np.multiply(per_weight_lr, remainder[0, :])
 
             # re-compute remainder
             remainder = remainder - w[win_rf_index, :]
@@ -443,20 +418,7 @@ class WTADeterminateBrain(object):
             lr = 0.1 * self.lr_base
             no_active_rf_indices = np.nonzero(self.last_activities[hl] == 0)
 
-            if hl==1:
-                pass
-                # print('*', np.amin(remainder), np.amax(remainder), np.count_nonzero(remainder), remainder.shape)
-
-                # 0.0 1.0 66 (1, 720)
-                # 0.0 1.0 71 (1, 720)
-                # 0.0 1.0 70 (1, 720)
-                # 0.0 1.0 72 (1, 720)
-
             self.weights[hl][no_active_rf_indices, :] = (1.0 - lr) * self.weights[hl][no_active_rf_indices, :] + lr * remainder[0, :]
-
-            #per_weight_lr = lr * np.abs(self.weights[hl][no_active_rf_indices, :])
-            #per_weight_lr[per_weight_lr < 0.1 * lr] = 0.1 * lr
-            #self.weights[hl][no_active_rf_indices, :] = np.multiply((1.0 - per_weight_lr), self.weights[hl][no_active_rf_indices, :]) + np.multiply(per_weight_lr, remainder[0, :])
 
         reconstruction[reconstruction > 1] = 1
         reconstruction[reconstruction < 0] = 0
