@@ -139,13 +139,13 @@ def get_brain_params():
         'learning_rate': LEARN_RATE,
         'bins_per_pixel': 6,
         'num_rf_per_hl': np.array([240, 240]),  #, 480]),  # np.array([240, 2 * 480])
-        'num_iter_per_input': [24, 24],  # only for iterative, not used in determinate
+        'num_iter_per_input': [12, 12],  # only for iterative, not used in determinate
         'input_num_time_steps_per_hl': np.array([1, 3]),  #, 3]),
         'input_delta_time_steps_per_hl': np.array([1, 5]),  #, 5]),
         'predict_ahead_time': 5,
         'start_time_per_hl': np.array([0, 10000]),  #50000]),
         'learning_off_time_per_hl': [10000, 5000000],  # 200000, ...
-        'delta_t_start_per_wta_group': 30000,
+        'delta_t_start_per_wta_group': 5000,
         'plot_interval_seconds': 30,
         'enable_generic_weights_viz': False
     }

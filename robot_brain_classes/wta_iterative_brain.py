@@ -413,15 +413,17 @@ class WTAIterativeBrain(object):
 
             # normalized error:
             # normalize to compute determinacy (not average dist, which is what this is)
-            sum_w = np.sum(np.abs(self.weights[hl][win_rf_index, :])) + 1e-9
-            sum_err = np.sum(np.abs(self.weights[hl][win_rf_index, :] - remainder))
-            #eff_fr = sum_err
+            # sum_w = np.sum(np.abs(self.weights[hl][win_rf_index, :])) + 1e-9
+            #sum_new_rem = np.sum(np.abs(self.weights[hl][win_rf_index, :] - remainder))
+            #sum_rem = np.sum(np.abs(remainder))
+            # eff_fr = sum_new_rem / sum_rem  # less than 1: reducing remainder (good); greater than 1: increasing the remainder (bad)
+
             # this is not right at all; error can be huge if weight is small but input is large:
             #eff_fr = abs(sum_w - np.sum(np.abs(self.weights[hl][win_rf_index, :] - remainder))) / sum_w
 
-            prod_w_in = np.multiply(self.weights[hl][win_rf_index, :], remainder)
-            # prod_w_in[prod_w_in < 0] = 0
-            eff_fr = np.sum(prod_w_in) / sum_w
+            # prod_w_in = np.multiply(self.weights[hl][win_rf_index, :], remainder)
+            # # prod_w_in[prod_w_in < 0] = 0
+            # eff_fr = np.sum(prod_w_in) / sum_w
 
             # above is a good measure
             # TODO next steps:
@@ -448,12 +450,16 @@ class WTAIterativeBrain(object):
 
                 #print(win_rf_index, np.amin(self.weights[hl][win_rf_index, :]), np.amax(self.weights[hl][win_rf_index, :]), np.amin(per_weight_lr), np.amax(per_weight_lr))
 
-            self.m_d[hl][win_rf_index] = (1.0 - self.lr_m_d) * self.m_d[hl][win_rf_index] + self.lr_m_d * eff_fr
-
+            sum_old_rem = np.sum(np.abs(remainder))
             remainder = remainder - self.weights[hl][win_rf_index, :]
+            sum_new_rem = np.sum(np.abs(remainder))
+
             #print('hl', hl, 'iter_i', iter_i, 'rem', np.min(remainder), np.max(remainder), 'w', np.min( self.weights[hl][win_rf_index, :]), np.max( self.weights[hl][win_rf_index, :]))
             reconstruction = reconstruction + self.weights[hl][win_rf_index, :]
             reconstruction_no_first = reconstruction
+
+            eff_fr = sum_new_rem / sum_old_rem
+            self.m_d[hl][win_rf_index] = (1.0 - self.lr_m_d) * self.m_d[hl][win_rf_index] + self.lr_m_d * eff_fr
 
             rfs_valid[win_rf_index] = 0
 
