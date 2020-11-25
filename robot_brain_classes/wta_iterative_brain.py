@@ -58,10 +58,6 @@ class WTAIterativeBrain(object):
         # how often in real seconds to print the plots (at a get_table_ims call)
         self.plot_interval = params['plot_interval_seconds']  # TODO 30
 
-        # this one basically disables the "background" in the reconstruction / prediction images
-        # also shows weights instead of values in prediction image
-        self.enable_hack_skip_first_layer = params['enable_hack_skip_first_layer']  # TODO True only for balls input
-
         # enable "generic" weights viz; overall not very useful
         self.enable_generic_weights_viz = params['enable_generic_weights_viz']
         assert self.enable_generic_weights_viz is False, 'generic weights viz not implemented for this one (only WTAMultiLayerBrain)'
@@ -466,17 +462,10 @@ class WTAIterativeBrain(object):
         reconstruction[reconstruction > 1] = 1
         reconstruction[reconstruction < 0] = 0
 
-        if self.enable_hack_skip_first_layer:
-            reconstruction_no_first[reconstruction_no_first > 1] = 1
-            reconstruction_no_first[reconstruction_no_first < 0] = 0
-
         if hl == 0:
             self.last_remainder_im = remainder.copy()
 
-            if self.enable_hack_skip_first_layer:
-                self.last_reconstruction_im = reconstruction_no_first.copy()
-            else:
-                self.last_reconstruction_im = reconstruction.copy()
+            self.last_reconstruction_im = reconstruction.copy()
 
         rec_error = np.sum(np.abs(reconstruction - hl_input))
         # sum_remainder = np.sum(np.abs(remainder))

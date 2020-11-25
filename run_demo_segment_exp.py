@@ -19,16 +19,21 @@ USERNAME = 'intec'
 
 COLOR_ENABLED = False
 
-USE_VIDEO_IN = True
+USE_VIDEO_IN = False
 
 if USE_VIDEO_IN:
-    IM_DIM = 128  # pixels, width & height
+    LEARN_RATE = 0.0001
 else:
-    IM_DIM = 16  # pixels, width & height
+    LEARN_RATE = 0.001
+
+IM_DIM = 16  # pixels, width & height
+
+DISABLE_BRAIN = False  # for testing input by itself; also starts slow display
 
 
 # uses: IM_DIM
 def get_sensors_params():
+    # TODO before using, fix im_dim like below
     # params_video_playback = {
     #     'image_dim': IM_DIM,  # sensor class has to figure out subset & scale to achieve this dim
     #     'video_dir': '/srv/projects/NL-data/',
@@ -44,7 +49,9 @@ def get_sensors_params():
     # }
 
     params_video_playback = {
-        'image_dim': IM_DIM,  # sensor class has to figure out subset & scale to achieve this dim
+        'image_dim': 128,  # sensor class has to figure out subset & scale to achieve this dim
+        'output_image_dim': IM_DIM,  # output image dim
+        'output_image_start_RC': (50, 64),
         'video_dir': '/srv/projects/NL-data/',
         'video_filename': 'DSC_0446.MOV',  # 32300 frames
         # 'video_filename': 'P1033727.mp4',  # 3840x2160
@@ -59,7 +66,8 @@ def get_sensors_params():
 
     params_physics_2d = {
         'image_dim': IM_DIM,  # sensor class has to figure out subset & scale to achieve this dim
-        'return_type': np.float32  # 32 or 64
+        'take_subimage_factor': None, # 4,  # (None for don't use). Use an image this factor larger for same simulation (i.e. higher res sim), and take a sub-image of that larger image. this changes the input!
+        'return_type': np.float64  # 32 or 64
     }
 
     params_duo_playback = {
@@ -80,6 +88,7 @@ def get_sensors_params():
         params = params_physics_2d
 
     return params
+
 
 
 def get_sim_folder_manager_params():
@@ -104,14 +113,14 @@ def get_brain_params():
 def get_visualizer_params():
     params = {
         'color_enabled': COLOR_ENABLED,
-        'fps_display_interval': 6,
-        'image_display_secs_fast': 4.2, #0.2,
-        'waitKey_time_fast': 1,  # 1, 100, 5000
+        'fps_display_interval': 5,
+        'image_display_secs_fast': 5,
+        'waitKey_time_fast': 1,
         'image_display_secs_slow': 0.01,  # 0: every frame
-        'waitKey_time_slow': 1,  # 1, 100, 5000  #
+        'waitKey_time_slow': 100,
         'scale_camera_factor': 1,
-        'auto_switch_to_slow_disp_time': 2000000, #50000,  # TODO re-introduce later for when training is done
-        'init_fast': True  # start with "fast" display
+        'auto_switch_to_slow_disp_time': None,  # 2000000,
+        'init_fast': not DISABLE_BRAIN  # start with "fast" display if brain is enabled
     }
     return params
 
@@ -131,6 +140,7 @@ def init_demo():
         'sim_folder_manager': SimFolderManager(get_sim_folder_manager_params())
     }
 
+
 def run_demo(demo_components):
     robot_brain = demo_components['robot_brain']
     robot_sensors = demo_components['robot_sensors']
@@ -146,10 +156,12 @@ def run_demo(demo_components):
 
         im = robot_sensors.read_input()
 
-        robot_brain.process_input(input_im=im)
+        if not DISABLE_BRAIN:
+            robot_brain.process_input(input_im=im)
 
         visualizer.visualize(input_im=im,
-                             segment_brain=robot_brain)  # So it can call .get_table_ims() only sometimes
+                             segment_brain=robot_brain,
+                             disable_brain=DISABLE_BRAIN)  # So it can call .get_table_ims() only sometimes
 
     robot_brain.save_model(models_save_folder=sim_folder_manager.get_models_save_folder())
 
