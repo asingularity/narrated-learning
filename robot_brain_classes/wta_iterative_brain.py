@@ -66,6 +66,8 @@ class WTAIterativeBrain(object):
         # how long to predict ahead
         self.predict_time_steps = params['predict_ahead_time']
 
+        self.delta_t_start_per_iter = params['delta_t_start_per_wta_group']
+
         # TODO make these parameters
 
         # for initializing arrays
@@ -373,7 +375,7 @@ class WTAIterativeBrain(object):
         use_wta_groups = True  # vs. iterative
 
         if use_wta_groups:
-            delta_t_start_per_iter = 30000
+            delta_t_start_per_iter = self.delta_t_start_per_iter   # 30000
         else:
             delta_t_start_per_iter = 0
 

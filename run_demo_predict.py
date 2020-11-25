@@ -145,6 +145,7 @@ def get_brain_params():
         'predict_ahead_time': 5,
         'start_time_per_hl': np.array([0, 10000]),  #50000]),
         'learning_off_time_per_hl': [10000, 5000000],  # 200000, ...
+        'delta_t_start_per_wta_group': 30000,
         'plot_interval_seconds': 30,
         'enable_generic_weights_viz': False
     }
