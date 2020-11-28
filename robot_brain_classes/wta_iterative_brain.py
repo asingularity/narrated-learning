@@ -387,9 +387,6 @@ class WTAIterativeBrain(object):
             else:
                 valid_indices = np.nonzero(rfs_valid)[0]
 
-            # BUG:
-            # eff_frame = np.divide(np.sum(np.abs(self.weights[hl][valid_indices, :] - remainder), axis=1), np.sum(self.weights[hl][valid_indices, :]))
-
             use_cython = True
             if use_cython:
                 # cython version:
@@ -398,10 +395,7 @@ class WTAIterativeBrain(object):
                 eff_frame = np.zeros(self.num_rf_per_hl[hl])
                 # sum_w = np.zeros(self.num_rf_per_hl[hl])
                 compute_eff(w, rem, eff_frame)
-                eff_frame_all = eff_frame.copy()
-
                 eff_frame = eff_frame[valid_indices]
-                #eff_frame = np.divide(eff_frame[valid_indices], sum_w[valid_indices])
             else:
                 eff_frame = np.sum(np.abs(self.weights[hl][valid_indices, :] - remainder), axis=1)
 
