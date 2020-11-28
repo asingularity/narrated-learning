@@ -68,6 +68,8 @@ class WTAIterativeBrain(object):
 
         self.delta_t_start_per_iter = params['delta_t_start_per_wta_group']
 
+        self.prediction_enabled = params['prediction_enabled']
+
         # TODO make these parameters
 
         # for initializing arrays
@@ -255,7 +257,7 @@ class WTAIterativeBrain(object):
 
                 # predictive
                 # OLD METHOD: DISABLED
-                if True:
+                if self.prediction_enabled:
                     if hl == 1 and self.t > 1:
 
                         hl_0_rf_activities_current = self.hl_output_histories[0].get_state(state_index=0, delay=0)
@@ -405,58 +407,18 @@ class WTAIterativeBrain(object):
 
             win_rf_index = valid_indices[np.argmin(eff_frame)]
 
-            # actual error used in WTA:
-            # eff_fr = eff_frame_all[win_rf_index]
-
-            # actual error recomputed:
-            # eff_fr = np.sum(np.abs(self.weights[hl][win_rf_index, :] - remainder))
-
-            # normalized error:
-            # normalize to compute determinacy (not average dist, which is what this is)
-            # sum_w = np.sum(np.abs(self.weights[hl][win_rf_index, :])) + 1e-9
-            #sum_new_rem = np.sum(np.abs(self.weights[hl][win_rf_index, :] - remainder))
-            #sum_rem = np.sum(np.abs(remainder))
-            # eff_fr = sum_new_rem / sum_rem  # less than 1: reducing remainder (good); greater than 1: increasing the remainder (bad)
-
-            # this is not right at all; error can be huge if weight is small but input is large:
-            #eff_fr = abs(sum_w - np.sum(np.abs(self.weights[hl][win_rf_index, :] - remainder))) / sum_w
-
-            # prod_w_in = np.multiply(self.weights[hl][win_rf_index, :], remainder)
-            # # prod_w_in[prod_w_in < 0] = 0
-            # eff_fr = np.sum(prod_w_in) / sum_w
-
-            # above is a good measure
-            # TODO next steps:
-            #   try to use that as selectin mechanism
-            #   try to incorporate into iterative method (as opposed to wta groups)
-            #   try improving how it should affect learning (to optimize for this measure)
-            #   try (again) to remove from remainder the intent of the learning once RF weights maxed, not just what is currently learned
-
-            #print(eff_fr, eff_fr2)
-
-
             self.last_activities[hl][win_rf_index] += 1
-            # print('iter', iter_i, 'win_rf', win_rf_index)
 
-            # TODO something like this (unclear the effect):
-            # lr = max(self.lr_base * pow(eff_fr, 2), 0.05 * self.lr_base)
             lr = self.lr_base
 
             if self.t < self.learning_off_time_per_hl[hl] and (hl==0 or self.t > self.start_time_per_hl[hl] + delta_t_start_per_iter * iter_i):
                 self.weights[hl][win_rf_index, :] = (1.0 - lr) * self.weights[hl][win_rf_index, :] + lr * remainder[0, :]
-                #per_weight_lr = lr * np.abs(self.weights[hl][win_rf_index, :])
-                #per_weight_lr[per_weight_lr < 0.1 * lr] = 0.1 * lr
-                #self.weights[hl][win_rf_index, :] = np.multiply((1.0 - per_weight_lr), self.weights[hl][win_rf_index, :]) + np.multiply(per_weight_lr, remainder[0, :])
-
-                #print(win_rf_index, np.amin(self.weights[hl][win_rf_index, :]), np.amax(self.weights[hl][win_rf_index, :]), np.amin(per_weight_lr), np.amax(per_weight_lr))
 
             sum_old_rem = np.sum(np.abs(remainder))
             remainder = remainder - self.weights[hl][win_rf_index, :]
             sum_new_rem = np.sum(np.abs(remainder))
 
-            #print('hl', hl, 'iter_i', iter_i, 'rem', np.min(remainder), np.max(remainder), 'w', np.min( self.weights[hl][win_rf_index, :]), np.max( self.weights[hl][win_rf_index, :]))
             reconstruction = reconstruction + self.weights[hl][win_rf_index, :]
-            reconstruction_no_first = reconstruction
 
             eff_fr = sum_new_rem / sum_old_rem
             self.m_d[hl][win_rf_index] = (1.0 - self.lr_m_d) * self.m_d[hl][win_rf_index] + self.lr_m_d * eff_fr

@@ -147,7 +147,8 @@ def get_brain_params():
         'learning_off_time_per_hl': [10000, 5000000],  # 200000, ...
         'delta_t_start_per_wta_group': 5000,
         'plot_interval_seconds': 30,
-        'enable_generic_weights_viz': False
+        'enable_generic_weights_viz': False,
+        'prediction_enabled': False
     }
 
     #return multilayer_brain_params
