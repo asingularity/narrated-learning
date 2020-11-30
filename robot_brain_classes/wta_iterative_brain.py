@@ -75,7 +75,7 @@ class WTAIterativeBrain(object):
         # for initializing arrays
         max_time = 10000000
 
-        self.use_negative_input = False  # instead of zero, set non-inputs to -1 for all layers
+        self.use_negative_input = True  # instead of zero, set non-inputs to -1 for all layers
 
         # ************ derived parameters ************
 
@@ -217,7 +217,6 @@ class WTAIterativeBrain(object):
         for hl in range(self.num_hl):
             if self.t >= self.start_time_per_hl[hl]:
                 hl_output = self._process_hyperlayer(hl_input=hl_input, hl=hl)
-
                 assert hl_output.shape[0] > 1, hl_output.shape
                 tmp1 = np.nonzero(hl_output)[0]
 
@@ -374,54 +373,118 @@ class WTAIterativeBrain(object):
 
         num_rf_per_iter = int(self.num_rf_per_hl[hl] / self.num_iter[hl])
 
-        use_wta_groups = True  # vs. iterative
+        use_wta_groups = False  # vs. iterative
+        do_background_remainder_learning = False
 
         if use_wta_groups:
             delta_t_start_per_iter = self.delta_t_start_per_iter   # 30000
         else:
             delta_t_start_per_iter = 0
 
-        for iter_i in range(self.num_iter[hl]):
-            if use_wta_groups:
-                valid_indices = np.arange(iter_i * num_rf_per_iter, (iter_i + 1)* num_rf_per_iter)
-            else:
-                valid_indices = np.nonzero(rfs_valid)[0]
+        # old way:
+        if False:
+            for iter_i in range(self.num_iter[hl]):
+                if use_wta_groups:
+                    valid_indices = np.arange(iter_i * num_rf_per_iter, (iter_i + 1)* num_rf_per_iter)
+                else:
+                    valid_indices = np.nonzero(rfs_valid)[0]
 
-            use_cython = True
-            if use_cython:
-                # cython version:
-                w = self.weights[hl]  #[valid_indices, :]
-                rem = remainder
-                eff_frame = np.zeros(self.num_rf_per_hl[hl])
-                # sum_w = np.zeros(self.num_rf_per_hl[hl])
-                compute_eff(w, rem, eff_frame)
-                eff_frame = eff_frame[valid_indices]
-            else:
-                eff_frame = np.sum(np.abs(self.weights[hl][valid_indices, :] - remainder), axis=1)
+                use_cython = False
+                if use_cython:
+                    # cython version:
+                    w = self.weights[hl]  #[valid_indices, :]
+                    rem = remainder
+                    eff_frame = np.zeros(self.num_rf_per_hl[hl])
+                    # sum_w = np.zeros(self.num_rf_per_hl[hl])
+                    compute_eff(w, rem, eff_frame)
+                    eff_frame = eff_frame[valid_indices]
 
-            win_rf_index = valid_indices[np.argmin(eff_frame)]
+                    win_rf_index = valid_indices[np.argmin(eff_frame)]
+                else:
+                    # equivalent to cython above:
+                    # eff_frame = np.sum(np.abs(self.weights[hl][valid_indices, :] - remainder), axis=1)
+                    # win_rf_index = valid_indices[np.argmin(eff_frame)]
+
+                    hl_input_inverse = np.ones_like(hl_input)
+                    hl_input_inverse[np.nonzero(hl_input==1)] = 0
+
+                    eff_frame = np.sum(np.multiply(self.weights[hl][valid_indices, :], hl_input), axis=1) - np.sum(np.multiply(self.weights[hl][valid_indices, :], hl_input_inverse), axis=1)
+                    win_rf_index = valid_indices[np.argmax(eff_frame)]
+                    win_eff = np.amax(eff_frame)
+
+                self.last_activities[hl][win_rf_index] += 1
+
+                lr = self.lr_base
+
+                if self.t < self.learning_off_time_per_hl[hl] and (hl==0 or self.t > self.start_time_per_hl[hl] + delta_t_start_per_iter * iter_i):
+                    #self.weights[hl][win_rf_index, :] = (1.0 - lr) * self.weights[hl][win_rf_index, :] + lr * remainder[0, :]
+                    self.weights[hl][win_rf_index, :] = (1.0 - lr) * self.weights[hl][win_rf_index, :] + lr * hl_input[0, :]
+
+                    # this doesn't make sense:
+                    #self.weights[hl][win_rf_index, :] = (1.0 - lr) * self.weights[hl][win_rf_index, :] + lr * hl_input_inverse[0, :]
+
+                sum_old_rem = np.sum(np.abs(remainder))
+                remainder = remainder - self.weights[hl][win_rf_index, :]
+
+                remainder[remainder < 0] = 0
+
+                sum_new_rem = np.sum(np.abs(remainder))
+
+                reconstruction = reconstruction + self.weights[hl][win_rf_index, :]
+
+                #eff_fr = sum_new_rem / (sum_old_rem + 1e-9)
+                eff_fr = win_eff
+                self.m_d[hl][win_rf_index] = (1.0 - self.lr_m_d) * self.m_d[hl][win_rf_index] + self.lr_m_d * eff_fr
+
+
+
+                rfs_valid[win_rf_index] = 0
+
+                # so that prediction is computed correctly, don't consider RF activated until after it has started learning:
+                if hl==0 or self.t > self.start_time_per_hl[hl] + delta_t_start_per_iter * iter_i:
+                    hl_output[win_rf_index] = 1.0
+
+        # new way:
+        hl_input_inverse = np.ones_like(hl_input)
+        hl_input_inverse[np.nonzero(hl_input == 1)] = 0
+
+        # total net pixel-bins explained (subtracting out negative)
+        #eff_frame = np.sum(np.multiply(self.weights[hl][:, :], hl_input), axis=1) - np.sum(np.multiply(self.weights[hl][:, :], hl_input_inverse), axis=1)
+        eff_frame = np.sum(np.abs(self.weights[hl][:, :] - hl_input), axis=1)
+
+        top_k = self.num_iter[hl]
+        sorted_rfs = np.argsort(eff_frame)  # [::-1]  # largest first
+        top_k_indices = sorted_rfs[0:top_k]
+
+        per_bin_diff = np.abs(self.weights[hl] - hl_input)
+        top_k_per_bin_diff = per_bin_diff[top_k_indices, :]
+
+        argmin_per_bin_diff = np.argmin(top_k_per_bin_diff, axis=0)
+        assert argmin_per_bin_diff.shape[0] == hl_input.shape[1], str((argmin_per_bin_diff.shape, hl_input.shape))
+
+        #print(argmin_per_bin_diff)
+        lr = self.lr_base
+
+        for tmp_ind in range(top_k):
+            win_rf_index = top_k_indices[tmp_ind]
+            bins_to_learn = np.nonzero(argmin_per_bin_diff==tmp_ind)
+
+            self.weights[hl][win_rf_index, bins_to_learn] = (1.0 - lr) * self.weights[hl][win_rf_index, bins_to_learn] + lr * hl_input[0, bins_to_learn]
+
+            hl_output[win_rf_index] = 1.0
+            eff_fr = eff_frame[win_rf_index]
+            self.m_d[hl][win_rf_index] = (1.0 - self.lr_m_d) * self.m_d[hl][win_rf_index] + self.lr_m_d * eff_fr
+
+            remainder = remainder - self.weights[hl][win_rf_index, :]
+            remainder[remainder < 0] = 0
 
             self.last_activities[hl][win_rf_index] += 1
 
-            lr = self.lr_base
+        #print(hl_output)
 
-            if self.t < self.learning_off_time_per_hl[hl] and (hl==0 or self.t > self.start_time_per_hl[hl] + delta_t_start_per_iter * iter_i):
-                self.weights[hl][win_rf_index, :] = (1.0 - lr) * self.weights[hl][win_rf_index, :] + lr * remainder[0, :]
-
-            sum_old_rem = np.sum(np.abs(remainder))
-            remainder = remainder - self.weights[hl][win_rf_index, :]
-            sum_new_rem = np.sum(np.abs(remainder))
-
-            reconstruction = reconstruction + self.weights[hl][win_rf_index, :]
-
-            eff_fr = sum_new_rem / sum_old_rem
-            self.m_d[hl][win_rf_index] = (1.0 - self.lr_m_d) * self.m_d[hl][win_rf_index] + self.lr_m_d * eff_fr
-
-            rfs_valid[win_rf_index] = 0
-
-            # so that prediction is computed correctly, don't consider RF activated until after it has started learning:
-            if hl==0 or self.t > self.start_time_per_hl[hl] + delta_t_start_per_iter * iter_i:
-                hl_output[win_rf_index] = 1.0
+        if do_background_remainder_learning:
+            lr_bg = self.lr_base * 0.1
+            self.weights[hl] = (1.0 - lr_bg) * self.weights[hl] + lr_bg * remainder[0, :]
 
         reconstruction[reconstruction > 1] = 1
         reconstruction[reconstruction < 0] = 0
@@ -498,6 +561,7 @@ class WTAIterativeBrain(object):
                 # im1 = 0.5 * (im1 + 1)
 
                 active_count = self.last_activities[hl][r_tmp]
+
                 im_active_count = np.zeros((self.input_im_dim, self.input_im_dim))
 
                 include_active_count_im = False
