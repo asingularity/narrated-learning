@@ -374,7 +374,7 @@ class WTAIterativeBrain(object):
         num_rf_per_iter = int(self.num_rf_per_hl[hl] / self.num_iter[hl])
 
         use_wta_groups = False  # vs. iterative
-        do_background_remainder_learning = False
+        do_background_remainder_learning = True
 
         if use_wta_groups:
             delta_t_start_per_iter = self.delta_t_start_per_iter   # 30000
@@ -470,6 +470,7 @@ class WTAIterativeBrain(object):
             bins_to_learn = np.nonzero(argmin_per_bin_diff==tmp_ind)
 
             self.weights[hl][win_rf_index, bins_to_learn] = (1.0 - lr) * self.weights[hl][win_rf_index, bins_to_learn] + lr * hl_input[0, bins_to_learn]
+            #self.weights[hl][win_rf_index, :] = (1.0 - lr) * self.weights[hl][win_rf_index, :] + lr * hl_input[0, :]
 
             hl_output[win_rf_index] = 1.0
             eff_fr = eff_frame[win_rf_index]
@@ -478,16 +479,18 @@ class WTAIterativeBrain(object):
             remainder = remainder - self.weights[hl][win_rf_index, :]
             remainder[remainder < 0] = 0
 
+            reconstruction = reconstruction + self.weights[hl][win_rf_index, :]
+
             self.last_activities[hl][win_rf_index] += 1
 
         #print(hl_output)
 
         if do_background_remainder_learning:
-            lr_bg = self.lr_base * 0.1
-            self.weights[hl] = (1.0 - lr_bg) * self.weights[hl] + lr_bg * remainder[0, :]
+            lr_bg = self.lr_base * 0.01
+            self.weights[hl] = (1.0 - lr_bg) * self.weights[hl] + lr_bg * 0  # remainder[0, :]
 
         reconstruction[reconstruction > 1] = 1
-        reconstruction[reconstruction < 0] = 0
+        reconstruction[reconstruction < -1] = -1
 
         if hl == 0:
             self.last_remainder_im = remainder.copy()
