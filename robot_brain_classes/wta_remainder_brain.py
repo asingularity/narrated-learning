@@ -379,7 +379,10 @@ class WTARemainderBrain(object):
         remainder = hl_input.copy()
 
         top_k_indices = np.sort(top_k_indices)  # sort indices to break symmetry in specific ordering
-        
+
+        #val_to_sort_by = self.m_d[hl][top_k_indices]
+        #top_k_indices = top_k_indices[np.argsort(val_to_sort_by)[::-1]]
+
         for k in range(top_k):
             win_rf_index = top_k_indices[k]
             self.last_activities[hl][win_rf_index] += 1
