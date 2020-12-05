@@ -8,6 +8,7 @@ from robot_brain_classes.wta_layer_brain import WTALayerBrain
 from robot_brain_classes.wta_multi_layer_brain import WTAMultiLayerBrain
 from robot_brain_classes.wta_iterative_brain import WTAIterativeBrain
 from robot_brain_classes.wta_determinate_brain import WTADeterminateBrain
+from robot_brain_classes.wta_remainder_brain import WTARemainderBrain
 from robot_sensor_classes.video_playback import VideoPlaybackSensor
 from robot_sensor_classes.duo_playback import DuoPlaybackSensor
 from robot_sensor_classes.physics_2d import Physics2DSensor
@@ -181,7 +182,8 @@ def init_demo():
     return {
         # *** DEPRECATED *** 'robot_brain': WTALayerBrain(get_brain_params()),
         #'robot_brain': WTAMultiLayerBrain(get_brain_params()),
-        'robot_brain': WTAIterativeBrain(get_brain_params()),
+        #'robot_brain': WTAIterativeBrain(get_brain_params()),
+        'robot_brain': WTARemainderBrain(get_brain_params()),
         #'robot_brain': WTADeterminateBrain(get_brain_params()),
         'robot_sensors': robot_sensors,
         'visualizer': SegmentVisualizer(get_visualizer_params()),
