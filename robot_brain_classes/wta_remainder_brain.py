@@ -379,7 +379,7 @@ class WTARemainderBrain(object):
         remainder = hl_input.copy()
 
         top_k_indices = np.sort(top_k_indices)  # sort indices to break symmetry in specific ordering
-
+        
         for k in range(top_k):
             win_rf_index = top_k_indices[k]
             self.last_activities[hl][win_rf_index] += 1
@@ -388,15 +388,17 @@ class WTARemainderBrain(object):
             lr = self.lr_base
             self.weights[hl][win_rf_index, :] = (1.0 - lr) * self.weights[hl][win_rf_index, :] + lr * remainder
 
-            # TODO to properly reflect reconstruction error, this should use w_tmp also here; but then we don't see reconstruction image as well
-            reconstruction = reconstruction + self.weights[hl][win_rf_index, :]
-
             w_tmp = self.weights[hl][win_rf_index, :].copy()
             w_tmp[w_tmp < 0.5] = 0
             w_tmp[w_tmp > 0.5] = 1
             remainder = remainder - w_tmp
 
             self.m_d[hl][win_rf_index] = (1.0 - self.lr_m_d) * self.m_d[hl][win_rf_index] + self.lr_m_d * np.count_nonzero(w_tmp)
+
+            # to properly reflect reconstruction error, this should use w_tmp also here; but then we don't see reconstruction image as well
+            reconstruction = reconstruction + w_tmp
+            # old way:
+            # reconstruction = reconstruction + self.weights[hl][win_rf_index, :]
 
 
             #remainder[remainder > 1] = 1
