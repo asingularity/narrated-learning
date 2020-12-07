@@ -23,7 +23,7 @@ class WTARemainderBrain(object):
         :param params:
         '''
 
-        self.im_dim = params['image_dim_display']  # TODO 1500
+        self.im_dim = params['image_dim_display']  # per layer
 
         # only applies to first hyperlayer (hl==0)
         self.input_im_dim = params['image_dim_NxN_pixels']  # TODO 16
@@ -361,15 +361,51 @@ class WTARemainderBrain(object):
         rfs_valid = np.ones(self.num_rf_per_hl[hl])
         self.last_activities[hl] = np.zeros(self.num_rf_per_hl[hl])
 
+        # experiment: conditioning on particular previous layer activation
+        # if hl == 1 and hl_input[0, 9] == 0:
+        #     return hl_output
+        # else:
+        #     pass
+
         # first, choose top K winners (for fixed-K)
-        #assert self.use_negative_input is True
 
         hl_input_inv = np.zeros_like(hl_input)
         hl_input_inv[np.nonzero(hl_input==0)] = 1
 
-        eff_frame = np.sum(np.multiply(self.weights[hl], hl_input), axis=1) - np.sum(np.multiply(self.weights[hl], hl_input_inv), axis=1)
-        #print(eff_frame)
+        if self.use_negative_input:
+            #eff_frame = np.sum(np.multiply(self.weights[hl], hl_input), axis=1)
+
+            rem = hl_input
+            hypothetical_remainder_sums = np.zeros(self.num_rf_per_hl[hl])
+            w = self.weights[hl].copy()
+            compute_eff(w, rem, hypothetical_remainder_sums)
+            eff_frame = hypothetical_remainder_sums
+
+        else:
+            eff_frame = np.sum(np.multiply(self.weights[hl], hl_input), axis=1) - np.sum(np.multiply(self.weights[hl], hl_input_inv), axis=1)
+
+            # this has NaNs because divide by zero:
+            #eff_frame = np.divide(np.sum(np.multiply(self.weights[hl], hl_input), axis=1) - np.sum(np.multiply(self.weights[hl], hl_input_inv), axis=1), np.sum(np.abs(self.weights[hl]), axis=1))
+            #print(eff_frame)
+
+            # compute distance, instead of dot product:
+            # (this needs changing to "smallest first" below this)
+            # rem = hl_input
+            # hypothetical_remainder_sums = np.zeros(self.num_rf_per_hl[hl])
+            # w = self.weights[hl].copy()
+            # compute_eff(w, rem, hypothetical_remainder_sums)
+            # eff_frame = hypothetical_remainder_sums
+
+            # some other variants of dot product
+            #eff_frame = np.sum(np.multiply(self.weights[hl], hl_input), axis=1) - p_factor * np.sum(np.multiply(self.weights[hl], hl_input_inv), axis=1)
+            # interesting results; here we optimize only for "least negative dot" / i.e. minimize only the error (not the positive overlap):
+            #eff_frame = - np.sum(np.multiply(self.weights[hl], hl_input_inv), axis=1)
+
         top_k = self.num_iter[hl]
+
+        # use this if taking distance instead:
+        #sorted_rfs = np.argsort(eff_frame)  # smallest first
+
         sorted_rfs = np.argsort(eff_frame)[::-1]  # largest first
         top_k_indices = sorted_rfs[0:top_k]
 
@@ -380,22 +416,45 @@ class WTARemainderBrain(object):
 
         top_k_indices = np.sort(top_k_indices)  # sort indices to break symmetry in specific ordering
 
+        # experiment: another way to sort indices:
         #val_to_sort_by = self.m_d[hl][top_k_indices]
         #top_k_indices = top_k_indices[np.argsort(val_to_sort_by)[::-1]]
+
+        # experiment: per bin learning:
+        # requires a second part uncommented below
+        # per_bin_diff = np.abs(self.weights[hl] - hl_input)
+        # top_k_per_bin_diff = per_bin_diff[top_k_indices, :]
+        # argmin_per_bin_diff = np.argmin(top_k_per_bin_diff, axis=0)
+        # assert argmin_per_bin_diff.shape[0] == hl_input.shape[1], str((argmin_per_bin_diff.shape, hl_input.shape))
 
         for k in range(top_k):
             win_rf_index = top_k_indices[k]
             self.last_activities[hl][win_rf_index] += 1
+
+            # experiment: uncomment this to skip first unit (i.e. background in some cases) to go to second layer
+            #if hl > 0 or win_rf_index > 0:
             hl_output[win_rf_index] = 1.0
 
-            lr = self.lr_base
+            if hl==0:
+                lr = self.lr_base
+            else:
+                lr = self.lr_base  # * 0.1
+
+            # normal learning
             self.weights[hl][win_rf_index, :] = (1.0 - lr) * self.weights[hl][win_rf_index, :] + lr * remainder
 
+            # experiment: per bin learning:
+            # bins_to_learn = np.nonzero(argmin_per_bin_diff==k)
+            # self.weights[hl][win_rf_index, bins_to_learn] = (1.0 - lr) * self.weights[hl][win_rf_index, bins_to_learn] + lr * hl_input[0, bins_to_learn]
+
             w_tmp = self.weights[hl][win_rf_index, :].copy()
-            w_tmp[w_tmp < 0.5] = 0
-            w_tmp[w_tmp > 0.5] = 1
+            # experiment: uncomment two below to threshold what gets taken from remainder (enforce remainder always reduces)
+            #   doesn't actually guarantee learning is helping for this
+            #w_tmp[w_tmp < 0.5] = 0
+            #w_tmp[w_tmp > 0.5] = 1
             remainder = remainder - w_tmp
 
+            # this is just for display
             self.m_d[hl][win_rf_index] = (1.0 - self.lr_m_d) * self.m_d[hl][win_rf_index] + self.lr_m_d * np.count_nonzero(w_tmp)
 
             # to properly reflect reconstruction error, this should use w_tmp also here; but then we don't see reconstruction image as well
@@ -403,16 +462,17 @@ class WTARemainderBrain(object):
             # old way:
             # reconstruction = reconstruction + self.weights[hl][win_rf_index, :]
 
-
+            # uncomment to clip remainder to normal range:
             #remainder[remainder > 1] = 1
             #remainder[remainder < -1] = -1
 
+        # given "zero mean" RFs, this converges them back to zero mean:
         do_background_remainder_learning = True
         if do_background_remainder_learning:
             lr_bg = self.lr_base * 0.01
             self.weights[hl] = (1.0 - lr_bg) * self.weights[hl] + lr_bg * 0  # remainder[0, :]
 
-
+        # old stuff
         if False:  # this fails because symmetry never broken
             for k in range(top_k):
                 win_rf_index = top_k_indices[k]
@@ -441,6 +501,7 @@ class WTARemainderBrain(object):
 
                 reconstruction = reconstruction + self.weights[hl][win_rf_index, :]
 
+        # old stuff
         if False:
             for iter_i in range(self.num_iter[hl]):
                 use_cython = True
@@ -484,7 +545,6 @@ class WTARemainderBrain(object):
 
         if hl == 0:
             self.last_remainder_im = remainder.copy()
-
             self.last_reconstruction_im = reconstruction.copy()
 
         rec_error = np.sum(np.abs(reconstruction - hl_input))
@@ -495,10 +555,10 @@ class WTARemainderBrain(object):
 
         return hl_output
 
-        # TODO return an array with binary output per RF: did it appear at least once
-        # TODO we may not allow one RF to be active more than once; no longer technically correct reconstruction then...
+        #  return an array with binary output per RF: did it appear at least once
+        #  we may not allow one RF to be active more than once; no longer technically correct reconstruction then...
         #   without counting the "number"
-        # TODO or we could return not a binary, but a number, like a "rate"
+        #  or we could return not a binary, but a number, like a "rate"
 
     def get_table_ims(self):
         print()
@@ -610,7 +670,7 @@ class WTARemainderBrain(object):
             tmp_all_im = tmp_im_all
 
             max_dim = max(tmp_all_im.shape[0], tmp_all_im.shape[1])
-            imscale = self.im_dim / max_dim  # 0.2: full table, 2.0
+            imscale = self.im_dim[hl] / max_dim  # 0.2: full table, 2.0
             tmp_im = cv2.resize(tmp_all_im, dsize=(0, 0), fx=imscale, fy=imscale, interpolation=cv2.INTER_NEAREST)
 
             ims_list.append(tmp_im)
@@ -703,11 +763,11 @@ class WTARemainderBrain(object):
 
             # scale this image:
             max_dim = max(hl_1_im_v.shape[0], hl_1_im_v.shape[1])
-            imscale = self.im_dim / max_dim  # 0.2: full table, 2.0
+            imscale = self.im_dim[hl] / max_dim  # 0.2: full table, 2.0
             hl_1_im_v = cv2.resize(hl_1_im_v, dsize=(0, 0), fx=imscale, fy=imscale, interpolation=cv2.INTER_NEAREST)
 
             max_dim = max(hl_1_im_w.shape[0], hl_1_im_w.shape[1])
-            imscale = self.im_dim / max_dim  # 0.2: full table, 2.0
+            imscale = self.im_dim[hl] / max_dim  # 0.2: full table, 2.0
             hl_1_im_w = cv2.resize(hl_1_im_w, dsize=(0, 0), fx=imscale, fy=imscale, interpolation=cv2.INTER_NEAREST)
 
             ims_list.append(hl_1_im_v)
