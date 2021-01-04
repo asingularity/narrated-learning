@@ -96,8 +96,15 @@ class WTARemainderBrain(object):
         self.hl_output_histories = []
         self.rec_error = []
         self.mean_rec_error = []
-        self.weights = []
         self.predict_weights = []
+
+        self.input_weights = []
+        self.output_weights = []
+        self.prob_weights = []
+        self.active_prob_weights = []
+        self.anchor_prob_weights = []
+
+        self.anchor_index = []
 
         self.predict_error = []
         self.predict_error_reference = []
@@ -134,10 +141,27 @@ class WTARemainderBrain(object):
             self.rec_error.append(np.zeros(max_time))
             self.mean_rec_error.append(np.zeros(max_time))
 
-            hl_weights = np.zeros((self.num_rf_per_hl[hl], hl_input_state_dim))
-            print('    adding feedforward weights for hyperlayer:', hl, ', of shape (num rf per hl, input dim):', hl_weights.shape)
+            input_weights = np.zeros((self.num_rf_per_hl[hl], hl_input_state_dim))
+            print('    adding input weights for hyperlayer:', hl, ', of shape (num rf per hl, input dim):', input_weights.shape)
+            self.input_weights.append(input_weights)
 
-            self.weights.append(hl_weights)
+            output_weights = np.zeros((self.num_rf_per_hl[hl], hl_input_state_dim))
+            print('    adding output weights for hyperlayer:', hl, ', of shape (num rf per hl, input dim):', output_weights.shape)
+            self.output_weights.append(output_weights)
+
+            prob_weights = np.zeros((self.num_rf_per_hl[hl], hl_input_state_dim))
+            print('    adding prob weights for hyperlayer:', hl, ', of shape (num rf per hl, input dim):', prob_weights.shape)
+            self.prob_weights.append(prob_weights)
+
+            active_prob_weights = np.zeros((self.num_rf_per_hl[hl], hl_input_state_dim))
+            print('    adding active prob weights for hyperlayer:', hl, ', of shape (num rf per hl, input dim):', active_prob_weights.shape)
+            self.active_prob_weights.append(active_prob_weights)
+
+            anchor_prob_weights = np.zeros((self.num_rf_per_hl[hl], hl_input_state_dim))
+            print('    adding anchor prob weights for hyperlayer:', hl, ', of shape (num rf per hl, input dim):', anchor_prob_weights.shape)
+            self.anchor_prob_weights.append(anchor_prob_weights)
+
+            self.anchor_index.append(np.zeros(self.num_rf_per_hl[hl]))
 
             if hl < self.num_hl - 1:
                 # next layer's input state dim
@@ -147,6 +171,8 @@ class WTARemainderBrain(object):
                 self.predict_error_reference.append(np.zeros(max_time))
                 self.mean_predict_error.append(np.zeros(max_time))
                 self.mean_predict_error_reference.append(np.zeros(max_time))
+
+        self.weights = self.output_weights
 
         print()
         print('Initialized!')
@@ -197,6 +223,10 @@ class WTARemainderBrain(object):
         for hl in range(self.num_hl):
             # measure determinacy
             self.m_d.append(np.zeros(self.num_rf_per_hl[hl]))
+
+
+        # temporary variables for experiment
+        self.tmp_w = None
 
 
     def process_input(self, input_im):
@@ -335,7 +365,269 @@ class WTARemainderBrain(object):
 
         self.t += 1
 
+
     def _process_hyperlayer(self, hl_input, hl):
+        assert hl_input.shape[0] == 1
+        assert hl_input.shape[1] > 0
+
+        assert self.num_rf_per_hl[hl] / self.num_iter[hl] == int( self.num_rf_per_hl[hl] / self.num_iter[hl] )
+
+        input_feature_len = hl_input.shape[1]
+
+        # TODO we should set these
+        remainder = hl_input.copy()
+        reconstruction = np.zeros((1, input_feature_len))
+
+        hl_output = np.zeros(self.num_rf_per_hl[hl])
+
+        if hl == 0:
+            self.last_remainder_im = remainder.copy()
+            self.last_reconstruction_im = reconstruction.copy()
+
+        return hl_output
+
+
+    def _process_hyperlayer_MAX_PROB_PATTERN(self, hl_input, hl):
+
+        assert hl_input.shape[0] == 1
+        assert hl_input.shape[1] > 0
+
+        assert self.num_rf_per_hl[hl] / self.num_iter[hl] == int( self.num_rf_per_hl[hl] / self.num_iter[hl] )
+
+        input_feature_len = hl_input.shape[1]
+
+        # TODO we should set these
+        remainder = hl_input.copy()
+        reconstruction = np.zeros((1, input_feature_len))
+
+        hl_output = np.zeros(self.num_rf_per_hl[hl])
+
+        # as first test, exclude background entirely (non-event), so we don't need competition solved
+        #   how easiest to do this hack? maybe here, set all background-bins to zero for binned pixels (hack)
+
+        if hl == 0:
+
+            # ENABLE FOR BALL INPUT
+            # TODO this zeros out background for ball input
+            hl_input[0, 1::6] = 0
+
+            # print(np.nonzero(hl_input))
+
+            # need to expand initialization of prob
+            # need multi-layer prob, where number of layers is max pattern size
+            # assume only one unit for now
+
+            max_pattern_bins = 16 * 16
+            num_rf = 10
+
+            if self.tmp_w is None:
+                # as on board:
+                # self.tmp_w = np.zeros((hl_input.shape[1], max_pattern_bins))
+                # to follow our conventions:
+                self.tmp_w = []
+                for rf_index in range(num_rf):
+                    self.tmp_w.append(np.zeros((max_pattern_bins, hl_input.shape[1])))
+
+            cumulative_pattern_weights = np.zeros(hl_input.shape[1])
+
+            for rf_index in range(num_rf):
+
+                # print(rf_index, np.count_nonzero(cumulative_pattern))
+                cumulative_pattern = np.zeros(hl_input.shape[1])
+
+                bin_layer_input = hl_input.copy()
+                bin_layer_input = bin_layer_input - cumulative_pattern_weights  #cumulative_pattern
+
+                pattern_weights = np.zeros(hl_input.shape[1])
+                cumulative_prob = 1.0
+
+                #assert np.amin(bin_layer_input) >= 0, (rf_index, np.amin(bin_layer_input))
+                assert np.amax(bin_layer_input) <= 1, (rf_index, np.amax(bin_layer_input))
+
+                bin_layer_input[bin_layer_input < 0] = 0
+
+                for bin_layer in range(max_pattern_bins):
+
+                    max_bin_this_bin_layer = np.argmax(self.tmp_w[rf_index][bin_layer, :])
+
+                    if bin_layer == 0:
+                        pass
+                        # TODO this pegs bin
+                        #max_bin_this_bin_layer = 316
+                        # max_bin_this_bin_layer = 632 - 12 - 1  # - 3
+                        #print(max_bin_this_bin_layer)
+
+                    if self._in_pattern(hl_input, cumulative_pattern):
+                        # update prob
+
+                        # TODO THIS MUST BE SEPARATE BETWEEN RFS!!!
+                        self.tmp_w[rf_index][bin_layer, :] = (1.0 - self.lr_base) * self.tmp_w[rf_index][bin_layer, :] + self.lr_base * bin_layer_input
+
+                        # update cumulative pattern
+                        cumulative_pattern[max_bin_this_bin_layer] = 1
+
+                    bin_layer_input[0, max_bin_this_bin_layer] = 0
+
+                    # update cumulative prob, for display
+                    # for display, remove bias of pattern start prob (first bin layer):
+                    if bin_layer > 0:
+                        cumulative_prob = cumulative_prob * self.tmp_w[rf_index][bin_layer, max_bin_this_bin_layer]
+
+                    # update pattern_weights for display using max at this bin_layer, and cumulative prob (for display)
+                    # TODO later for defining actual output weights, apply a threshold here given pattern size and cumulative prob to optimize time-integral
+                    pattern_weights[max_bin_this_bin_layer] = 1  # cumulative_prob
+
+                # maybe for display, show all bins, but show weight as cumulative prob?
+                self.output_weights[hl][rf_index, :] = pattern_weights[:]
+                # for debugging, show first bin layer prob
+                # self.output_weights[hl][rf_index, :] = self.tmp_w[0, :]
+
+                cumulative_pattern_weights = cumulative_pattern_weights + pattern_weights
+                cumulative_pattern_weights[cumulative_pattern_weights > 1] = 1
+
+        # for display
+        self.weights = self.output_weights
+
+        if hl == 0:
+            self.last_remainder_im = remainder.copy()
+            self.last_reconstruction_im = reconstruction.copy()
+
+        return hl_output
+
+    def _in_pattern(self, search_in, search_for):
+        '''
+
+        assuming all binary patterns
+
+        :param search_in:
+        :param search_for:
+        :return:
+        '''
+
+        match_sum = np.sum(np.multiply(search_in, search_for))
+        return match_sum == np.count_nonzero(search_for)
+
+    def _process_hyperlayer_THRESHOLDING_ATTMPE(self, hl_input, hl):
+        '''
+
+        :param hl_input:
+        :param hl: index of hyperlayer
+        :return:
+        '''
+
+        assert hl_input.shape[0] == 1
+        assert hl_input.shape[1] > 0
+
+        assert self.num_rf_per_hl[hl] / self.num_iter[hl] == int( self.num_rf_per_hl[hl] / self.num_iter[hl] )
+
+        input_feature_len = hl_input.shape[1]
+
+        # TODO we should set these
+        remainder = hl_input.copy()
+        reconstruction = np.zeros((1, input_feature_len))
+
+        hl_output = np.zeros(self.num_rf_per_hl[hl])
+
+        # (1) compute input weights -> activations
+        #       based on input weights
+        #       for reconstruction case: input weights are set as binary output weights, and all or none activation based on full input
+
+        match_sum = np.sum(np.multiply(self.input_weights[hl], hl_input), axis=1)
+
+        # only active if full RF (input weights) was a subset of the input
+        full_match = match_sum == np.sum(self.input_weights[hl], axis=1)
+
+        rfs_active = np.nonzero(full_match)[0]
+        hl_output[rfs_active] = 1
+
+        sum_explained = np.sum(self.output_weights[hl][rfs_active, :], axis=0)
+        sum_explained[sum_explained > 1] = 1
+
+        # (2) update output weights
+        #
+        #
+        #       retrieve remainder from last step
+        #       update prob of remainder that it sees; i.e. input minus all other RFs binary output weights when they are active
+        #       update threshold: compute delta and modify with learning rate
+        #       subtract its binary output weights from current input for all others to compute remainder for next step
+        #       symmetry broken? or will there be a false stable state?
+
+        for rf_index in range(self.num_rf_per_hl[hl]):
+            input_to_rf = hl_input.copy()
+            input_to_rf -= sum_explained
+
+            assert np.amin(input_to_rf) >= 0, str(np.amin(input_to_rf))
+
+            # if RF was active, we subtracted its RF above; add it back, since it is a valid input to this one
+            if full_match[rf_index] == 1:
+                input_to_rf += self.output_weights[hl][rf_index, :]
+
+                # update prob given unit was active based on feedforward input weights:
+                self.active_prob_weights[hl][rf_index, :] = (1.0 - self.lr_base) * self.active_prob_weights[hl][rf_index, :] + self.lr_base * input_to_rf
+
+            # update prob
+            self.prob_weights[hl][rf_index, :] = (1.0 - self.lr_base) * self.prob_weights[hl][rf_index, :] + self.lr_base * input_to_rf
+
+            # update prob given current anchor, if anchor was active
+            if input_to_rf[0, int(self.anchor_index[hl][rf_index])] == 1:
+                self.anchor_prob_weights[hl][rf_index, :] = (1.0 - self.lr_base) * self.anchor_prob_weights[hl][rf_index, :] + self.lr_base * input_to_rf
+
+            if random.random() < 0.1:  # learning
+
+                # set "anchor" for this RF: the most frequent bin in the input to this RF (imposed constraint)
+                this_unit_prob = self.prob_weights[hl][rf_index, :]
+                anchor_bin = np.argmax(this_unit_prob)
+                self.anchor_index[hl][rf_index] = 1.0
+
+                self.output_weights[hl][rf_index, :] = 0
+                self.output_weights[hl][rf_index, anchor_bin] = 1.0
+
+                # update output weights around anchor; for this we need prob given anchor (not prob given activation?)
+                # NOT CLEAR HOW TO DO THIS, STILL SAME PROBLEM: NO CORRELATION INFO
+                # TODO this is wrong
+                #self.output_weights[hl][rf_index, :] = 0
+                nnz_tmp = np.nonzero(self.anchor_prob_weights[hl][rf_index, :] > 0.8)
+                self.output_weights[hl][rf_index, nnz_tmp] = 1
+
+                # (3) update input weights
+                #       for reconstruction: simply set input weights to be the binary output weights
+                self.input_weights[hl][rf_index, :] = self.output_weights[hl][rf_index, :]
+                #
+                #       more generic:
+
+        # for display
+        self.weights = self.output_weights
+
+        if hl == 0:
+            self.last_remainder_im = remainder.copy()
+            self.last_reconstruction_im = reconstruction.copy()
+
+        return hl_output
+
+    def _get_optimal_threshold(self, prob_weights, frame_input):
+        '''
+
+        :param prob_weights:
+        :param frame_input:
+        :return:
+        '''
+
+        # assume a grid search for now
+
+        thresholds_to_test = np.linspace(0, 1, 20)
+
+        # TODO remember these are binary; also that it must be complete match or it is no match (discontinuity in that); i.e. complete output weights must be subset of input to be input match
+
+        output_weights_at_thresholds = np.zeros((len(thresholds_to_test), prob_weights.shape[0]))
+        output_weights_at_thresholds[:, :] = prob_weights[:]
+
+        t_tmp = np.zeros((len(thresholds_to_test), prob_weights.shape[0]))
+        t_tmp[:, :] = thresholds_to_test[:, np.newaxis][:]
+
+        output_weights_at_thresholds[output_weights_at_thresholds < t_tmp] = 0
+        output_weights_at_thresholds[output_weights_at_thresholds >= t_tmp] = 1
+
+    def _process_hyperlayer_STANDARD(self, hl_input, hl):
         '''
 
         :param hl_input:
@@ -559,6 +851,7 @@ class WTARemainderBrain(object):
         #  we may not allow one RF to be active more than once; no longer technically correct reconstruction then...
         #   without counting the "number"
         #  or we could return not a binary, but a number, like a "rate"
+
 
     def get_table_ims(self):
         print()
