@@ -9,6 +9,7 @@ from robot_brain_classes.wta_multi_layer_brain import WTAMultiLayerBrain
 from robot_brain_classes.wta_iterative_brain import WTAIterativeBrain
 from robot_brain_classes.wta_determinate_brain import WTADeterminateBrain
 from robot_brain_classes.wta_remainder_brain import WTARemainderBrain
+from robot_brain_classes.two_stage_seqnn_brain import TwoStageSeqNNBrain
 from robot_sensor_classes.video_playback import VideoPlaybackSensor
 from robot_sensor_classes.duo_playback import DuoPlaybackSensor
 from robot_sensor_classes.physics_2d import Physics2DSensor
@@ -135,16 +136,16 @@ def get_brain_params():
 
     # WTAIterativeBrain
     iterative_brain_params = {
-        'image_dim_display': [int(2800), int(1200)],  # per layer
+        'image_dim_display': [int(1400)], #, int(1200)],  # per layer
         'image_dim_NxN_pixels': IM_DIM,
         'learning_rate': LEARN_RATE,
         'bins_per_pixel': 6,
-        'num_rf_per_hl': np.array([2 * 240, 2 * 240]),  #, 480]),  # np.array([240, 2 * 480])
-        'num_iter_per_input': [6, 6],  # only for iterative, not used in determinate
-        'input_num_time_steps_per_hl': np.array([1, 3]),  #, 3]),
-        'input_delta_time_steps_per_hl': np.array([1, 5]),  #, 5]),
+        'num_rf_per_hl': np.array([200]),  #, 480]),  # np.array([240, 2 * 480])
+        'num_iter_per_input': [1],  # , 1],  # only for iterative, not used in determinate
+        'input_num_time_steps_per_hl': np.array([1]),  #, 3]),
+        'input_delta_time_steps_per_hl': np.array([1]),  #, 5]),
         'predict_ahead_time': 5,
-        'start_time_per_hl': np.array([0, 10000]),  #50000]),
+        'start_time_per_hl': np.array([0]),  #, 10000]),  #50000]),
         'learning_off_time_per_hl': [10000, 5000000],  # 200000, ...
         'delta_t_start_per_wta_group': 5000,
         'plot_interval_seconds': 30,
@@ -183,8 +184,9 @@ def init_demo():
         # *** DEPRECATED *** 'robot_brain': WTALayerBrain(get_brain_params()),
         #'robot_brain': WTAMultiLayerBrain(get_brain_params()),
         #'robot_brain': WTAIterativeBrain(get_brain_params()),
-        'robot_brain': WTARemainderBrain(get_brain_params()),
+        #'robot_brain': WTARemainderBrain(get_brain_params()),
         #'robot_brain': WTADeterminateBrain(get_brain_params()),
+        'robot_brain': TwoStageSeqNNBrain(get_brain_params()),
         'robot_sensors': robot_sensors,
         'visualizer': SegmentVisualizer(get_visualizer_params()),
         'sim_folder_manager': SimFolderManager(get_sim_folder_manager_params())
