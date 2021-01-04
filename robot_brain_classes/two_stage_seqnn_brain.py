@@ -10,6 +10,8 @@ from cython_eff import compute_eff
 
 from utils.one_time_messages import OneTimeMessages
 
+from cuda_dist_query import CudaTable
+
 import matplotlib
 matplotlib.use('Agg')
 matplotlib.rcParams['agg.path.chunksize'] = 10000
@@ -80,6 +82,19 @@ class TwoStageSeqNNBrain(object):
         self.use_negative_input = False  # instead of zero, set non-inputs to -1 for all layers
 
         # ************ derived parameters ************
+
+        # CUDA TABLE
+
+        input_state_dim = self.input_im_dim * self.input_im_dim * self.bins_per_pixel
+
+        self.cuda_table_I = CudaTable(num_entries=self.num_rf_per_hl[0],
+                                      input_dim=input_state_dim)
+        self.init_I_row_num = None
+
+        self.num_row_changes_for_disp = 0
+        self.frames_since_row_change_disp = 0
+
+        # OTHER
 
         self.num_hl = len(self.num_rf_per_hl)
 
@@ -168,7 +183,7 @@ class TwoStageSeqNNBrain(object):
                 self.mean_predict_error.append(np.zeros(max_time))
                 self.mean_predict_error_reference.append(np.zeros(max_time))
 
-        self.weights = self.output_weights
+        self.weights = [None, None]  #self.output_weights
 
         print()
         print('Initialized!')
@@ -223,7 +238,6 @@ class TwoStageSeqNNBrain(object):
 
         # temporary variables for experiment
         self.tmp_w = None
-
 
     def process_input(self, input_im):
         input_pixels_1 = input_im
@@ -376,10 +390,91 @@ class TwoStageSeqNNBrain(object):
         hl_output = np.zeros(self.num_rf_per_hl[hl])
 
         if hl == 0:
+
+            # CUDA TABLE
+
+            input_state = hl_input.flatten().astype(np.float32)
+
+            dists = self.cuda_table_I.query(query_input=input_state)
+            # I_index = np.argmin(dists)
+
+            row_replaced = self._learn_table(dists=dists, input_state=input_state)
+
+            if row_replaced:
+                self.num_row_changes_for_disp += 1
+            self.frames_since_row_change_disp += 1
+
+            # OTHER
+
             self.last_remainder_im = remainder.copy()
             self.last_reconstruction_im = reconstruction.copy()
 
+            self.weights[0] = self.cuda_table_I.table_i.copy()
+
         return hl_output
+
+
+    def _learn_table(self, dists, input_state):
+        '''
+
+        :param dists:
+        :param input_state:
+        :return:
+        '''
+
+        # to do later on replacement or learning: should zero out W from that row for all predictions
+        #   why don't we do this now?
+        #   because, for now, we learn table, then we leave it alone when learning predictions later
+
+        row_replaced = False
+
+        # assert input_state.shape[0] == self.input_dim
+
+        sorted_dist_indices = np.argsort(dists)
+        new_min_ind = sorted_dist_indices[0]
+        new_min_dist = dists[new_min_ind]
+
+        if self.init_I_row_num is None:
+            self.init_I_row_num = 0
+
+        if self.init_I_row_num < self.cuda_table_I.get_num_rows():
+            # necessary so dist matrix helper is not so slow at start
+            dists[self.init_I_row_num] = np.inf
+            try:
+                self.cuda_table_I.set_matrix_row(row_index=self.init_I_row_num,
+                                                 row_input=input_state,
+                                                 row_to_table_dists=dists,
+                                                 fast_init=True)
+            except AssertionError:
+                print('\nError! Invalid GPU data type. input_state.dtype: ' + str(input_state.dtype) + '\n')
+                raise
+
+            row_replaced = True
+            self.init_I_row_num += 1
+        else:
+            if not self.cuda_table_I.post_init_done:
+                self.cuda_table_I.post_init()
+
+            table_min_dist, table_min_dist_r, table_min_dist_c = self.cuda_table_I.get_min_dist()
+
+            if new_min_dist > table_min_dist:
+                # minimum distance of new row to current rows is greater than current minimum row-row distance
+                # so: replace one row of current minimum, with new row
+
+                # get one of the row indices of current minimum dist pair
+                r_r_ind = table_min_dist_r  # could be table_min_dist_c
+
+                dists[r_r_ind] = np.inf
+
+                # replace the current min dist row, with the new row
+                self.cuda_table_I.set_matrix_row(row_index=r_r_ind,
+                                                 row_input=input_state,
+                                                 row_to_table_dists=dists)
+
+                row_replaced = True
+
+        return row_replaced
+
 
     def _process_hyperlayer_MAX_PROB_PATTERN(self, hl_input, hl):
 
@@ -510,6 +605,9 @@ class TwoStageSeqNNBrain(object):
             print()
             print(self.m_d[hl])
             print()
+        #         self.num_row_changes_for_disp = 0
+        #         self.frames_since_row_change_disp = 0
+        print('mean frames between row replaces: ', self.frames_since_row_change_disp / (self.num_row_changes_for_disp + 1e-9))
 
         ims_list = []
         ims_names_list = []
