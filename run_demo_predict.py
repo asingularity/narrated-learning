@@ -146,11 +146,13 @@ def get_brain_params():
         'input_delta_time_steps_per_hl': np.array([1]),  #, 5]),
         'predict_ahead_time': 5,
         'start_time_per_hl': np.array([0]),  #, 10000]),  #50000]),
-        'learning_off_time_per_hl': [10000, 5000000],  # 200000, ...
+        'learning_off_time_per_hl': [10000, 5000000],  # 200000, ...  # UNUSED RIGHT NOW!!!
         'delta_t_start_per_wta_group': 5000,
         'plot_interval_seconds': 30,
         'enable_generic_weights_viz': False,
-        'prediction_enabled': False
+        'prediction_enabled': False,
+        'cuda_table_i_save_time': 200000,  # saves cuda_table.table_i matrix to text file
+        'cuda_table_i_save_file': 'table_i.txt'
     }
 
     #return multilayer_brain_params

@@ -94,6 +94,9 @@ class TwoStageSeqNNBrain(object):
         self.num_row_changes_for_disp = 0
         self.frames_since_row_change_disp = 0
 
+        self.cuda_table_i_save_time = params['cuda_table_i_save_time']  # : 200000,  # saves cuda_table.table_i matrix to text file
+        self.cuda_table_i_save_file = params['cuda_table_i_save_file']
+
         # OTHER
 
         self.num_hl = len(self.num_rf_per_hl)
@@ -410,6 +413,13 @@ class TwoStageSeqNNBrain(object):
             self.last_reconstruction_im = reconstruction.copy()
 
             self.weights[0] = self.cuda_table_I.table_i.copy()
+
+            if self.t == self.cuda_table_i_save_time:
+                print()
+                print('************** SAVING CUDA TABLE I TO FILE **************')
+                print()
+
+                np.savetxt(self.cuda_table_i_save_file, self.weights[0])
 
         return hl_output
 
