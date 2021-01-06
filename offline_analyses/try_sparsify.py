@@ -215,6 +215,8 @@ def _get_max_bin_index_and_joint_prob(remainder, cumulative_pattern_indices, bin
 def _get_best_pattern(remainder, rf_index_for_debug=None):
     '''
 
+    perfect method: i.e. binary pattern must be wholly contained in the input sample
+
     :param remainder:
     :return:
     '''
@@ -271,7 +273,7 @@ def _get_best_pattern(remainder, rf_index_for_debug=None):
 
 def get_sparse_features(arr):
 
-    num_rfs = 400
+    num_rfs = 200
     feature_len = arr.shape[1]
 
     remainder = arr.copy()
@@ -295,6 +297,10 @@ def get_sparse_features(arr):
             remainder[matched_row, best_pattern.astype(np.int)] = 0
         #print(prev_matched_rows)
 
+        if k%10 == 0:
+            im = make_im(sparse_arr)
+            cv2.imshow('RFs', im)
+        cv2.waitKey(1)
 
     return sparse_arr
 
@@ -303,7 +309,7 @@ def main():
     print('loading file...')
     print()
 
-    arr = np.loadtxt('table_i_800_video.txt')
+    arr = np.loadtxt('table_i_800.txt')
     print('table_i shape:', arr.shape)
     print()
 

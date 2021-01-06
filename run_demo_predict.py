@@ -140,7 +140,7 @@ def get_brain_params():
         'image_dim_NxN_pixels': IM_DIM,
         'learning_rate': LEARN_RATE,
         'bins_per_pixel': 6,
-        'num_rf_per_hl': np.array([200]),  #, 480]),  # np.array([240, 2 * 480])
+        'num_rf_per_hl': np.array([800]),  #, 480]),  # np.array([240, 2 * 480])
         'num_iter_per_input': [1],  # , 1],  # only for iterative, not used in determinate
         'input_num_time_steps_per_hl': np.array([1]),  #, 3]),
         'input_delta_time_steps_per_hl': np.array([1]),  #, 5]),
@@ -152,7 +152,7 @@ def get_brain_params():
         'enable_generic_weights_viz': False,
         'prediction_enabled': False,
         'cuda_table_i_save_time': 200000,  # saves cuda_table.table_i matrix to text file
-        'cuda_table_i_save_file': 'table_i.txt'
+        'cuda_table_i_save_file': 'table_i_800.txt'
     }
 
     #return multilayer_brain_params
