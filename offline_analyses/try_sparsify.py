@@ -241,16 +241,16 @@ def _get_best_pattern(remainder, rf_index_for_debug=None):
         # note that cumulative_pattern_indices are only valid up to index: bin_layer-1, in input arguments below:
         max_bin_index, joint_prob = _get_max_bin_index_and_joint_prob(remainder=remainder, cumulative_pattern_indices=cumulative_pattern_indices, bin_layer=bin_layer)
 
-        if rf_index_for_debug == 104:
-            print(bin_layer, joint_prob, (bin_layer + 1) * joint_prob)
+        #if rf_index_for_debug == 51:
+        #    print(bin_layer, joint_prob, (bin_layer + 1) * joint_prob)
 
-        if np.isnan(joint_prob):
+        if np.isnan(joint_prob):  #  or bin_layer == 0:  FIX HACK! bin_layer==0 returns higher values...
             time_integral = 0
         else:
             time_integral = (bin_layer + 1) * joint_prob
 
         #if time_integral < last_time_integral:
-        #    # TODO THIS IS WRONG!!! actually this function can go up and down, need to look at max over all samples!!!
+        #    # THIS IS WRONG!!! actually this function can go up and down, need to look at max over all samples!!!
         #    break
 
         cumulative_pattern_indices[bin_layer] = max_bin_index
@@ -265,13 +265,13 @@ def _get_best_pattern(remainder, rf_index_for_debug=None):
 
     # TODO is this the right bin? off by one? verify
     print("    best pattern size: ", bin_layer, ', occurence prob: ', cumulative_prob[bin_layer], ', num occurences: ', int(cumulative_prob[bin_layer] * remainder.shape[0]))
-    best_pattern = cumulative_pattern_indices[0:bin_layer]
+    best_pattern = cumulative_pattern_indices[0:(bin_layer + 1)]
     return best_pattern
 
 
 def get_sparse_features(arr):
 
-    num_rfs = 200
+    num_rfs = 400
     feature_len = arr.shape[1]
 
     remainder = arr.copy()
@@ -303,7 +303,7 @@ def main():
     print('loading file...')
     print()
 
-    arr = np.loadtxt('table_i.txt')
+    arr = np.loadtxt('table_i_800_video.txt')
     print('table_i shape:', arr.shape)
     print()
 
