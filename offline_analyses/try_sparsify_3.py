@@ -140,7 +140,192 @@ def make_im(input_arrays):
     return tmp_im
 
 
-def _get_max_bin_index_and_joint_prob(remainder, cumulative_pattern_indices, bin_layer):
+def _get_matching_rows(data_set, pattern_exp):
+    '''
+
+    :param data_set:
+    :param pattern_exp: expanded binary pattern (not indices)
+    :return:
+    '''
+
+    # if pattern_exp has no bins; i.e. zero-pattern; match to all rows
+    if np.count_nonzero(pattern_exp) == 0:
+        matching_row_indices = np.arange(data_set.shape[0]).astype(np.int)
+        pattern_value = 0
+    else:
+
+        # main rule: select RF for frame as long as net reduction of remainder; i.e. most of the pattern is effective
+
+        # total number of bins where (pattern == 1 && remainder == 1), per data_set input pattern row
+        match_sum = np.sum(np.multiply(data_set, pattern_exp), axis=1)
+
+        # total number of bins of pattern
+        pattern_sum = np.sum(pattern_exp)
+
+        # match if match_sum > pattern_sum / 2; in this case the RF has more bins that reduce the remainder than not
+        # we don't care at all about bins where pattern is zero; we care about bins where:
+        #   (pattern == 1 && remainder == 1)
+        #   (pattern == 1 && remainder == 0)
+        # we say pattern is a "match" if most (more than half) of the pattern has remainder == 1 on this frame
+
+        matching_row_indices = np.nonzero(match_sum > pattern_sum / 2)[0]
+
+        # old, more strict rule:
+        # prev_matched_rows = np.nonzero(np.equal(match_sum, pattern_sum))[0]
+
+        # TODO DEFINE per pattern row in data set, and then sum
+        pattern_value = np.sum((match_sum - pattern_sum / 2)[matching_row_indices])
+
+    return matching_row_indices, pattern_value
+
+
+def _get_best_add_bin_index(current_pattern_exp, current_pattern_match_rows, remainder):
+    '''
+
+    get the "best" bin index to add to current_pattern_exp
+
+    :param current_pattern_exp: expanded binary pattern
+    :param remainder: data set
+    :return:
+    '''
+
+    # subtract current_pattern_exp from matched rows of remainder and set negatives to zero
+    # (or zero out all ones of current pattern in current matched rows)
+    rem_tmp = remainder.copy()
+
+    if np.count_nonzero(current_pattern_exp) > 0:
+        # TODO is this still right? reduce set to what already matched? this is not a given now
+        # Is it not the case that, with a new bin, new additional rows might match when you add a bin? then this whole conditional may not be accurate here...
+        # we are assuming so but this might be overly limiting; exhaustive search would be running _get_matching_rows on every possible additional bin candidate, instead of just getting max
+        rem_tmp = rem_tmp[current_pattern_match_rows, :]
+
+        cumulative_pattern_indices = np.nonzero(current_pattern_exp)[0]
+        rem_tmp[:, cumulative_pattern_indices.astype(np.int)] = 0
+
+    # (3) find max prob bin in remainder copy after zeroing out above
+    sum_bins = np.sum(rem_tmp, axis=0)
+    max_bin_index = np.argmax(sum_bins)
+
+    # find max bin
+
+    # return max bin
+    return max_bin_index
+
+
+def _get_best_pattern(remainder, rf_index_for_debug=None):
+    '''
+
+    perfect method: i.e. binary pattern must be wholly contained in the input sample
+
+    :param remainder:
+    :return:
+    '''
+
+    num_bins_per_pixel = 6
+    input_im_dim = 16
+
+    feature_len = remainder.shape[1]
+
+    assert feature_len == num_bins_per_pixel * input_im_dim * input_im_dim
+
+    max_pattern_bins = input_im_dim * input_im_dim
+
+    cumulative_pattern_exp = np.zeros(feature_len)
+    cumulative_pattern_indices = []
+    cumulative_pattern_values = np.zeros(max_pattern_bins)
+    cumulative_matching_rows, pattern_value = _get_matching_rows(data_set=remainder, pattern_exp=cumulative_pattern_exp)
+
+    assert cumulative_matching_rows.shape[0] == remainder.shape[0]  # all rows should match for zero-pattern
+    assert pattern_value == 0  # pattern value should be zero for zero-pattern
+
+    for bin_num in range(1, max_pattern_bins):  # why start at one? zero-pattern is already defined
+        # get next max bin given cumulative_matching_rows from previous iteration
+        max_bin_index = _get_best_add_bin_index(current_pattern_exp=cumulative_pattern_exp, current_pattern_match_rows=cumulative_matching_rows, remainder=remainder)
+
+        # update cumulative_pattern_exp, cumulative_pattern_indices
+        cumulative_pattern_indices.append(max_bin_index)  # for being able to pick max pattern at the end
+        cumulative_pattern_exp[max_bin_index] = 1
+
+        # get new matching rows and value
+        # cumulative_pattern_values, cumulative_matching_rows
+        cumulative_matching_rows, pattern_value = _get_matching_rows(data_set=remainder, pattern_exp=cumulative_pattern_exp)
+        cumulative_pattern_values[bin_num] = pattern_value
+
+    # TODO ensure not off by one!
+    best_pattern_length = np.argmax(cumulative_pattern_values)
+    best_pattern = np.array(cumulative_pattern_indices)[0:best_pattern_length + 1].astype(np.int)
+
+    # return indices of best pattern
+    return best_pattern
+
+
+def get_sparse_features(arr):
+
+    num_rfs = 200
+    feature_len = arr.shape[1]
+
+    remainder = arr.copy()
+    sparse_arr = np.zeros((num_rfs, feature_len))
+
+    for k in range(num_rfs):
+        print()
+        print('Finding best pattern for RF: ', k)
+        # get "best pattern" from remainder using iterative greedy max prob
+
+        best_pattern = _get_best_pattern(remainder, rf_index_for_debug=k)
+        best_pattern_exp = np.zeros(remainder.shape[1])
+        best_pattern_exp[best_pattern.astype(np.int)] = 1
+
+        # set "best pattern" as this row of sparse arr
+        sparse_arr[k, :] = best_pattern_exp[:]
+
+        # subtract "best pattern" from remainder where present
+
+        matching_rows, _ = _get_matching_rows(data_set=remainder, pattern_exp=best_pattern_exp)
+
+        print('   num matched rows: ', len(matching_rows))
+
+        for matched_row in list(matching_rows):
+            remainder[matched_row, best_pattern.astype(np.int)] = 0
+            # consider later: do we need to worry about -1 introduced above if it was a subtraction and not a zeroing?
+
+        if k%10 == 0:
+            im = make_im(sparse_arr)
+            cv2.imshow('RFs', im)
+        cv2.waitKey(1)
+
+    return sparse_arr
+
+
+def main():
+    print()
+    print('loading file...')
+    print()
+
+    arr = np.loadtxt('table_i_800.txt')
+    print('table_i shape:', arr.shape)
+    print()
+
+    sparse_arr = get_sparse_features(arr=arr)
+
+    im_orig = make_im(arr)
+    im = make_im(sparse_arr)
+
+    cv2.imshow('orig', im_orig)
+    cv2.imshow('RFs', im)
+    cv2.waitKey(0)
+
+
+if __name__ == '__main__':
+    main()
+
+
+
+
+
+
+
+def DEPRECATED_get_max_bin_index_and_joint_prob(remainder, cumulative_pattern_indices, bin_layer):
     '''
 
     find max bin and its joint prob based with cumulative pattern being present in remainder, excluding any bins in cumulative pattern already
@@ -198,7 +383,7 @@ def _get_max_bin_index_and_joint_prob(remainder, cumulative_pattern_indices, bin
     return max_bin_index, joint_prob
 
 
-def _get_pattern_value(bin_layer, joint_prob, cumulative_pattern_indices, cumulative_prob, remainder):
+def DEPRECATED_get_pattern_value(bin_layer, joint_prob, cumulative_pattern_indices, cumulative_prob, remainder):
     '''
 
     :param bin_layer: total number of bins in pattern
@@ -206,7 +391,7 @@ def _get_pattern_value(bin_layer, joint_prob, cumulative_pattern_indices, cumula
     :return:
     '''
 
-    allow_overlap = ALLOW_OVERLAP
+    allow_overlap = True
 
     if allow_overlap:
         pass
@@ -214,8 +399,8 @@ def _get_pattern_value(bin_layer, joint_prob, cumulative_pattern_indices, cumula
         # expectation is this allows pattern to be larger and some noise tolerance
         # should this still be done in the remainder that's left after previous patterns are subtracted out? for now yes; later we can switch to the per-bin method instead of per-rf where we don't need to do this
 
+    else:  # deprecated
 
-    else:
         # simple time integral method:
         # assuming pattern only used in reconstruction in "perfect" case where entire pattern is wholly in the input:
 
@@ -225,113 +410,3 @@ def _get_pattern_value(bin_layer, joint_prob, cumulative_pattern_indices, cumula
             time_integral = (bin_layer + 1) * joint_prob
 
         return time_integral
-
-
-def _get_best_pattern(remainder, rf_index_for_debug=None):
-    '''
-
-    perfect method: i.e. binary pattern must be wholly contained in the input sample
-
-    :param remainder:
-    :return:
-    '''
-
-    num_bins_per_pixel = 6
-    input_im_dim = 16
-
-    feature_len = remainder.shape[1]
-
-    assert feature_len == num_bins_per_pixel * input_im_dim * input_im_dim
-
-    # find max prob bins, and cumulative prob at each additional bin
-    # cutoff at max integral (cumulative prob * cumulative pattern size)
-
-    max_pattern_bins = input_im_dim * input_im_dim
-    cumulative_pattern_indices = np.zeros(max_pattern_bins)
-    cumulative_prob = np.zeros(max_pattern_bins)
-    pattern_values = np.zeros(max_pattern_bins)
-
-    for bin_layer in range(max_pattern_bins):
-        # find max bin and its joint prob based with cumulative pattern being present in remainder, excluding any bins in cumulative pattern already
-        # note that cumulative_pattern_indices are only valid up to index: bin_layer-1, in input arguments below:
-        max_bin_index, joint_prob = _get_max_bin_index_and_joint_prob(remainder=remainder, cumulative_pattern_indices=cumulative_pattern_indices, bin_layer=bin_layer)
-
-        pattern_value = _get_pattern_value(bin_layer=bin_layer,
-                                           joint_prob=joint_prob,
-                                           cumulative_pattern_indices=cumulative_pattern_indices,
-                                           cumulative_prob=cumulative_prob,
-                                           remainder=remainder)
-
-        cumulative_pattern_indices[bin_layer] = max_bin_index
-        cumulative_prob[bin_layer] = joint_prob
-        pattern_values[bin_layer] = pattern_value
-
-    # TODO is this the right bin? off by one? verify
-    #print(pattern_values)
-    bin_layer = np.argmax(pattern_values)
-
-    # TODO is this the right bin? off by one? verify
-    print("    best pattern size: ", bin_layer, ', occurence prob: ', cumulative_prob[bin_layer], ', num occurences: ', int(cumulative_prob[bin_layer] * remainder.shape[0]))
-    best_pattern = cumulative_pattern_indices[0:(bin_layer + 1)]
-    return best_pattern
-
-
-def get_sparse_features(arr):
-
-    num_rfs = 200
-    feature_len = arr.shape[1]
-
-    remainder = arr.copy()
-    sparse_arr = np.zeros((num_rfs, feature_len))
-
-    for k in range(num_rfs):
-        print()
-        print('Finding best pattern for RF: ', k)
-        # get "best pattern" from remainder using iterative greedy max prob
-        best_pattern = _get_best_pattern(remainder, rf_index_for_debug=k)
-        best_pattern_exp = np.zeros(remainder.shape[1])
-        best_pattern_exp[best_pattern.astype(np.int)] = 1
-
-        # set "best pattern" as this row of sparse arr
-        sparse_arr[k, :] = best_pattern_exp[:]
-
-        # subtract "best pattern" from remainder where present
-
-        # TODO fix for ALLOW_OVERLAP case !!!!!!!!!!!!!!
-        ==
-
-        match_sum = np.sum(np.multiply(remainder, best_pattern_exp), axis=1)
-        prev_matched_rows = np.nonzero(np.equal(match_sum, np.sum(best_pattern_exp)))[0]
-        for matched_row in list(prev_matched_rows):
-            remainder[matched_row, best_pattern.astype(np.int)] = 0
-        #print(prev_matched_rows)
-
-        if k%10 == 0:
-            im = make_im(sparse_arr)
-            cv2.imshow('RFs', im)
-        cv2.waitKey(1)
-
-    return sparse_arr
-
-def main():
-    print()
-    print('loading file...')
-    print()
-
-    arr = np.loadtxt('table_i_800.txt')
-    print('table_i shape:', arr.shape)
-    print()
-
-    sparse_arr = get_sparse_features(arr=arr)
-
-    im_orig = make_im(arr)
-    im = make_im(sparse_arr)
-
-    cv2.imshow('orig', im_orig)
-    cv2.imshow('RFs', im)
-    cv2.waitKey(0)
-
-
-
-if __name__ == '__main__':
-    main()
