@@ -43,6 +43,14 @@ class TwoStageSeqNNBrain(object):
         #   hyperlayer_1 has WTA layers with num_rf: [10, 10, 10]
         self.num_rf_per_hl = params['num_rf_per_hl']  # TODO np.array([20, 10])
 
+        self.rfs_load_files = params['rfs_load_files']
+        self.rfs_load_times = params['rfs_load_times']
+
+        # cuda table params
+        self.cuda_table_rows = params['cuda_table_rows']
+        self.cuda_table_i_save_times = params['cuda_table_i_save_times']  # : 200000,  # saves cuda_table.table_i matrix to text file
+        self.cuda_table_i_save_files = params['cuda_table_i_save_files']
+
         # number of iterations per input (fixed iterative k in k-WTA)
         self.num_iter = params['num_iter_per_input']  # TODO one number (all hyperlayers); can theoretically be more than RFs but probably want less
 
@@ -83,23 +91,12 @@ class TwoStageSeqNNBrain(object):
 
         # ************ derived parameters ************
 
-        # CUDA TABLE
-
-        input_state_dim = self.input_im_dim * self.input_im_dim * self.bins_per_pixel
-
-        self.cuda_table_I = CudaTable(num_entries=self.num_rf_per_hl[0],
-                                      input_dim=input_state_dim)
-        self.init_I_row_num = None
+        self.num_hl = len(self.num_rf_per_hl)
 
         self.num_row_changes_for_disp = 0
         self.frames_since_row_change_disp = 0
 
-        self.cuda_table_i_save_time = params['cuda_table_i_save_time']  # : 200000,  # saves cuda_table.table_i matrix to text file
-        self.cuda_table_i_save_file = params['cuda_table_i_save_file']
-
         # OTHER
-
-        self.num_hl = len(self.num_rf_per_hl)
 
         for hl in range(self.num_hl):
             assert self.learning_off_time_per_hl[hl] < max_time
@@ -118,6 +115,7 @@ class TwoStageSeqNNBrain(object):
         self.mean_rec_error = []
         self.predict_weights = []
 
+        self.rf_weights = []
         self.input_weights = []
         self.output_weights = []
         self.prob_weights = []
@@ -130,6 +128,9 @@ class TwoStageSeqNNBrain(object):
         self.predict_error_reference = []
         self.mean_predict_error = []
         self.mean_predict_error_reference = []
+
+        self.cuda_tables = []
+        self.init_I_row_nums = []
 
         hl_start_time = 0
         hl_input_state_dim = self.input_im_dim * self.input_im_dim * self.bins_per_pixel
@@ -161,21 +162,32 @@ class TwoStageSeqNNBrain(object):
             self.rec_error.append(np.zeros(max_time))
             self.mean_rec_error.append(np.zeros(max_time))
 
-            input_weights = np.zeros((self.num_rf_per_hl[hl], hl_input_state_dim))
-            print('    adding input weights for hyperlayer:', hl, ', of shape (num rf per hl, input dim):', input_weights.shape)
-            self.input_weights.append(input_weights)
+            rf_weights = np.zeros((self.num_rf_per_hl[hl], hl_input_state_dim))
+            print('    adding rf weights for hyperlayer:', hl, ', of shape (num rf per hl, input dim):', rf_weights.shape)
+            self.rf_weights.append(rf_weights)
 
-            output_weights = np.zeros((self.num_rf_per_hl[hl], hl_input_state_dim))
-            print('    adding output weights for hyperlayer:', hl, ', of shape (num rf per hl, input dim):', output_weights.shape)
-            self.output_weights.append(output_weights)
+            # CUDA TABLE
+            input_state_dim = self.input_im_dim * self.input_im_dim * self.bins_per_pixel
+            self.cuda_tables.append(CudaTable(num_entries=self.cuda_table_rows[hl],
+                                              input_dim=input_state_dim))
+            self.init_I_row_nums.append(None)
 
-            prob_weights = np.zeros((self.num_rf_per_hl[hl], hl_input_state_dim))
-            print('    adding prob weights for hyperlayer:', hl, ', of shape (num rf per hl, input dim):', prob_weights.shape)
-            self.prob_weights.append(prob_weights)
-
-            active_prob_weights = np.zeros((self.num_rf_per_hl[hl], hl_input_state_dim))
-            print('    adding active prob weights for hyperlayer:', hl, ', of shape (num rf per hl, input dim):', active_prob_weights.shape)
-            self.active_prob_weights.append(active_prob_weights)
+            #
+            # input_weights = np.zeros((self.num_rf_per_hl[hl], hl_input_state_dim))
+            # print('    adding input weights for hyperlayer:', hl, ', of shape (num rf per hl, input dim):', input_weights.shape)
+            # self.input_weights.append(input_weights)
+            #
+            # output_weights = np.zeros((self.num_rf_per_hl[hl], hl_input_state_dim))
+            # print('    adding output weights for hyperlayer:', hl, ', of shape (num rf per hl, input dim):', output_weights.shape)
+            # self.output_weights.append(output_weights)
+            #
+            # prob_weights = np.zeros((self.num_rf_per_hl[hl], hl_input_state_dim))
+            # print('    adding prob weights for hyperlayer:', hl, ', of shape (num rf per hl, input dim):', prob_weights.shape)
+            # self.prob_weights.append(prob_weights)
+            #
+            # active_prob_weights = np.zeros((self.num_rf_per_hl[hl], hl_input_state_dim))
+            # print('    adding active prob weights for hyperlayer:', hl, ', of shape (num rf per hl, input dim):', active_prob_weights.shape)
+            # self.active_prob_weights.append(active_prob_weights)
 
             if hl < self.num_hl - 1:
                 # next layer's input state dim
@@ -186,7 +198,7 @@ class TwoStageSeqNNBrain(object):
                 self.mean_predict_error.append(np.zeros(max_time))
                 self.mean_predict_error_reference.append(np.zeros(max_time))
 
-        self.weights = [None, None]  #self.output_weights
+        self.weights = self.rf_weights
 
         print()
         print('Initialized!')
@@ -378,6 +390,28 @@ class TwoStageSeqNNBrain(object):
 
         self.t += 1
 
+
+    def _get_active_rfs(self, rf_weights, input_row):
+        '''
+
+        :param rf_weights:
+        :param remainder:
+        :return:
+        '''
+
+        match_sums = np.sum(np.multiply(rf_weights, input_row), axis=1)
+        weights_sums = np.sum(rf_weights, axis=1)
+
+        # TODO this is a hack!
+        no_display_first_rf = 0
+        if no_display_first_rf:
+            match_sums[0] = -1
+
+        active_rf_indices = np.nonzero(np.greater(match_sums, weights_sums * 0.5))[0]
+        #print(len(active_rf_indices))
+        return active_rf_indices
+
+
     def _process_hyperlayer(self, hl_input, hl):
         assert hl_input.shape[0] == 1
         assert hl_input.shape[1] > 0
@@ -386,45 +420,55 @@ class TwoStageSeqNNBrain(object):
 
         input_feature_len = hl_input.shape[1]
 
-        # TODO we should set these
         remainder = hl_input.copy()
         reconstruction = np.zeros((1, input_feature_len))
 
         hl_output = np.zeros(self.num_rf_per_hl[hl])
 
-        if hl == 0:
+        input_state = hl_input.flatten().astype(np.float32)
 
-            # CUDA TABLE
+        dists = self.cuda_tables[hl].query(query_input=input_state)
+        # I_index = np.argmin(dists)
 
-            input_state = hl_input.flatten().astype(np.float32)
+        row_replaced = self._learn_table(cuda_table_I=self.cuda_tables[hl], dists=dists, input_state=input_state, hl=hl)  # hl only needed for init_I_row_nums
 
-            dists = self.cuda_table_I.query(query_input=input_state)
-            # I_index = np.argmin(dists)
+        if row_replaced:
+            self.num_row_changes_for_disp += 1
+        self.frames_since_row_change_disp += 1
 
-            row_replaced = self._learn_table(dists=dists, input_state=input_state)
+        # TODO need operation of rf weights here, if after load time! i.e. set hl_output, remainder, reconstruction
+        # TODO import necessary functions from try_sparsify_3.py, dont copy
+        # does this have to be in sequence or can we do it in parallel over RFs and iterative remainder?
+        active_rf_indices = self._get_active_rfs(rf_weights=self.rf_weights[hl], input_row=hl_input.copy())
 
-            if row_replaced:
-                self.num_row_changes_for_disp += 1
-            self.frames_since_row_change_disp += 1
+        hl_output[active_rf_indices] = 1
+        reconstruction[0, :] = np.sum(self.rf_weights[hl][active_rf_indices, :], axis=0)[:]
+        reconstruction[reconstruction > 1] = 1
 
-            # OTHER
+        remainder = hl_input - reconstruction
+        remainder[remainder < 0] = 0
 
-            self.last_remainder_im = remainder.copy()
-            self.last_reconstruction_im = reconstruction.copy()
+        self.last_remainder_im = remainder.copy()
+        self.last_reconstruction_im = reconstruction.copy()
 
-            self.weights[0] = self.cuda_table_I.table_i.copy()
+        # load RF weights from file at right time
+        if self.t == self.rfs_load_times[hl]:
+            self.rf_weights[hl] = np.loadtxt(self.rfs_load_files[hl])
 
-            if self.t == self.cuda_table_i_save_time:
-                print()
-                print('************** SAVING CUDA TABLE I TO FILE **************')
-                print()
+        if self.t == self.cuda_table_i_save_times[hl]:
+            print()
+            print('************** SAVING CUDA TABLE I TO FILE **************')
+            print()
 
-                np.savetxt(self.cuda_table_i_save_file, self.weights[0])
+            np.savetxt(self.cuda_table_i_save_files[hl], self.cuda_tables[hl].table_i.copy())
+
+        # for debugging cuda table:
+        # self.weights[0] = self.cuda_table_I.table_i.copy()
 
         return hl_output
 
 
-    def _learn_table(self, dists, input_state):
+    def _learn_table(self, cuda_table_I, dists, input_state, hl):
         '''
 
         :param dists:
@@ -444,28 +488,28 @@ class TwoStageSeqNNBrain(object):
         new_min_ind = sorted_dist_indices[0]
         new_min_dist = dists[new_min_ind]
 
-        if self.init_I_row_num is None:
-            self.init_I_row_num = 0
+        if self.init_I_row_nums[hl] is None:
+            self.init_I_row_nums[hl] = 0
 
-        if self.init_I_row_num < self.cuda_table_I.get_num_rows():
+        if self.init_I_row_nums[hl] < cuda_table_I.get_num_rows():
             # necessary so dist matrix helper is not so slow at start
-            dists[self.init_I_row_num] = np.inf
+            dists[self.init_I_row_nums[hl]] = np.inf
             try:
-                self.cuda_table_I.set_matrix_row(row_index=self.init_I_row_num,
-                                                 row_input=input_state,
-                                                 row_to_table_dists=dists,
-                                                 fast_init=True)
+                cuda_table_I.set_matrix_row(row_index=self.init_I_row_nums[hl],
+                                            row_input=input_state,
+                                            row_to_table_dists=dists,
+                                            fast_init=True)
             except AssertionError:
                 print('\nError! Invalid GPU data type. input_state.dtype: ' + str(input_state.dtype) + '\n')
                 raise
 
             row_replaced = True
-            self.init_I_row_num += 1
+            self.init_I_row_nums[hl] += 1
         else:
-            if not self.cuda_table_I.post_init_done:
-                self.cuda_table_I.post_init()
+            if not cuda_table_I.post_init_done:
+                cuda_table_I.post_init()
 
-            table_min_dist, table_min_dist_r, table_min_dist_c = self.cuda_table_I.get_min_dist()
+            table_min_dist, table_min_dist_r, table_min_dist_c = cuda_table_I.get_min_dist()
 
             if new_min_dist > table_min_dist:
                 # minimum distance of new row to current rows is greater than current minimum row-row distance
@@ -477,9 +521,9 @@ class TwoStageSeqNNBrain(object):
                 dists[r_r_ind] = np.inf
 
                 # replace the current min dist row, with the new row
-                self.cuda_table_I.set_matrix_row(row_index=r_r_ind,
-                                                 row_input=input_state,
-                                                 row_to_table_dists=dists)
+                cuda_table_I.set_matrix_row(row_index=r_r_ind,
+                                            row_input=input_state,
+                                            row_to_table_dists=dists)
 
                 row_replaced = True
 

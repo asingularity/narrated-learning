@@ -261,7 +261,7 @@ def _get_best_pattern(remainder, rf_index_for_debug=None):
 
 def get_sparse_features(arr):
 
-    num_rfs = 200
+    num_rfs = 80
     feature_len = arr.shape[1]
 
     remainder = arr.copy()
@@ -307,6 +307,7 @@ def main():
     print()
 
     sparse_arr = get_sparse_features(arr=arr)
+    np.savetxt('rfs_balls_80.txt', sparse_arr)
 
     im_orig = make_im(arr)
     im = make_im(sparse_arr)
