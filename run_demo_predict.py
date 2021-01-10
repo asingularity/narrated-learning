@@ -144,9 +144,9 @@ def get_brain_params():
         'num_rf_per_hl': np.array([80]),  # this needs to match below file, can we avoid duplicating this parameter? at least needs assert
         'rfs_load_files': ['rfs_balls_80.txt'],  # waits for RFs to exist in this file
         'rfs_load_times': [0],  # set to longer if running analysis in-line after cuda table write time below
-        'cuda_table_rows': np.array([800]),  # per hl also
+        'cuda_table_rows': np.array([1600]),  # per hl also
         'cuda_table_i_save_times': np.array([200000]),  # saves cuda_table.table_i matrix to text file
-        'cuda_table_i_save_files': ['table_i_800_tmp.txt'],
+        'cuda_table_i_save_files': ['table_i_tmp.txt'],
         'input_num_time_steps_per_hl': np.array([1]),  #, 3]),
         'input_delta_time_steps_per_hl': np.array([1]),  #, 5]),
         'predict_ahead_time': 5,

@@ -302,7 +302,7 @@ def main():
     print('loading file...')
     print()
 
-    arr = np.loadtxt('table_i_800.txt')
+    arr = np.loadtxt('table_i_1600.txt')
     print('table_i shape:', arr.shape)
     print()
 

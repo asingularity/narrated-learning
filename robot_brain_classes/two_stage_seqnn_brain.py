@@ -403,7 +403,7 @@ class TwoStageSeqNNBrain(object):
         weights_sums = np.sum(rf_weights, axis=1)
 
         # TODO this is a hack!
-        no_display_first_rf = 0
+        no_display_first_rf = 1
         if no_display_first_rf:
             match_sums[0] = -1
 
