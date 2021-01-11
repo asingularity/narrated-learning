@@ -103,7 +103,7 @@ class TwoStageSeqNNBrain(object):
             assert self.learning_off_time_per_hl[hl] > self.start_time_per_hl[hl]
 
         for hl in range(1, self.num_hl):
-            assert self.start_time_per_hl[hl] > self.start_time_per_hl[hl - 1]
+            # assert self.start_time_per_hl[hl] > self.start_time_per_hl[hl - 1]
             assert self.num_rf_per_hl[hl] % 10 == 0, 'num rfs must be divisible by 10! for plotting purposes'
 
         assert len(self.input_time_steps_per_hl) == self.num_hl
@@ -167,9 +167,9 @@ class TwoStageSeqNNBrain(object):
             self.rf_weights.append(rf_weights)
 
             # CUDA TABLE
-            input_state_dim = self.input_im_dim * self.input_im_dim * self.bins_per_pixel
+
             self.cuda_tables.append(CudaTable(num_entries=self.cuda_table_rows[hl],
-                                              input_dim=input_state_dim))
+                                              input_dim=hl_input_state_dim))
             self.init_I_row_nums.append(None)
 
             #
@@ -403,7 +403,7 @@ class TwoStageSeqNNBrain(object):
         weights_sums = np.sum(rf_weights, axis=1)
 
         # TODO this is a hack!
-        no_display_first_rf = 1
+        no_display_first_rf = 0
         if no_display_first_rf:
             match_sums[0] = -1
 
@@ -436,24 +436,33 @@ class TwoStageSeqNNBrain(object):
             self.num_row_changes_for_disp += 1
         self.frames_since_row_change_disp += 1
 
-        # TODO need operation of rf weights here, if after load time! i.e. set hl_output, remainder, reconstruction
-        # TODO import necessary functions from try_sparsify_3.py, dont copy
-        # does this have to be in sequence or can we do it in parallel over RFs and iterative remainder?
-        active_rf_indices = self._get_active_rfs(rf_weights=self.rf_weights[hl], input_row=hl_input.copy())
+        debug_cuda_table_view = False
+        if debug_cuda_table_view and hl == 1:
+            # for debugging cuda table:
+            # if hl == 1:
+            self.rf_weights[1] = self.cuda_tables[1].table_i.copy()
+        else:
+            # TODO need operation of rf weights here, if after load time! i.e. set hl_output, remainder, reconstruction
+            # TODO import necessary functions from try_sparsify_3.py, dont copy
+            # does this have to be in sequence or can we do it in parallel over RFs and iterative remainder?
+            active_rf_indices = self._get_active_rfs(rf_weights=self.rf_weights[hl], input_row=hl_input.copy())
 
-        hl_output[active_rf_indices] = 1
-        reconstruction[0, :] = np.sum(self.rf_weights[hl][active_rf_indices, :], axis=0)[:]
-        reconstruction[reconstruction > 1] = 1
+            hl_output[active_rf_indices] = 1
+            reconstruction[0, :] = np.sum(self.rf_weights[hl][active_rf_indices, :], axis=0)[:]
+            reconstruction[reconstruction > 1] = 1
 
-        remainder = hl_input - reconstruction
-        remainder[remainder < 0] = 0
+            remainder = hl_input - reconstruction
+            remainder[remainder < 0] = 0
 
-        self.last_remainder_im = remainder.copy()
-        self.last_reconstruction_im = reconstruction.copy()
+
+        if hl == 0:
+            self.last_remainder_im = remainder.copy()
+            self.last_reconstruction_im = reconstruction.copy()
 
         # load RF weights from file at right time
         if self.t == self.rfs_load_times[hl]:
-            self.rf_weights[hl] = np.loadtxt(self.rfs_load_files[hl])
+            if self.rfs_load_files[hl] is not None:
+                self.rf_weights[hl] = np.loadtxt(self.rfs_load_files[hl])
 
         if self.t == self.cuda_table_i_save_times[hl]:
             print()
@@ -461,9 +470,6 @@ class TwoStageSeqNNBrain(object):
             print()
 
             np.savetxt(self.cuda_table_i_save_files[hl], self.cuda_tables[hl].table_i.copy())
-
-        # for debugging cuda table:
-        # self.weights[0] = self.cuda_table_I.table_i.copy()
 
         return hl_output
 
@@ -529,113 +535,6 @@ class TwoStageSeqNNBrain(object):
 
         return row_replaced
 
-
-    def _process_hyperlayer_MAX_PROB_PATTERN(self, hl_input, hl):
-
-        assert hl_input.shape[0] == 1
-        assert hl_input.shape[1] > 0
-
-        assert self.num_rf_per_hl[hl] / self.num_iter[hl] == int( self.num_rf_per_hl[hl] / self.num_iter[hl] )
-
-        input_feature_len = hl_input.shape[1]
-
-        # TODO we should set these
-        remainder = hl_input.copy()
-        reconstruction = np.zeros((1, input_feature_len))
-
-        hl_output = np.zeros(self.num_rf_per_hl[hl])
-
-        # as first test, exclude background entirely (non-event), so we don't need competition solved
-        #   how easiest to do this hack? maybe here, set all background-bins to zero for binned pixels (hack)
-
-        if hl == 0:
-
-            # ENABLE FOR BALL INPUT
-            # TODO this zeros out background for ball input
-            hl_input[0, 1::6] = 0
-
-            # print(np.nonzero(hl_input))
-
-            # need to expand initialization of prob
-            # need multi-layer prob, where number of layers is max pattern size
-            # assume only one unit for now
-
-            max_pattern_bins = 16 * 16
-            num_rf = 10
-
-            if self.tmp_w is None:
-                # as on board:
-                # self.tmp_w = np.zeros((hl_input.shape[1], max_pattern_bins))
-                # to follow our conventions:
-                self.tmp_w = []
-                for rf_index in range(num_rf):
-                    self.tmp_w.append(np.zeros((max_pattern_bins, hl_input.shape[1])))
-
-            cumulative_pattern_weights = np.zeros(hl_input.shape[1])
-
-            for rf_index in range(num_rf):
-
-                # print(rf_index, np.count_nonzero(cumulative_pattern))
-                cumulative_pattern = np.zeros(hl_input.shape[1])
-
-                bin_layer_input = hl_input.copy()
-                bin_layer_input = bin_layer_input - cumulative_pattern_weights  #cumulative_pattern
-
-                pattern_weights = np.zeros(hl_input.shape[1])
-                cumulative_prob = 1.0
-
-                #assert np.amin(bin_layer_input) >= 0, (rf_index, np.amin(bin_layer_input))
-                assert np.amax(bin_layer_input) <= 1, (rf_index, np.amax(bin_layer_input))
-
-                bin_layer_input[bin_layer_input < 0] = 0
-
-                for bin_layer in range(max_pattern_bins):
-
-                    max_bin_this_bin_layer = np.argmax(self.tmp_w[rf_index][bin_layer, :])
-
-                    if bin_layer == 0:
-                        pass
-                        # TODO this pegs bin
-                        #max_bin_this_bin_layer = 316
-                        # max_bin_this_bin_layer = 632 - 12 - 1  # - 3
-                        #print(max_bin_this_bin_layer)
-
-                    if self._in_pattern(hl_input, cumulative_pattern):
-                        # update prob
-
-                        # TODO THIS MUST BE SEPARATE BETWEEN RFS!!!
-                        self.tmp_w[rf_index][bin_layer, :] = (1.0 - self.lr_base) * self.tmp_w[rf_index][bin_layer, :] + self.lr_base * bin_layer_input
-
-                        # update cumulative pattern
-                        cumulative_pattern[max_bin_this_bin_layer] = 1
-
-                    bin_layer_input[0, max_bin_this_bin_layer] = 0
-
-                    # update cumulative prob, for display
-                    # for display, remove bias of pattern start prob (first bin layer):
-                    if bin_layer > 0:
-                        cumulative_prob = cumulative_prob * self.tmp_w[rf_index][bin_layer, max_bin_this_bin_layer]
-
-                    # update pattern_weights for display using max at this bin_layer, and cumulative prob (for display)
-                    # TODO later for defining actual output weights, apply a threshold here given pattern size and cumulative prob to optimize time-integral
-                    pattern_weights[max_bin_this_bin_layer] = 1  # cumulative_prob
-
-                # maybe for display, show all bins, but show weight as cumulative prob?
-                self.output_weights[hl][rf_index, :] = pattern_weights[:]
-                # for debugging, show first bin layer prob
-                # self.output_weights[hl][rf_index, :] = self.tmp_w[0, :]
-
-                cumulative_pattern_weights = cumulative_pattern_weights + pattern_weights
-                cumulative_pattern_weights[cumulative_pattern_weights > 1] = 1
-
-        # for display
-        self.weights = self.output_weights
-
-        if hl == 0:
-            self.last_remainder_im = remainder.copy()
-            self.last_reconstruction_im = reconstruction.copy()
-
-        return hl_output
 
     def _in_pattern(self, search_in, search_for):
         '''
@@ -770,6 +669,8 @@ class TwoStageSeqNNBrain(object):
             ims_names_list.append('weights_v, weights_w_' + str(hl))
 
             rec_im, rec_w = self._collapse_binned_columns_to_pixels(arr_exp=self.last_reconstruction_im, num_bins_per_pixel=self.bins_per_pixel)
+
+            #print(self.last_reconstruction_im.shape, self.input_im_dim)
             im0 = rec_im[0, :].reshape((self.input_im_dim, self.input_im_dim))
             im1 = rec_w[0, :].reshape((self.input_im_dim, self.input_im_dim))
 

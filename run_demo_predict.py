@@ -136,21 +136,21 @@ def get_brain_params():
 
     # WTAIterativeBrain
     iterative_brain_params = {
-        'image_dim_display': [int(1400)], #, int(1200)],  # per layer
+        'image_dim_display': [int(1400), int(1400)], #, int(1200)],  # per layer
         'image_dim_NxN_pixels': IM_DIM,
         'learning_rate': LEARN_RATE,
         'bins_per_pixel': 6,
-        'num_iter_per_input': [1],  # , 1],  # only for iterative, not used in determinate
-        'num_rf_per_hl': np.array([80]),  # this needs to match below file, can we avoid duplicating this parameter? at least needs assert
-        'rfs_load_files': ['rfs_balls_80.txt'],  # waits for RFs to exist in this file
-        'rfs_load_times': [0],  # set to longer if running analysis in-line after cuda table write time below
-        'cuda_table_rows': np.array([1600]),  # per hl also
-        'cuda_table_i_save_times': np.array([200000]),  # saves cuda_table.table_i matrix to text file
-        'cuda_table_i_save_files': ['table_i_tmp.txt'],
-        'input_num_time_steps_per_hl': np.array([1]),  #, 3]),
-        'input_delta_time_steps_per_hl': np.array([1]),  #, 5]),
+        'num_iter_per_input': [1, 1],  # , 1],  # only for iterative, not used in determinate
+        'num_rf_per_hl': np.array([80, 240]),  # this needs to match below file, can we avoid duplicating this parameter? at least needs assert
+        'rfs_load_files': ['rfs_balls_80.txt', 'rfs_balls_240_hl_1.txt'],  # waits for RFs to exist in this file
+        'rfs_load_times': [0, 0],  # set to longer if running analysis in-line after cuda table write time below
+        'cuda_table_rows': np.array([1600, 400]),  # per hl also
+        'cuda_table_i_save_times': np.array([200000, 30000]),  # saves cuda_table.table_i matrix to text file
+        'cuda_table_i_save_files': ['table_i_0.txt', 'table_i_1.txt'],
+        'input_num_time_steps_per_hl': np.array([1, 3]),  #, 3]),
+        'input_delta_time_steps_per_hl': np.array([1, 3]),  #, 5]),
         'predict_ahead_time': 5,
-        'start_time_per_hl': np.array([0]),  #, 10000]),  #50000]),
+        'start_time_per_hl': np.array([0, 0]),  #, 10000]),  #50000]),
         'learning_off_time_per_hl': [10000, 5000000],  # 200000, ...  # UNUSED RIGHT NOW!!!
         'delta_t_start_per_wta_group': 5000,
         'plot_interval_seconds': 30,

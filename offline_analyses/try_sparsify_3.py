@@ -212,7 +212,7 @@ def _get_best_add_bin_index(current_pattern_exp, current_pattern_match_rows, rem
     return max_bin_index
 
 
-def _get_best_pattern(remainder, rf_index_for_debug=None):
+def _get_best_pattern(remainder, rf_index_for_debug=None, pixel_input=True):
     '''
 
     perfect method: i.e. binary pattern must be wholly contained in the input sample
@@ -226,7 +226,8 @@ def _get_best_pattern(remainder, rf_index_for_debug=None):
 
     feature_len = remainder.shape[1]
 
-    assert feature_len == num_bins_per_pixel * input_im_dim * input_im_dim
+    if pixel_input:
+        assert feature_len == num_bins_per_pixel * input_im_dim * input_im_dim
 
     max_pattern_bins = input_im_dim * input_im_dim
 
@@ -259,9 +260,8 @@ def _get_best_pattern(remainder, rf_index_for_debug=None):
     return best_pattern
 
 
-def get_sparse_features(arr):
+def get_sparse_features(arr, num_rfs, pixel_input):
 
-    num_rfs = 80
     feature_len = arr.shape[1]
 
     remainder = arr.copy()
@@ -272,7 +272,7 @@ def get_sparse_features(arr):
         print('Finding best pattern for RF: ', k)
         # get "best pattern" from remainder using iterative greedy max prob
 
-        best_pattern = _get_best_pattern(remainder, rf_index_for_debug=k)
+        best_pattern = _get_best_pattern(remainder, rf_index_for_debug=k, pixel_input=pixel_input)
         best_pattern_exp = np.zeros(remainder.shape[1])
         best_pattern_exp[best_pattern.astype(np.int)] = 1
 
@@ -289,7 +289,7 @@ def get_sparse_features(arr):
             remainder[matched_row, best_pattern.astype(np.int)] = 0
             # consider later: do we need to worry about -1 introduced above if it was a subtraction and not a zeroing?
 
-        if k%10 == 0:
+        if k%10 == 0 and pixel_input:
             im = make_im(sparse_arr)
             cv2.imshow('RFs', im)
         cv2.waitKey(1)
@@ -302,15 +302,22 @@ def main():
     print('loading file...')
     print()
 
-    arr = np.loadtxt('table_i_1600.txt')
+    arr = np.loadtxt('table_i_1.txt')
+    # pixel_input = True for hl==0, else False
+    pixel_input = False
+
     print('table_i shape:', arr.shape)
     print()
 
-    sparse_arr = get_sparse_features(arr=arr)
-    np.savetxt('rfs_balls_80.txt', sparse_arr)
+    sparse_arr = get_sparse_features(arr=arr, num_rfs=240, pixel_input=pixel_input)
+    np.savetxt('rfs_balls_240_hl_1.txt', sparse_arr)
 
-    im_orig = make_im(arr)
-    im = make_im(sparse_arr)
+    if pixel_input:
+        im_orig = make_im(arr)
+        im = make_im(sparse_arr)
+    else:
+        im_orig = arr
+        im = sparse_arr
 
     cv2.imshow('orig', im_orig)
     cv2.imshow('RFs', im)
@@ -323,91 +330,3 @@ if __name__ == '__main__':
 
 
 
-
-
-
-def DEPRECATED_get_max_bin_index_and_joint_prob(remainder, cumulative_pattern_indices, bin_layer):
-    '''
-
-    find max bin and its joint prob based with cumulative pattern being present in remainder, excluding any bins in cumulative pattern already
-    note that cumulative_pattern_indices are only valid up to index: bin_layer-1, in input arguments below:
-
-    :param remainder:
-    :param cumulative_pattern_indices:
-    :param bin_layer:
-    :return:
-    '''
-
-    #print()
-    #print('remainder.shape', remainder.shape)
-    #print('cumulative_pattern_indices[0:bin_layer]', cumulative_pattern_indices[0:bin_layer].astype(np.int))
-    #print()
-
-    # (1) find all rows of remainder where current cumulative pattern is present
-    #       current cumulative pattern size: <bin_layer>
-    #           bin_layer 0: pattern size 0
-    #           bin_layer 1: pattern size 1
-
-    cumulative_pattern_exp = np.zeros(remainder.shape[1])
-    if bin_layer > 0:
-
-        # TODO this also has to change for ALLOW_OVERLAP
-        # unclear how; easier to do instead the fixed RFs and leave this file alone
-
-        cumulative_pattern_exp[cumulative_pattern_indices[0:bin_layer].astype(np.int)] = 1
-        match_sum = np.sum(np.multiply(remainder, cumulative_pattern_exp), axis=1)
-        prev_matched_rows = np.nonzero(np.equal(match_sum, bin_layer))[0]
-    else:
-        #pass
-        # all rows are candidate rows, since all rows matched
-        prev_matched_rows = np.arange(remainder.shape[0])
-
-    # (2) zero out current cumulative pattern from those rows, in a remainder copy
-    rem_tmp = remainder.copy()
-
-    if bin_layer > 0:
-        rem_tmp = rem_tmp[prev_matched_rows, :]
-        rem_tmp[:, cumulative_pattern_indices[0:bin_layer].astype(np.int)] = 0
-
-    # (3) find max prob bin in remainder copy after zeroing out above
-    sum_bins = np.sum(rem_tmp, axis=0)
-    max_bin_index = np.argmax(sum_bins)
-
-    occurences = np.amax(sum_bins)
-
-    #if bin_layer > 0:
-    prob_cumulative_pattern = len(prev_matched_rows) / remainder.shape[0]
-    prob_max_bin_given_pattern = occurences / len(prev_matched_rows)
-
-    joint_prob = prob_cumulative_pattern * prob_max_bin_given_pattern
-
-    return max_bin_index, joint_prob
-
-
-def DEPRECATED_get_pattern_value(bin_layer, joint_prob, cumulative_pattern_indices, cumulative_prob, remainder):
-    '''
-
-    :param bin_layer: total number of bins in pattern
-    :param joint_prob: overall prob of this whole pattern being present
-    :return:
-    '''
-
-    allow_overlap = True
-
-    if allow_overlap:
-        pass
-        # assume pattern is used even if it introduces new error, so long as helps reconstruction
-        # expectation is this allows pattern to be larger and some noise tolerance
-        # should this still be done in the remainder that's left after previous patterns are subtracted out? for now yes; later we can switch to the per-bin method instead of per-rf where we don't need to do this
-
-    else:  # deprecated
-
-        # simple time integral method:
-        # assuming pattern only used in reconstruction in "perfect" case where entire pattern is wholly in the input:
-
-        if np.isnan(joint_prob):
-            time_integral = 0
-        else:
-            time_integral = (bin_layer + 1) * joint_prob
-
-        return time_integral
