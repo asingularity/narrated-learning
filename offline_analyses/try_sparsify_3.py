@@ -169,12 +169,11 @@ def _get_matching_rows(data_set, pattern_exp):
         # we say pattern is a "match" if most (more than half) of the pattern has remainder == 1 on this frame
 
         matching_row_indices = np.nonzero(match_sum > pattern_sum / 2)[0]
+        pattern_value = np.sum((match_sum - pattern_sum / 2)[matching_row_indices])
 
         # old, more strict rule:
-        # prev_matched_rows = np.nonzero(np.equal(match_sum, pattern_sum))[0]
-
-        # TODO DEFINE per pattern row in data set, and then sum
-        pattern_value = np.sum((match_sum - pattern_sum / 2)[matching_row_indices])
+        # matching_row_indices = np.nonzero(match_sum == pattern_sum)[0]
+        # pattern_value = len(matching_row_indices) * pattern_sum
 
     return matching_row_indices, pattern_value
 
