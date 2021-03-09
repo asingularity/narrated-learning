@@ -87,7 +87,16 @@ class VideoPlaybackSensor(object):
                     min_dim = min(im_rows, im_cols)
 
                     if self.use_full_frame:
-                        sample_im = gray[0:min_dim, 0:min_dim, :]
+                        # sample_im = gray[0:min_dim, 0:min_dim, :]
+                        # instead of the above, which crops to left, crop to center the view instead:
+                        if gray.shape[0] > min_dim:
+                            start_i = int(0.5 * (gray.shape[0] - min_dim))
+                            end_i = start_i + min_dim
+                            sample_im = gray[start_i:end_i, 0:min_dim, :]
+                        else:
+                            start_i = int(0.5 * (gray.shape[1] - min_dim))
+                            end_i = start_i + min_dim
+                            sample_im = gray[0:min_dim, start_i:end_i, :]
                     else:
                         factor = self.partial_frame_factor  # 8, but tried 4
                         sample_im = gray[mid_pt_r - min_dim / factor:mid_pt_r + min_dim / factor,
@@ -218,7 +227,9 @@ class VideoPlaybackSensor(object):
                 r0 = self.output_image_start_RC[0]
                 c0 = self.output_image_start_RC[1]
                 dim = self.output_image_dim
+                # print(sample_im.shape, 'before')
                 sample_im = sample_im[r0:r0+dim, c0:c0+dim]
+                # print(sample_im.shape, 'after')
             else:
                 assert False, 'Unsupported! output_image_dim does not match image_dim, and no image_start_RC provided!'
 
