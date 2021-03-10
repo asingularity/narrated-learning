@@ -52,9 +52,11 @@ class MultiLayerSeqNNBrain(object):
         self.bins_per_pixel = 6
         self.input_im_dim = params['input_im_dim']
 
+        self.arbitrary_viz_constant = 20  # 60 for 3200 cuda table rows; 10 for 400 cuda table rows
+
         layer_paras = {'input_state_dim': self.input_im_dim * self.input_im_dim * self.bins_per_pixel,
                         'layer_name': '0',
-                        'cuda_table_rows': 3200,
+                        'cuda_table_rows': 1600,
                         'rf_training_times': [20000, 40000, 80000],
                         'input_im_dim': params['input_im_dim'],
                         'num_bins_per_pixel': self.bins_per_pixel}
@@ -95,7 +97,7 @@ class MultiLayerSeqNNBrain(object):
         arr, weights = self._collapse_binned_columns_to_pixels(arr_exp=table_weights,
                                                                num_bins_per_pixel=self.bins_per_pixel)
 
-        arbitrary_constant = 60  # number per column or something like that
+        arbitrary_constant = self.arbitrary_viz_constant  # number per column or something like that
 
         for r_tmp in range(weights.shape[0]):  # per rf
 
@@ -286,7 +288,7 @@ class SingleLayer(object):
         self.sparse_arr = get_sparse_features(arr=self.cuda_table.table_i.copy(), num_rfs=240, pixel_input=True,
                                               input_im_dim=self.input_im_dim, num_bins_per_pixel=self.num_bins_per_pixel)
 
-        self.rfs_im = make_im(self.sparse_arr, num_bins_per_pixel=6, input_im_dim=16)
+        self.rfs_im = make_im(self.sparse_arr, num_bins_per_pixel=self.num_bins_per_pixel, input_im_dim=self.input_im_dim)
 
     def _learn_table(self, cuda_table_I, dists, input_state):
         '''

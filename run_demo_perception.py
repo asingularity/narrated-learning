@@ -27,7 +27,7 @@ from sim_folder_manager import SimFolderManager
 from robot_sensor_classes.video_playback import VideoPlaybackSensor
 
 DISABLE_BRAIN = False  # for testing input by itself; also starts slow display
-RF_IM_DIM = 32
+RF_IM_DIM = 16
 
 def get_sensors_params():
 

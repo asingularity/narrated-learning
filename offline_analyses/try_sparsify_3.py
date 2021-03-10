@@ -284,7 +284,7 @@ def get_sparse_features(arr, num_rfs, pixel_input, num_bins_per_pixel, input_im_
             # consider later: do we need to worry about -1 introduced above if it was a subtraction and not a zeroing?
 
         if k%10 == 0 and pixel_input:
-            im = make_im(sparse_arr)
+            im = make_im(sparse_arr, num_bins_per_pixel=num_bins_per_pixel, input_im_dim=input_im_dim)
             cv2.imshow('RFs', im)
         cv2.waitKey(1)
 
