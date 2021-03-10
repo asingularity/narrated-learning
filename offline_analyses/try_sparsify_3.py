@@ -94,16 +94,13 @@ def _collapse_binned_columns_to_pixels(arr_exp, num_bins_per_pixel):
     return arr, weights
 
 
-def make_im(input_arrays):
-
-    num_bins_per_pixel = 6
-    input_im_dim = 16
+def make_im(input_arrays, num_bins_per_pixel, input_im_dim):
 
     tmp_im_all = None
     tmp_im = None
 
     arr, weights = _collapse_binned_columns_to_pixels(arr_exp=input_arrays,
-                                                      num_bins_per_pixel=6)
+                                                      num_bins_per_pixel=num_bins_per_pixel)
 
     for r_tmp in range(weights.shape[0]):  # per rf
 
@@ -211,7 +208,7 @@ def _get_best_add_bin_index(current_pattern_exp, current_pattern_match_rows, rem
     return max_bin_index
 
 
-def _get_best_pattern(remainder, rf_index_for_debug=None, pixel_input=True):
+def _get_best_pattern(remainder, num_bins_per_pixel, input_im_dim, rf_index_for_debug=None, pixel_input=True):
     '''
 
     perfect method: i.e. binary pattern must be wholly contained in the input sample
@@ -219,9 +216,6 @@ def _get_best_pattern(remainder, rf_index_for_debug=None, pixel_input=True):
     :param remainder:
     :return:
     '''
-
-    num_bins_per_pixel = 6
-    input_im_dim = 16
 
     feature_len = remainder.shape[1]
 
@@ -259,7 +253,7 @@ def _get_best_pattern(remainder, rf_index_for_debug=None, pixel_input=True):
     return best_pattern
 
 
-def get_sparse_features(arr, num_rfs, pixel_input):
+def get_sparse_features(arr, num_rfs, pixel_input, num_bins_per_pixel, input_im_dim):
 
     feature_len = arr.shape[1]
 
@@ -271,7 +265,8 @@ def get_sparse_features(arr, num_rfs, pixel_input):
         print('Finding best pattern for RF: ', k)
         # get "best pattern" from remainder using iterative greedy max prob
 
-        best_pattern = _get_best_pattern(remainder, rf_index_for_debug=k, pixel_input=pixel_input)
+        best_pattern = _get_best_pattern(remainder, rf_index_for_debug=k, pixel_input=pixel_input,
+                                         num_bins_per_pixel=num_bins_per_pixel, input_im_dim=input_im_dim)
         best_pattern_exp = np.zeros(remainder.shape[1])
         best_pattern_exp[best_pattern.astype(np.int)] = 1
 
@@ -308,12 +303,13 @@ def main():
     print('table_i shape:', arr.shape)
     print()
 
-    sparse_arr = get_sparse_features(arr=arr, num_rfs=240, pixel_input=pixel_input)
+    sparse_arr = get_sparse_features(arr=arr, num_rfs=240, pixel_input=pixel_input,
+                                     num_bins_per_pixel=6, input_im_dim=16)
     np.savetxt('rfs_balls_240_hl_1.txt', sparse_arr)
 
     if pixel_input:
-        im_orig = make_im(arr)
-        im = make_im(sparse_arr)
+        im_orig = make_im(arr, num_bins_per_pixel=6, input_im_dim=16)
+        im = make_im(sparse_arr, num_bins_per_pixel=6, input_im_dim=16)
     else:
         im_orig = arr
         im = sparse_arr

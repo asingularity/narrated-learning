@@ -24,6 +24,7 @@ import pickle
 from math import sqrt
 from brain_components_classes.states_history import StatesLimitedHistory
 from cython_eff import compute_eff
+from offline_analyses.try_sparsify_3 import get_sparse_features, make_im
 
 from utils.one_time_messages import OneTimeMessages
 
@@ -51,12 +52,14 @@ class MultiLayerSeqNNBrain(object):
         self.bins_per_pixel = 6
         self.input_im_dim = params['input_im_dim']
 
-        layer_parmas = {}
-        layer_parmas['input_state_dim'] = self.input_im_dim * self.input_im_dim * self.bins_per_pixel
-        layer_parmas['layer_name'] = '0'
-        layer_parmas['cuda_table_rows'] = 3200
+        layer_paras = {'input_state_dim': self.input_im_dim * self.input_im_dim * self.bins_per_pixel,
+                        'layer_name': '0',
+                        'cuda_table_rows': 3200,
+                        'rf_training_times': [20000, 40000, 80000],
+                        'input_im_dim': params['input_im_dim'],
+                        'num_bins_per_pixel': self.bins_per_pixel}
 
-        self.layers = [SingleLayer(params=layer_parmas)]
+        self.layers = [SingleLayer(params=layer_paras)]
 
         self.display_im_dim = 3000
 
@@ -126,12 +129,20 @@ class MultiLayerSeqNNBrain(object):
 
         return cuda_table_im
 
+    def _get_rfs_im(self):
+        return self.layers[0].rfs_im
+
     def get_table_ims(self):
         ims_list = []
         ims_names_list = []
 
         ims_list.append(self._get_cuda_table_im())
         ims_names_list.append('layer_0_cuda_table')
+
+        rfs_im = self._get_rfs_im()
+        if rfs_im is not None:
+            ims_list.append(rfs_im)
+            ims_names_list.append('layer_0_rfs')
 
         return ims_list, ims_names_list
 
@@ -229,11 +240,14 @@ class SingleLayer(object):
         :param params:
         '''
 
+        self.input_im_dim = params['input_im_dim']  # used for sparse features
+        self.num_bins_per_pixel = params['num_bins_per_pixel']  # used for sparse features
+
         self.input_state_dim = params['input_state_dim']
         self.layer_name = params['layer_name']
 
         self.cuda_table_rows = params['cuda_table_rows']
-        self.rf_training_times = [20000, 40000, 80000]  # which frames to train RFs off of cuda table
+        self.rf_training_times = params['rf_training_times']  # which frames to train RFs off of cuda table
 
         self.cuda_table = CudaTable(num_entries=self.cuda_table_rows,
                                     input_dim=self.input_state_dim)
@@ -243,6 +257,9 @@ class SingleLayer(object):
 
         self.num_row_changes_for_disp = 0
         self.frames_since_row_change_disp = 0
+
+        self.sparse_arr = None
+        self.rfs_im = None
 
     def step(self, layer_input):
 
@@ -257,10 +274,19 @@ class SingleLayer(object):
         self.frames_since_row_change_disp += 1
 
         # periodically, re-train RFs using max-bin-append; library from offline_analyses
+        if self.t in self.rf_training_times:
+            self._train_rfs()
 
+        self.t += 1
         layer_output = None
 
         return layer_output
+
+    def _train_rfs(self):
+        self.sparse_arr = get_sparse_features(arr=self.cuda_table.table_i.copy(), num_rfs=240, pixel_input=True,
+                                              input_im_dim=self.input_im_dim, num_bins_per_pixel=self.num_bins_per_pixel)
+
+        self.rfs_im = make_im(self.sparse_arr, num_bins_per_pixel=6, input_im_dim=16)
 
     def _learn_table(self, cuda_table_I, dists, input_state):
         '''
