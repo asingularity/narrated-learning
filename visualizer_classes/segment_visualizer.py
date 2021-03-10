@@ -70,8 +70,10 @@ class SegmentVisualizer(object):
         self.fps_frames += 1
 
     def _display_raycast_image(self, raycast_image):
-        resized_im = cv2.resize(src=raycast_image, dsize=(0, 0), fx=self.scale_camera_factor,
-                                fy=self.scale_camera_factor, interpolation=cv2.INTER_NEAREST)
+        #resized_im = cv2.resize(src=raycast_image, dsize=(0, 0), fx=self.scale_camera_factor,
+        #                        fy=self.scale_camera_factor, interpolation=cv2.INTER_NEAREST)
+
+        resized_im = raycast_image
         cv2.imshow('raycast', resized_im)
 
         # without this, was not always displaying most up to date image

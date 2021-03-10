@@ -26,19 +26,18 @@ from visualizer_classes.segment_visualizer import SegmentVisualizer
 from sim_folder_manager import SimFolderManager
 from robot_sensor_classes.video_playback import VideoPlaybackSensor
 
-IM_DIM = 128  # pixels, width & height
-DISABLE_BRAIN = True  # for testing input by itself; also starts slow display
-
+DISABLE_BRAIN = False  # for testing input by itself; also starts slow display
+RF_IM_DIM = 32
 
 def get_sensors_params():
 
     params_video_playback = {
-        'image_dim': 128,  # video is cropped to square, then resized (scaled) to this square size
-        'output_image_dim': IM_DIM,  # output image dim
-        'output_image_start_RC': (0, 0),
+        'image_dim': 256,  # video is cropped to square, then resized (scaled) to this square size. changing this resets preload of pickle.
+        'output_image_dim': RF_IM_DIM,  # output image dim provided from class; must be smaller than or equal to 'image_dim'. affects how much of the image we actually use
+        'output_image_start_RC': (128 - int(RF_IM_DIM/2), 128 - int(RF_IM_DIM/2)),  # relative to 'image_dim'. affects which subimage of the image we actually use
         'video_dir': '/srv/projects/video-downloads/',
         'video_filename': 'sea-turtles-yLuEx-XH3Uc.mp4',
-        'stop_preload_at_frames': 2 * 60 * 60 * 30,  # None: use whole video
+        'stop_preload_at_frames': 1 * 60 * 60 * 30,  # None: use whole video
         'use_full_frame': True,  # use the whole image
         'partial_frame_factor': 4,  # from center, what factor to use - larger factor ~ smaller part of image
         'return_type': np.float32,  # 32 or 64
@@ -61,6 +60,7 @@ def get_sim_folder_manager_params():
 
 def get_brain_params():
     brain_params = {
+        'input_im_dim': RF_IM_DIM
     }
 
     return brain_params
@@ -105,7 +105,6 @@ def run_demo(demo_components):
         # a = np.dot(np.random.random((200, 200)), np.random.random((200, 200)))
 
         im = robot_sensors.read_input()
-
         if not DISABLE_BRAIN:
             robot_brain.process_input(input_im=im)
 
