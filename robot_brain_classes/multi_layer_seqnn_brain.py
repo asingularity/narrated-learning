@@ -41,6 +41,8 @@ class AnotherBrain(object):
     def __init__(self, params):
         '''
 
+        A simplified version of max-bin-append (try_sparsify_3.py) where we don't try to optimize size / remainder; just find max bins with max bins, not whole RF
+
         :param params:
         '''
 
