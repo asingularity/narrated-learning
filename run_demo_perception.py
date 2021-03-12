@@ -21,7 +21,7 @@ import numpy as np
 random.seed(6)
 np.random.seed(6)
 
-from robot_brain_classes.multi_layer_seqnn_brain import MultiLayerSeqNNBrain
+from robot_brain_classes.multi_layer_seqnn_brain import MultiLayerSeqNNBrain, AnotherBrain
 from visualizer_classes.segment_visualizer import SegmentVisualizer
 from sim_folder_manager import SimFolderManager
 from robot_sensor_classes.video_playback import VideoPlaybackSensor
@@ -37,6 +37,7 @@ def get_sensors_params():
         'output_image_start_RC': (128 - int(RF_IM_DIM/2), 128 - int(RF_IM_DIM/2)),  # relative to 'image_dim'. affects which subimage of the image we actually use
         'video_dir': '/srv/projects/video-downloads/',
         'video_filename': 'sea-turtles-yLuEx-XH3Uc.mp4',
+        #'video_filename': 'seattle-driving-fkps18H3SXY.mp4',
         'stop_preload_at_frames': 1 * 60 * 60 * 30,  # None: use whole video
         'use_full_frame': True,  # use the whole image
         'partial_frame_factor': 4,  # from center, what factor to use - larger factor ~ smaller part of image
@@ -83,7 +84,8 @@ def get_visualizer_params():
 
 def init_demo():
     return {
-        'robot_brain': MultiLayerSeqNNBrain(get_brain_params()),
+        #'robot_brain': MultiLayerSeqNNBrain(get_brain_params()),
+        'robot_brain': AnotherBrain(get_brain_params()),
         'robot_sensors': VideoPlaybackSensor(get_sensors_params()),
         'visualizer': SegmentVisualizer(get_visualizer_params()),
         'sim_folder_manager': SimFolderManager(get_sim_folder_manager_params())

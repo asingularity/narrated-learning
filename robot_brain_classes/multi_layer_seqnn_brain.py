@@ -37,6 +37,206 @@ import matplotlib.pyplot as plt
 from math import log
 
 
+class AnotherBrain(object):
+    def __init__(self, params):
+        '''
+
+        :param params:
+        '''
+
+        # TODO testing this was 24!
+        self.bins_per_pixel = 6
+        self.create_rf_times = [20000, 40000, 80000]
+        self.input_im_dim = params['input_im_dim']
+
+        self.input_state_dim = self.input_im_dim * self.input_im_dim * self.bins_per_pixel
+
+        # for each input bin, track:
+        #   number of times of occurrence
+        #   number of times of co-occurrence with other bins
+        self.occur = np.zeros(self.input_state_dim, np.int)
+
+        self.co_occur = np.zeros((self.input_state_dim, self.input_state_dim), np.int)
+
+        self.rf_im = None
+
+        self.t = 0
+
+    def process_input(self, input_im):
+        '''
+
+        :param input_im:
+        :return:
+        '''
+
+        # pixels to bins
+        input_pixels_1 = input_im
+        input_pixels_flat = input_pixels_1.flatten()
+        input_arr_1 = input_pixels_flat[np.newaxis, :]
+        input_exp_1 = self._bin_pixels_expand_columns(arr=input_arr_1, num_bins_per_pixel=self.bins_per_pixel).flatten()
+
+        event_bins = np.nonzero(input_exp_1)[0]
+        self.occur[event_bins] = self.occur[event_bins] + 1
+
+        # for now, we will only look for co-occurrence within same frame; this should be expanded to look over some time window
+        r, c = np.meshgrid(event_bins, event_bins)
+        self.co_occur[r, c] = self.co_occur[r, c] + 1
+        # zero out diagonal / self co-occurrence?
+        # self.co_occur[event_bins, event_bins] = 0
+
+        if self.t in self.create_rf_times:
+            self._create_rfs()
+
+        self.t += 1
+
+    def _create_rfs(self):
+
+        # these are not rfs per se, just the starting point for the event sieve.
+        # later, we will divide these into pre / post (what is predictor, what is anticipated on average)
+        # later we can do some remainder stuff etc. so there is pressure for rarer features
+
+        num_rfs = 80
+        rf_size = 60  # set size of rf in terms of weight==1 bins
+
+        self.rfs = np.zeros((num_rfs, self.input_state_dim))
+
+        occur_tmp = self.occur.copy()
+
+        norm_co_occur = self.co_occur.copy()
+        # the above should be more like correlation: normalized against occurrence false positives/negatives!
+        #   do that here!!!
+        occur_sum_mat = occur_tmp[:, None] + occur_tmp[None,:]
+        norm_co_occur = np.divide(norm_co_occur, occur_sum_mat + 1e-12)
+
+        # TESTING this should be below instead!!! where its commented, and comment here!
+        # co_occur_tmp = norm_co_occur.copy()
+
+        for rf in range(num_rfs):
+            co_occur_tmp = norm_co_occur.copy()
+
+            new_rf = np.zeros(self.input_state_dim)
+            # choose a random nonzero bin
+            nnz_bins = np.nonzero(occur_tmp)[0]
+            nnz_bin = np.random.choice(nnz_bins)
+            co_occur_tmp[:, nnz_bin] = 0
+
+            new_rf[nnz_bin] = 1
+            # rf_bins = [nnz_bin]
+
+            for tmp in range(rf_size):
+                # greedy: add max co-occuring bin that we haven't added yet, with any in the rf so far
+                rf_bins = np.nonzero(new_rf)[0]
+
+                co_occur_with_rf = co_occur_tmp[rf_bins, :]
+
+                ind = np.unravel_index(np.argmax(co_occur_with_rf, axis=None), co_occur_with_rf.shape)
+                # ind is two-dim: (r, c)
+                bin_to_add = ind[1]
+                new_rf[bin_to_add] = 1
+
+                co_occur_tmp[:, bin_to_add] = 0
+
+            self.rfs[rf, :] = new_rf[:]
+
+            # TODO this is an extreme, hack rule!
+            # actually, just affects initial bin selection
+            # occur_tmp[np.nonzero(new_rf)] = 0
+
+        print(self.rfs.shape)
+        self.rf_im = make_im(input_arrays=self.rfs, num_bins_per_pixel=self.bins_per_pixel, input_im_dim=self.input_im_dim, im_final_dim=2600)
+
+    def get_table_ims(self):
+        ims_list = []
+        ims_names_list = []
+
+        if self.rf_im is not None:
+            ims_list.append(self.rf_im)
+            ims_names_list.append('rfs')
+
+        return ims_list, ims_names_list
+
+    def _bin_pixels_expand_columns(self, arr, num_bins_per_pixel):
+        '''
+
+        keep number of rows, expand in number of columns
+        construct binary image: (0.0 or 1.0) per bin
+
+        https://stackoverflow.com/questions/6163334/binning-data-in-python-with-scipy-numpy
+            use: digitize, or histogram
+
+        https://het.as.utexas.edu/HET/Software/Numpy/reference/generated/numpy.digitize.html
+            digitize: returns index of bin to which each pixel belongs
+            expanded array will have a set of bins per pixel, in the expanded columns
+
+        :param arr:
+        :return:
+        '''
+        # print('***')
+        # print('arr', arr.shape)
+
+        bins = np.linspace(0, 1 + 1e-9, num_bins_per_pixel + 1)  # TODO to fix binning add 1e-9 to 1 in second argument!
+        # print('bins', bins.shape, bins)
+        bin_indices = np.digitize(arr, bins) - 1  # same shape as arr; which bin, per pixel
+        # print('bin_indices', bin_indices.shape, bin_indices)
+        self.use_negative_input = False  # instead of zero, set non-inputs to -1 for all layers
+        if self.use_negative_input:
+            arr_exp = -np.ones((arr.shape[0], arr.shape[1] * num_bins_per_pixel))
+        else:
+            arr_exp = np.zeros((arr.shape[0], arr.shape[1] * num_bins_per_pixel))
+
+        # print('arr_exp', arr_exp.shape)
+
+        # term1 = np.tile(self.num_bins_per_pixel * np.arange(arr.shape[1]), 2)  # can't remember why this is np.tile(..., 2)
+        term1 = num_bins_per_pixel * np.arange(arr.shape[1])  # only works if arr rows is 1?
+        term2 = bin_indices.flatten()
+        # print('term1', term1.shape, term1)
+        # print('term2', term2.shape, term2)
+        c = term1 + term2
+        r = np.repeat(np.arange(arr.shape[0]), arr.shape[1])
+
+        arr_exp[r, c] = 1.0
+
+        return arr_exp
+
+    def _collapse_binned_columns_to_pixels(self, arr_exp, num_bins_per_pixel):
+        '''
+
+        non-trivial: arr_exp may no longer be binary; need to figure out how to collapse multiple values of different weight to one pixel:
+            weighted average? take max value?
+
+        :param arr_exp:
+        :return:
+        '''
+
+        num_pixels = int((arr_exp.shape[1] / num_bins_per_pixel))
+        num_rows = arr_exp.shape[0]
+
+        # reshape so we can take max along one dim
+        #   ie each row in this matrix is a pixel, temporarily
+        # then reshape back
+
+        tmp = arr_exp.reshape((num_rows * num_pixels, num_bins_per_pixel))
+
+        bins = np.linspace(0, 1 + 1e-9, num_bins_per_pixel + 1)
+
+        # max val for display:
+        max_index = np.argmax(tmp, axis=1)
+        max_vals = bins[max_index]
+
+        weights = tmp[np.arange(tmp.shape[0]), max_index]
+
+        # print(max_vals.shape, weights.shape)
+
+        # weighted mean val for display:
+        # tmp1 = np.multiply(tmp, bins[np.newaxis, 0:num_bins_per_pixel])
+        # tmp2 = np.sum(tmp1, axis=1)  # 65536
+        # tmp3 = np.divide(tmp2, np.sum(tmp, axis=1))
+        # max_vals = tmp3
+
+        weights = weights.reshape(num_rows, num_pixels)
+        arr = max_vals.reshape(num_rows, num_pixels)
+
+        return arr, weights
 
 
 

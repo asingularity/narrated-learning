@@ -94,7 +94,7 @@ def _collapse_binned_columns_to_pixels(arr_exp, num_bins_per_pixel):
     return arr, weights
 
 
-def make_im(input_arrays, num_bins_per_pixel, input_im_dim):
+def make_im(input_arrays, num_bins_per_pixel, input_im_dim, im_final_dim=1600):
 
     tmp_im_all = None
     tmp_im = None
@@ -119,7 +119,7 @@ def make_im(input_arrays, num_bins_per_pixel, input_im_dim):
             tmp3 = 0.2 * np.ones((2, tmp_im.shape[1]))
             tmp_im = np.vstack((tmp_im, tmp3, tmp2))
 
-        if r_tmp > 0 and (r_tmp + 1) % 20 == 0:
+        if r_tmp > 0 and (r_tmp + 1) % 5 == 0:
             if tmp_im_all is None:
                 tmp_im_all = tmp_im.copy()
             else:
@@ -131,7 +131,7 @@ def make_im(input_arrays, num_bins_per_pixel, input_im_dim):
     tmp_all_im = tmp_im_all
 
     max_dim = max(tmp_all_im.shape[0], tmp_all_im.shape[1])
-    imscale = 1600 / max_dim  # 0.2: full table, 2.0
+    imscale = im_final_dim / max_dim  # 0.2: full table, 2.0
     tmp_im = cv2.resize(tmp_all_im, dsize=(0, 0), fx=imscale, fy=imscale, interpolation=cv2.INTER_NEAREST)
 
     return tmp_im
