@@ -3,7 +3,7 @@ import numpy as np
 import time
 import pycuda.driver as cuda
 import pycuda.autoinit
-from pycuda.compiler import SourceModule
+#from pycuda.compiler import SourceModule
 import pycuda.gpuarray as gpuarray
 import pycuda.cumath as cumath
 import skcuda.linalg as linalg
