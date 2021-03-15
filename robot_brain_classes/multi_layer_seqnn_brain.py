@@ -41,6 +41,200 @@ class AnotherBrain(object):
     def __init__(self, params):
         '''
 
+        This is testing the temporal wta idea
+
+        (1) get reference frames via seq-nn
+        (2) for each reference frame, find best partial pattern cluster:
+                for each input frame, if this input has most in common with reference frame over last 100 frames, store in common as the pattern
+
+        :param params:
+        '''
+
+        self.rf_im = None
+
+        self.num_rfs = 80
+
+        self.bins_per_pixel = 12
+        self.input_im_dim = params['input_im_dim']
+
+        self.input_state_dim = self.input_im_dim * self.input_im_dim * self.bins_per_pixel
+
+        self.rfs = np.random.random((self.num_rfs, self.input_state_dim)).astype(np.float32)
+
+        self.t = 0
+        self.wta_steps = 100  # 1000
+        self.lr = 0.001 * 10  # 0.01
+
+        self.last_train_time = -1000
+
+        self.input_states_history = StatesLimitedHistory(params={'max_delay': self.wta_steps,
+                                                                 'states_dim_list': [self.input_state_dim],
+                                                                 'store_extra_data': False})
+
+        self.weight_sum_history = StatesLimitedHistory(params={'max_delay': self.wta_steps,
+                                                               'states_dim_list': [self.num_rfs],
+                                                               'store_extra_data': False})
+
+
+    def process_input(self, input_im):
+        '''
+
+        :param input_im:
+        :return:
+        '''
+
+        # pixels to bins
+        input_pixels_1 = input_im
+        input_pixels_flat = input_pixels_1.flatten()
+        input_arr_1 = input_pixels_flat[np.newaxis, :]
+        input_exp_1 = self._bin_pixels_expand_columns(arr=input_arr_1, num_bins_per_pixel=self.bins_per_pixel).flatten()
+
+        input_exp_flat = input_exp_1.flatten()
+
+        tmp  = np.multiply(input_exp_1, self.rfs)
+        weight_sum = np.sum(tmp, axis=1) * 1.0 / (self.input_im_dim * self.input_im_dim)
+
+        input_exp_flat -= np.sum(np.multiply(weight_sum[:, np.newaxis], tmp), axis=0)
+        input_exp_flat[input_exp_1 < 0] = 0
+
+        self.weight_sum_history.store_new_states(newest_states_list=[weight_sum])
+        self.input_states_history.store_new_states(newest_states_list=[input_exp_flat])
+
+        # learn first rf
+        if self.t > self.last_train_time + self.wta_steps / 10:  # a hack for speed
+            input_states_sequence = self.input_states_history.get_state_sequence(state_index=0,
+                                                                                 delay_long=self.wta_steps - 1,
+                                                                                 delay_short=0,
+                                                                                 oldest_first=False)
+
+            weight_sum_sequence = self.weight_sum_history.get_state_sequence(state_index=0,
+                                                                             delay_long=self.wta_steps - 1,
+                                                                             delay_short=0,
+                                                                             oldest_first=False)
+
+            # print(input_states_sequence.shape, weight_sum_sequence.shape)  # (100, 3072) (100, 40)
+
+            for rf_index in range(self.num_rfs):
+                first_rf_weight_sum_sequence = weight_sum_sequence[:, rf_index]
+                best_input_index = np.argmax(first_rf_weight_sum_sequence)
+                best_input = input_states_sequence[best_input_index, :]
+
+                # disqualiy for others
+                weight_sum_sequence[best_input_index, :] = 0
+
+                self.rfs[rf_index, :] = (1.0 - self.lr) * self.rfs[rf_index, :] + self.lr * best_input
+
+            self.last_train_time = self.t
+
+        self.t += 1
+
+    def get_table_ims(self):
+        ims_list = []
+        ims_names_list = []
+
+        if self.rfs is not None:
+            self.rf_im = make_im(input_arrays=self.rfs,
+                                 num_bins_per_pixel=self.bins_per_pixel,
+                                 input_im_dim=self.input_im_dim,
+                                 im_final_dim=2000)
+
+        if self.rf_im is not None:
+            ims_list.append(self.rf_im)
+            ims_names_list.append('rfs')
+
+        return ims_list, ims_names_list
+
+    def _bin_pixels_expand_columns(self, arr, num_bins_per_pixel):
+        '''
+
+        keep number of rows, expand in number of columns
+        construct binary image: (0.0 or 1.0) per bin
+
+        https://stackoverflow.com/questions/6163334/binning-data-in-python-with-scipy-numpy
+            use: digitize, or histogram
+
+        https://het.as.utexas.edu/HET/Software/Numpy/reference/generated/numpy.digitize.html
+            digitize: returns index of bin to which each pixel belongs
+            expanded array will have a set of bins per pixel, in the expanded columns
+
+        :param arr:
+        :return:
+        '''
+        # print('***')
+        # print('arr', arr.shape)
+
+        bins = np.linspace(0, 1 + 1e-9, num_bins_per_pixel + 1)  # TODO to fix binning add 1e-9 to 1 in second argument!
+        # print('bins', bins.shape, bins)
+        bin_indices = np.digitize(arr, bins) - 1  # same shape as arr; which bin, per pixel
+        # print('bin_indices', bin_indices.shape, bin_indices)
+        self.use_negative_input = False  # instead of zero, set non-inputs to -1 for all layers
+        if self.use_negative_input:
+            arr_exp = -np.ones((arr.shape[0], arr.shape[1] * num_bins_per_pixel))
+        else:
+            arr_exp = np.zeros((arr.shape[0], arr.shape[1] * num_bins_per_pixel))
+
+        # print('arr_exp', arr_exp.shape)
+
+        # term1 = np.tile(self.num_bins_per_pixel * np.arange(arr.shape[1]), 2)  # can't remember why this is np.tile(..., 2)
+        term1 = num_bins_per_pixel * np.arange(arr.shape[1])  # only works if arr rows is 1?
+        term2 = bin_indices.flatten()
+        # print('term1', term1.shape, term1)
+        # print('term2', term2.shape, term2)
+        c = term1 + term2
+        r = np.repeat(np.arange(arr.shape[0]), arr.shape[1])
+
+        arr_exp[r, c] = 1.0
+
+        return arr_exp
+
+    def _collapse_binned_columns_to_pixels(self, arr_exp, num_bins_per_pixel):
+        '''
+
+        non-trivial: arr_exp may no longer be binary; need to figure out how to collapse multiple values of different weight to one pixel:
+            weighted average? take max value?
+
+        :param arr_exp:
+        :return:
+        '''
+
+        num_pixels = int((arr_exp.shape[1] / num_bins_per_pixel))
+        num_rows = arr_exp.shape[0]
+
+        # reshape so we can take max along one dim
+        #   ie each row in this matrix is a pixel, temporarily
+        # then reshape back
+
+        tmp = arr_exp.reshape((num_rows * num_pixels, num_bins_per_pixel))
+
+        bins = np.linspace(0, 1 + 1e-9, num_bins_per_pixel + 1)
+
+        # max val for display:
+        max_index = np.argmax(tmp, axis=1)
+        max_vals = bins[max_index]
+
+        weights = tmp[np.arange(tmp.shape[0]), max_index]
+
+        # print(max_vals.shape, weights.shape)
+
+        # weighted mean val for display:
+        # tmp1 = np.multiply(tmp, bins[np.newaxis, 0:num_bins_per_pixel])
+        # tmp2 = np.sum(tmp1, axis=1)  # 65536
+        # tmp3 = np.divide(tmp2, np.sum(tmp, axis=1))
+        # max_vals = tmp3
+
+        weights = weights.reshape(num_rows, num_pixels)
+        arr = max_vals.reshape(num_rows, num_pixels)
+
+        return arr, weights
+
+
+
+
+
+class GreedyPairwiseBins(object):
+    def __init__(self, params):
+        '''
+
         A simplified version of max-bin-append (try_sparsify_3.py) where we don't try to optimize size / remainder; just find max bins with max bins, not whole RF
 
         :param params:
@@ -251,21 +445,23 @@ class MultiLayerSeqNNBrain(object):
         '''
 
         self.last_input_im = None
-        self.bins_per_pixel = 6
+        self.bins_per_pixel = 12
         self.input_im_dim = params['input_im_dim']
+
+        self.display_im_dim = 3000
 
         self.arbitrary_viz_constant = 20  # 60 for 3200 cuda table rows; 10 for 400 cuda table rows
 
         layer_paras = {'input_state_dim': self.input_im_dim * self.input_im_dim * self.bins_per_pixel,
                         'layer_name': '0',
                         'cuda_table_rows': 1600,
-                        'rf_training_times': [20000, 40000, 80000],
+                        'rf_training_times': [10000],  # [20000, 40000, 80000],
                         'input_im_dim': params['input_im_dim'],
-                        'num_bins_per_pixel': self.bins_per_pixel}
+                        'num_bins_per_pixel': self.bins_per_pixel,
+                        'display_im_dim': self.display_im_dim}
 
         self.layers = [SingleLayer(params=layer_paras)]
 
-        self.display_im_dim = 3000
 
     def process_input(self, input_im):
         '''
@@ -453,6 +649,10 @@ class SingleLayer(object):
         self.cuda_table_rows = params['cuda_table_rows']
         self.rf_training_times = params['rf_training_times']  # which frames to train RFs off of cuda table
 
+        self.cuda_table_learning_off_time = self.rf_training_times[0] - 1
+
+        self.display_im_dim = params['display_im_dim']
+
         self.cuda_table = CudaTable(num_entries=self.cuda_table_rows,
                                     input_dim=self.input_state_dim)
         self.init_I_row_num = None
@@ -465,28 +665,70 @@ class SingleLayer(object):
         self.sparse_arr = None
         self.rfs_im = None
 
+        self.tmp_index = 0
+
     def step(self, layer_input):
 
         # update seq-nn table
-
         input_state = layer_input.flatten().astype(np.float32)
-        dists = self.cuda_table.query(query_input=input_state)
-        row_replaced = self._learn_table(cuda_table_I=self.cuda_table, dists=dists, input_state=input_state)  # hl only needed for init_I_row_nums
 
-        if row_replaced:
-            self.num_row_changes_for_disp += 1
-        self.frames_since_row_change_disp += 1
+        if self.t < self.cuda_table_learning_off_time:
+            dists = self.cuda_table.query(query_input=input_state)
+            row_replaced = self._learn_table(cuda_table_I=self.cuda_table, dists=dists, input_state=input_state)  # hl only needed for init_I_row_nums
+
+            if row_replaced:
+                self.num_row_changes_for_disp += 1
+            self.frames_since_row_change_disp += 1
 
         # periodically, re-train RFs using max-bin-append; library from offline_analyses
-        if self.t in self.rf_training_times:
-            self._train_rfs()
+        #if self.t in self.rf_training_times:
+        #    self._train_rfs()
+
+        # train using new method
+        if self.t > self.rf_training_times[0]:
+            self._train_rfs_new(input_state=input_state)
 
         self.t += 1
         layer_output = None
 
         return layer_output
 
-    def _train_rfs(self):
+    def _train_rfs_new(self, input_state):
+        '''
+
+        :return:
+        '''
+
+        # try with only one row from cuda table first
+
+        # first experiment: every K frames, train an "rf" as just: whatever overlaps in pixel-bin space with reference in cuda table
+
+        num_rfs = 200
+
+        reference_index = 366
+
+        if self.t % (3 * 30) == 0:
+            reference_flat = self.cuda_table.table_i[reference_index, :]
+
+            if self.sparse_arr is None:
+                self.sparse_arr = np.zeros((num_rfs + 1, self.input_state_dim))
+                self.sparse_arr[0, :] = reference_flat[:]
+
+            if self.tmp_index < num_rfs:
+
+                matched_bins = np.nonzero(np.logical_and(input_state, reference_flat))[0]
+                self.sparse_arr[self.tmp_index, matched_bins] = 1
+
+                self.rfs_im = make_im(self.sparse_arr,
+                                      num_bins_per_pixel=self.num_bins_per_pixel,
+                                      input_im_dim=self.input_im_dim,
+                                      im_final_dim=self.display_im_dim,
+                                      mod_for_disp=10)
+
+                self.tmp_index += 1
+
+
+    def _train_rfs_max_bin_append(self):
         self.sparse_arr = get_sparse_features(arr=self.cuda_table.table_i.copy(), num_rfs=240, pixel_input=True,
                                               input_im_dim=self.input_im_dim, num_bins_per_pixel=self.num_bins_per_pixel)
 

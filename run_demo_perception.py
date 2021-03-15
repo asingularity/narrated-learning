@@ -27,7 +27,7 @@ from sim_folder_manager import SimFolderManager
 from robot_sensor_classes.video_playback import VideoPlaybackSensor
 
 DISABLE_BRAIN = False  # for testing input by itself; also starts slow display
-RF_IM_DIM = 16
+RF_IM_DIM = 32  # 16, 32, 64
 
 def get_sensors_params():
 
@@ -70,8 +70,8 @@ def get_brain_params():
 def get_visualizer_params():
     params = {
         'color_enabled': False,
-        'fps_display_interval': 5,
-        'image_display_secs_fast': 5,  # 8+ for good speed
+        'fps_display_interval': 3,
+        'image_display_secs_fast': 3,  # 8+ for good speed
         'waitKey_time_fast': 1,  # 1, 100, 5000
         'image_display_secs_slow': 0.0,#2,  # 0: every frame
         'waitKey_time_slow': 1,  # 1, 100, 5000
