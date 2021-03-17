@@ -39,6 +39,11 @@ from math import log
 
 class AnotherBrain(object):
     def __init__(self, params):
+        pass
+
+
+class TemporalWTALearningBrain(object):
+    def __init__(self, params):
         '''
 
         This is testing the temporal wta idea
@@ -445,7 +450,7 @@ class MultiLayerSeqNNBrain(object):
         '''
 
         self.last_input_im = None
-        self.bins_per_pixel = 12
+        self.bins_per_pixel = 24
         self.input_im_dim = params['input_im_dim']
 
         self.display_im_dim = 3000
@@ -454,14 +459,13 @@ class MultiLayerSeqNNBrain(object):
 
         layer_paras = {'input_state_dim': self.input_im_dim * self.input_im_dim * self.bins_per_pixel,
                         'layer_name': '0',
-                        'cuda_table_rows': 1600,
-                        'rf_training_times': [10000],  # [20000, 40000, 80000],
+                        'cuda_table_rows': 400, #1600,
+                        'rf_training_times': [np.inf],  # [10000],  # [20000, 40000, 80000],
                         'input_im_dim': params['input_im_dim'],
                         'num_bins_per_pixel': self.bins_per_pixel,
                         'display_im_dim': self.display_im_dim}
 
         self.layers = [SingleLayer(params=layer_paras)]
-
 
     def process_input(self, input_im):
         '''
@@ -530,7 +534,7 @@ class MultiLayerSeqNNBrain(object):
         return cuda_table_im
 
     def _get_rfs_im(self):
-        return self.layers[0].rfs_im
+        return self.layers[0]._get_rfs_im()
 
     def get_table_ims(self):
         ims_list = []
@@ -667,10 +671,41 @@ class SingleLayer(object):
 
         self.tmp_index = 0
 
+        self.last_layer_input = None
+
+        # WTA experiment
+        self.weights = np.zeros((80, self.input_state_dim))
+
     def step(self, layer_input):
 
         # update seq-nn table
         input_state = layer_input.flatten().astype(np.float32)
+
+        # change it into a diff image
+        #if self.last_layer_input is not None:
+        #    input_state = input_state - self.last_layer_input.flatten().astype(np.float32)
+        #    input_state[input_state < 0] = 0
+
+        self._step_wta(input_state)
+
+        # self._step_cuda_table(input_state)
+
+        # periodically, re-train RFs using max-bin-append; library from offline_analyses
+        #if self.t in self.rf_training_times:
+        #    self._train_rfs()
+
+        # train using new method
+        if self.t > self.rf_training_times[0]:
+            pass
+            #self._train_rfs_new(input_state=input_state)
+
+        self.t += 1
+        layer_output = None
+        self.last_layer_input = layer_input.copy()
+
+        return layer_output
+
+    def _step_cuda_table(self, input_state):
 
         if self.t < self.cuda_table_learning_off_time:
             dists = self.cuda_table.query(query_input=input_state)
@@ -680,18 +715,24 @@ class SingleLayer(object):
                 self.num_row_changes_for_disp += 1
             self.frames_since_row_change_disp += 1
 
-        # periodically, re-train RFs using max-bin-append; library from offline_analyses
-        #if self.t in self.rf_training_times:
-        #    self._train_rfs()
+    def _step_wta(self, input_state):
+        '''
 
-        # train using new method
-        if self.t > self.rf_training_times[0]:
-            self._train_rfs_new(input_state=input_state)
+        :param input_state:
+        :return:
+        '''
 
-        self.t += 1
-        layer_output = None
+        err_frame = np.sum(np.abs(self.weights - input_state), axis=1)
+        best_rf = np.argmin(err_frame)
 
-        return layer_output
+        lr = 0.01
+        self.weights[best_rf, :] = lr * input_state + (1.0 - lr) * self.weights[best_rf, :]
+
+    def _get_rfs_im(self):
+        rfs_im = make_im(self.weights, num_bins_per_pixel=self.num_bins_per_pixel, input_im_dim=self.input_im_dim)
+
+        return rfs_im
+
 
     def _train_rfs_new(self, input_state):
         '''

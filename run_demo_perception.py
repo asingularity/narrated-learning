@@ -27,7 +27,7 @@ from sim_folder_manager import SimFolderManager
 from robot_sensor_classes.video_playback import VideoPlaybackSensor
 
 DISABLE_BRAIN = False  # for testing input by itself; also starts slow display
-RF_IM_DIM = 32  # 16, 32, 64
+RF_IM_DIM = 16  # 8, 16, 32, 64
 
 def get_sensors_params():
 
@@ -84,8 +84,8 @@ def get_visualizer_params():
 
 def init_demo():
     return {
-        #'robot_brain': MultiLayerSeqNNBrain(get_brain_params()),
-        'robot_brain': AnotherBrain(get_brain_params()),
+        'robot_brain': MultiLayerSeqNNBrain(get_brain_params()),
+        #'robot_brain': AnotherBrain(get_brain_params()),
         'robot_sensors': VideoPlaybackSensor(get_sensors_params()),
         'visualizer': SegmentVisualizer(get_visualizer_params()),
         'sim_folder_manager': SimFolderManager(get_sim_folder_manager_params())
