@@ -815,6 +815,13 @@ class SingleLayer(object):
             lr = 0.01
             self.weights[best_rf, :] = lr * state_to_learn + (1.0 - lr) * self.weights[best_rf, :]
 
+            # expected activity per RF: 1/N frames
+            num_rf = self.weights.shape[0]
+
+            slow_unlearn = True
+            if slow_unlearn:
+                self.weights *= (1.0 - 0.00001 * 0.5)
+
     def _get_rfs_im(self):
         rfs_im = make_im(self.weights, num_bins_per_pixel=self.num_bins_per_pixel,
                          input_im_dim=self.input_im_dim,
