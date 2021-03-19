@@ -450,7 +450,7 @@ class MultiLayerSeqNNBrain(object):
         '''
 
         self.last_input_im = None
-        self.bins_per_pixel = 24
+        self.bins_per_pixel = 6
         self.input_im_dim = params['input_im_dim']
 
         self.display_im_dim = 3000
@@ -463,7 +463,8 @@ class MultiLayerSeqNNBrain(object):
                         'rf_training_times': [np.inf],  # [10000],  # [20000, 40000, 80000],
                         'input_im_dim': params['input_im_dim'],
                         'num_bins_per_pixel': self.bins_per_pixel,
-                        'display_im_dim': self.display_im_dim}
+                        'display_im_dim': self.display_im_dim,
+                       'learning_off_time': params['learning_off_time']}
 
         self.layers = [SingleLayer(params=layer_paras)]
 
@@ -540,8 +541,8 @@ class MultiLayerSeqNNBrain(object):
         ims_list = []
         ims_names_list = []
 
-        ims_list.append(self._get_cuda_table_im())
-        ims_names_list.append('layer_0_cuda_table')
+        #ims_list.append(self._get_cuda_table_im())
+        #ims_names_list.append('layer_0_cuda_table')
 
         rfs_im = self._get_rfs_im()
         if rfs_im is not None:
@@ -636,13 +637,14 @@ class MultiLayerSeqNNBrain(object):
 
 
 
-
-class SingleLayer(object):
+class SingleLayerPredictAll(object):
     def __init__(self, params):
         '''
 
         :param params:
         '''
+
+        self.learning_off_time = params['learning_off_time']
 
         self.input_im_dim = params['input_im_dim']  # used for sparse features
         self.num_bins_per_pixel = params['num_bins_per_pixel']  # used for sparse features
@@ -650,70 +652,40 @@ class SingleLayer(object):
         self.input_state_dim = params['input_state_dim']
         self.layer_name = params['layer_name']
 
-        self.cuda_table_rows = params['cuda_table_rows']
-        self.rf_training_times = params['rf_training_times']  # which frames to train RFs off of cuda table
-
-        self.cuda_table_learning_off_time = self.rf_training_times[0] - 1
-
         self.display_im_dim = params['display_im_dim']
-
-        self.cuda_table = CudaTable(num_entries=self.cuda_table_rows,
-                                    input_dim=self.input_state_dim)
-        self.init_I_row_num = None
 
         self.t = 0
 
-        self.num_row_changes_for_disp = 0
-        self.frames_since_row_change_disp = 0
-
-        self.sparse_arr = None
         self.rfs_im = None
 
-        self.tmp_index = 0
-
         self.last_layer_input = None
+        self.last_input_state = None
 
         # WTA experiment
-        self.weights = np.zeros((80, self.input_state_dim))
+        # 400
+        self.weights = np.zeros((400, self.input_state_dim))
 
     def step(self, layer_input):
 
-        # update seq-nn table
         input_state = layer_input.flatten().astype(np.float32)
 
+        # TODO this is an option!
         # change it into a diff image
-        #if self.last_layer_input is not None:
-        #    input_state = input_state - self.last_layer_input.flatten().astype(np.float32)
-        #    input_state[input_state < 0] = 0
+        change_to_diff_image = True
+        if change_to_diff_image:
+            if self.last_layer_input is not None:
+                input_state = input_state - self.last_layer_input.flatten().astype(np.float32)
+                input_state[input_state < 0] = 0
 
-        self._step_wta(input_state)
-
-        # self._step_cuda_table(input_state)
-
-        # periodically, re-train RFs using max-bin-append; library from offline_analyses
-        #if self.t in self.rf_training_times:
-        #    self._train_rfs()
-
-        # train using new method
-        if self.t > self.rf_training_times[0]:
-            pass
-            #self._train_rfs_new(input_state=input_state)
+        if self.t < self.learning_off_time:
+            self._step_wta(input_state)
 
         self.t += 1
-        layer_output = None
         self.last_layer_input = layer_input.copy()
+        self.last_input_state = input_state.copy()
 
+        layer_output = None
         return layer_output
-
-    def _step_cuda_table(self, input_state):
-
-        if self.t < self.cuda_table_learning_off_time:
-            dists = self.cuda_table.query(query_input=input_state)
-            row_replaced = self._learn_table(cuda_table_I=self.cuda_table, dists=dists, input_state=input_state)  # hl only needed for init_I_row_nums
-
-            if row_replaced:
-                self.num_row_changes_for_disp += 1
-            self.frames_since_row_change_disp += 1
 
     def _step_wta(self, input_state):
         '''
@@ -722,121 +694,134 @@ class SingleLayer(object):
         :return:
         '''
 
-        err_frame = np.sum(np.abs(self.weights - input_state), axis=1)
-        best_rf = np.argmin(err_frame)
+        #state_to_learn = self.last_input_state.copy()
+        state_to_learn = input_state.copy()
+
+        # for each nnz bin in input_state:
+        #   find which rf
+
+        #if input_state[self.predicted_pixel_bin] == 1:
+
+            #err_frame = np.sum(np.abs(self.weights - self.last_input_state), axis=1)
+            #best_rf = np.argmin(err_frame)
+
+        tmp_1 = np.multiply(self.weights, state_to_learn)
+        tmp_2_cpu = np.sum(tmp_1, axis=1)
+        tmp_3_cpu = np.sum(self.weights, axis=1)
+        eff_frame = np.divide(tmp_2_cpu, tmp_3_cpu)
+        best_rf = np.argmax(eff_frame)
 
         lr = 0.01
-        self.weights[best_rf, :] = lr * input_state + (1.0 - lr) * self.weights[best_rf, :]
+        self.weights[best_rf, :] = lr * state_to_learn + (1.0 - lr) * self.weights[best_rf, :]
 
     def _get_rfs_im(self):
-        rfs_im = make_im(self.weights, num_bins_per_pixel=self.num_bins_per_pixel, input_im_dim=self.input_im_dim)
+        rfs_im = make_im(self.weights, num_bins_per_pixel=self.num_bins_per_pixel,
+                         input_im_dim=self.input_im_dim,
+                         im_final_dim=3000,
+                         mod_for_disp=20)
 
         return rfs_im
 
 
-    def _train_rfs_new(self, input_state):
+
+class SingleLayer(object):
+    def __init__(self, params):
         '''
 
-        :return:
+        :param params:
         '''
 
-        # try with only one row from cuda table first
+        self.learning_off_time = params['learning_off_time']
 
-        # first experiment: every K frames, train an "rf" as just: whatever overlaps in pixel-bin space with reference in cuda table
+        self.input_im_dim = params['input_im_dim']  # used for sparse features
+        self.num_bins_per_pixel = params['num_bins_per_pixel']  # used for sparse features
 
-        num_rfs = 200
+        self.input_state_dim = params['input_state_dim']
+        self.layer_name = params['layer_name']
 
-        reference_index = 366
+        self.display_im_dim = params['display_im_dim']
 
-        if self.t % (3 * 30) == 0:
-            reference_flat = self.cuda_table.table_i[reference_index, :]
+        self.t = 0
 
-            if self.sparse_arr is None:
-                self.sparse_arr = np.zeros((num_rfs + 1, self.input_state_dim))
-                self.sparse_arr[0, :] = reference_flat[:]
+        self.rfs_im = None
 
-            if self.tmp_index < num_rfs:
+        self.last_layer_input = None
+        self.last_input_state = None
 
-                matched_bins = np.nonzero(np.logical_and(input_state, reference_flat))[0]
-                self.sparse_arr[self.tmp_index, matched_bins] = 1
+        # WTA experiment
+        # 400
+        self.weights = np.zeros((800, self.input_state_dim))
 
-                self.rfs_im = make_im(self.sparse_arr,
-                                      num_bins_per_pixel=self.num_bins_per_pixel,
-                                      input_im_dim=self.input_im_dim,
-                                      im_final_dim=self.display_im_dim,
-                                      mod_for_disp=10)
+        self.pixel_bin_counts = np.zeros(self.input_state_dim)
+        self.pixel_bin_count_steps = 1000  # 10000
 
-                self.tmp_index += 1
+        self.predicted_pixel_bin = None
 
+    def step(self, layer_input):
 
-    def _train_rfs_max_bin_append(self):
-        self.sparse_arr = get_sparse_features(arr=self.cuda_table.table_i.copy(), num_rfs=240, pixel_input=True,
-                                              input_im_dim=self.input_im_dim, num_bins_per_pixel=self.num_bins_per_pixel)
+        input_state = layer_input.flatten().astype(np.float32)
 
-        self.rfs_im = make_im(self.sparse_arr, num_bins_per_pixel=self.num_bins_per_pixel, input_im_dim=self.input_im_dim)
+        # TODO this is an option!
+        # change it into a diff image
+        change_to_diff_image = True
+        if change_to_diff_image:
+            if self.last_layer_input is not None:
+                input_state = input_state - self.last_layer_input.flatten().astype(np.float32)
+                input_state[input_state < 0] = 0
 
-    def _learn_table(self, cuda_table_I, dists, input_state):
+        if self.t < self.pixel_bin_count_steps:
+            nnz_input_state = np.nonzero(input_state)
+            self.pixel_bin_counts[nnz_input_state] = self.pixel_bin_counts[nnz_input_state] + 1
+        elif self.t == self.pixel_bin_count_steps:
+            sorted_bins = np.argsort(self.pixel_bin_counts)[::-1]  # make largest first
+            self.predicted_pixel_bin = sorted_bins[0]  # 0 is largest
+            #self.predicted_pixel_bin = 645
+            print('INPUT STATE DIM', self.input_state_dim)
+            assert self.predicted_pixel_bin < self.input_state_dim
+
+        else:
+            if self.t < self.learning_off_time:
+                self._step_wta(input_state)
+
+        self.t += 1
+        self.last_layer_input = layer_input.copy()
+        self.last_input_state = input_state.copy()
+
+        layer_output = None
+        return layer_output
+
+    def _step_wta(self, input_state):
         '''
 
-        :param dists:
         :param input_state:
         :return:
         '''
 
-        # to do later on replacement or learning: should zero out W from that row for all predictions
-        #   why don't we do this now?
-        #   because, for now, we learn table, then we leave it alone when learning predictions later
+        #state_to_learn = self.last_input_state.copy()
+        state_to_learn = input_state.copy()
 
-        row_replaced = False
+        # TODO True means not conditioned; otherwise condition on one pixel
+        if True:  # input_state[self.predicted_pixel_bin] == 1:
 
-        # assert input_state.shape[0] == self.input_dim
+            #err_frame = np.sum(np.abs(self.weights - self.last_input_state), axis=1)
+            #best_rf = np.argmin(err_frame)
 
-        sorted_dist_indices = np.argsort(dists)
-        new_min_ind = sorted_dist_indices[0]
-        new_min_dist = dists[new_min_ind]
+            tmp_1 = np.multiply(self.weights, state_to_learn)
+            tmp_2_cpu = np.sum(tmp_1, axis=1)
+            tmp_3_cpu = np.sum(self.weights, axis=1)
+            eff_frame = np.divide(tmp_2_cpu, tmp_3_cpu)
+            best_rf = np.argmax(eff_frame)
 
-        if self.init_I_row_num is None:
-            self.init_I_row_num = 0
+            lr = 0.01
+            self.weights[best_rf, :] = lr * state_to_learn + (1.0 - lr) * self.weights[best_rf, :]
 
-        if self.init_I_row_num < cuda_table_I.get_num_rows():
-            # necessary so dist matrix helper is not so slow at start
-            dists[self.init_I_row_num] = np.inf
-            try:
-                cuda_table_I.set_matrix_row(row_index=self.init_I_row_num,
-                                            row_input=input_state,
-                                            row_to_table_dists=dists,
-                                            fast_init=True)
-            except AssertionError:
-                print('\nError! Invalid GPU data type. input_state.dtype: ' + str(input_state.dtype) + '\n')
-                raise
+    def _get_rfs_im(self):
+        rfs_im = make_im(self.weights, num_bins_per_pixel=self.num_bins_per_pixel,
+                         input_im_dim=self.input_im_dim,
+                         im_final_dim=3000,
+                         mod_for_disp=20)
 
-            row_replaced = True
-            self.init_I_row_num += 1
-        else:
-            if not cuda_table_I.post_init_done:
-                cuda_table_I.post_init()
-
-            table_min_dist, table_min_dist_r, table_min_dist_c = cuda_table_I.get_min_dist()
-
-            if new_min_dist > table_min_dist:
-                # minimum distance of new row to current rows is greater than current minimum row-row distance
-                # so: replace one row of current minimum, with new row
-
-                # get one of the row indices of current minimum dist pair
-                r_r_ind = table_min_dist_r  # could be table_min_dist_c
-
-                dists[r_r_ind] = np.inf
-
-                # replace the current min dist row, with the new row
-                cuda_table_I.set_matrix_row(row_index=r_r_ind,
-                                            row_input=input_state,
-                                            row_to_table_dists=dists)
-
-                row_replaced = True
-
-        return row_replaced
-
-
+        return rfs_im
 
 
 

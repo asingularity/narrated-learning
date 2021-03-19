@@ -28,6 +28,7 @@ from robot_sensor_classes.video_playback import VideoPlaybackSensor
 
 DISABLE_BRAIN = False  # for testing input by itself; also starts slow display
 RF_IM_DIM = 16  # 8, 16, 32, 64
+PRELOAD_FRAMES = 1 * 60 * 60 * 30
 
 def get_sensors_params():
 
@@ -38,7 +39,7 @@ def get_sensors_params():
         'video_dir': '/srv/projects/video-downloads/',
         'video_filename': 'sea-turtles-yLuEx-XH3Uc.mp4',
         #'video_filename': 'seattle-driving-fkps18H3SXY.mp4',
-        'stop_preload_at_frames': 1 * 60 * 60 * 30,  # None: use whole video
+        'stop_preload_at_frames': PRELOAD_FRAMES,  # None: use whole video
         'use_full_frame': True,  # use the whole image
         'partial_frame_factor': 4,  # from center, what factor to use - larger factor ~ smaller part of image
         'return_type': np.float32,  # 32 or 64
@@ -61,7 +62,8 @@ def get_sim_folder_manager_params():
 
 def get_brain_params():
     brain_params = {
-        'input_im_dim': RF_IM_DIM
+        'input_im_dim': RF_IM_DIM,
+        'learning_off_time': np.inf  # PRELOAD_FRAMES
     }
 
     return brain_params
