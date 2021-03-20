@@ -659,6 +659,8 @@ class SingleLayer(object):
 
         self.last_layer_input = None
         self.last_input_state = None
+        self.last_last_input_state = None
+        self.last_last_last_input_state = None
 
         # WTA experiment
         # 400
@@ -693,6 +695,11 @@ class SingleLayer(object):
             if self.last_layer_input is not None:
                 input_state = input_state - self.last_layer_input.flatten().astype(np.float32)
                 input_state[input_state < 0] = 0
+        input_state_before_append = input_state.copy()
+
+        if self.last_last_last_input_state is not None:
+            input_state = input_state + self.last_input_state + self.last_last_input_state + self.last_last_last_input_state
+            input_state[input_state > 1] = 1
 
         nnz_input_state = np.nonzero(input_state)[0]
         self.input_raster_history[nnz_input_state, self.t] = 1
@@ -702,7 +709,12 @@ class SingleLayer(object):
 
         self.t += 1
         self.last_layer_input = layer_input.copy()
-        self.last_input_state = input_state.copy()
+
+        if self.last_last_input_state is not None:
+            self.last_last_last_input_state = self.last_last_input_state.copy()
+        if self.last_input_state is not None:
+            self.last_last_input_state = self.last_input_state.copy()
+        self.last_input_state = input_state_before_append.copy()
 
         layer_output = None
         return layer_output
