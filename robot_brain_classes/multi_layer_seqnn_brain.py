@@ -636,94 +636,6 @@ class MultiLayerSeqNNBrain(object):
         return arr, weights
 
 
-
-class SingleLayerPredictAll(object):
-    def __init__(self, params):
-        '''
-
-        :param params:
-        '''
-
-        self.learning_off_time = params['learning_off_time']
-
-        self.input_im_dim = params['input_im_dim']  # used for sparse features
-        self.num_bins_per_pixel = params['num_bins_per_pixel']  # used for sparse features
-
-        self.input_state_dim = params['input_state_dim']
-        self.layer_name = params['layer_name']
-
-        self.display_im_dim = params['display_im_dim']
-
-        self.t = 0
-
-        self.rfs_im = None
-
-        self.last_layer_input = None
-        self.last_input_state = None
-
-        # WTA experiment
-        # 400
-        self.weights = np.zeros((400, self.input_state_dim))
-
-    def step(self, layer_input):
-
-        input_state = layer_input.flatten().astype(np.float32)
-
-        # TODO this is an option!
-        # change it into a diff image
-        change_to_diff_image = True
-        if change_to_diff_image:
-            if self.last_layer_input is not None:
-                input_state = input_state - self.last_layer_input.flatten().astype(np.float32)
-                input_state[input_state < 0] = 0
-
-        if self.t < self.learning_off_time:
-            self._step_wta(input_state)
-
-        self.t += 1
-        self.last_layer_input = layer_input.copy()
-        self.last_input_state = input_state.copy()
-
-        layer_output = None
-        return layer_output
-
-    def _step_wta(self, input_state):
-        '''
-
-        :param input_state:
-        :return:
-        '''
-
-        #state_to_learn = self.last_input_state.copy()
-        state_to_learn = input_state.copy()
-
-        # for each nnz bin in input_state:
-        #   find which rf
-
-        #if input_state[self.predicted_pixel_bin] == 1:
-
-            #err_frame = np.sum(np.abs(self.weights - self.last_input_state), axis=1)
-            #best_rf = np.argmin(err_frame)
-
-        tmp_1 = np.multiply(self.weights, state_to_learn)
-        tmp_2_cpu = np.sum(tmp_1, axis=1)
-        tmp_3_cpu = np.sum(self.weights, axis=1)
-        eff_frame = np.divide(tmp_2_cpu, tmp_3_cpu)
-        best_rf = np.argmax(eff_frame)
-
-        lr = 0.01
-        self.weights[best_rf, :] = lr * state_to_learn + (1.0 - lr) * self.weights[best_rf, :]
-
-    def _get_rfs_im(self):
-        rfs_im = make_im(self.weights, num_bins_per_pixel=self.num_bins_per_pixel,
-                         input_im_dim=self.input_im_dim,
-                         im_final_dim=3000,
-                         mod_for_disp=20)
-
-        return rfs_im
-
-
-
 class SingleLayer(object):
     def __init__(self, params):
         '''
@@ -750,12 +662,25 @@ class SingleLayer(object):
 
         # WTA experiment
         # 400
-        self.weights = np.zeros((800, self.input_state_dim))
+        num_rfs = 800
+        self.weights = np.zeros((num_rfs, self.input_state_dim))
 
         self.pixel_bin_counts = np.zeros(self.input_state_dim)
         self.pixel_bin_count_steps = 1000  # 10000
 
         self.predicted_pixel_bin = None
+
+        # raster stuff
+        max_time = 2000000
+        self.input_raster_history = np.zeros((self.input_state_dim, max_time), np.uint8)
+        self.rfs_0_raster_history = np.zeros((num_rfs, max_time), np.uint8)
+
+        self.fig = plt.figure(figsize=(40, 20))
+        self.ax = self.fig.add_subplot(1, 1, 1)
+        self.ax.cla()
+        self.ax.get_xaxis().get_major_formatter().set_scientific(False)
+        self.ax.get_yaxis().get_major_formatter().set_scientific(False)
+
 
     def step(self, layer_input):
 
@@ -769,19 +694,11 @@ class SingleLayer(object):
                 input_state = input_state - self.last_layer_input.flatten().astype(np.float32)
                 input_state[input_state < 0] = 0
 
-        if self.t < self.pixel_bin_count_steps:
-            nnz_input_state = np.nonzero(input_state)
-            self.pixel_bin_counts[nnz_input_state] = self.pixel_bin_counts[nnz_input_state] + 1
-        elif self.t == self.pixel_bin_count_steps:
-            sorted_bins = np.argsort(self.pixel_bin_counts)[::-1]  # make largest first
-            self.predicted_pixel_bin = sorted_bins[0]  # 0 is largest
-            #self.predicted_pixel_bin = 645
-            print('INPUT STATE DIM', self.input_state_dim)
-            assert self.predicted_pixel_bin < self.input_state_dim
+        nnz_input_state = np.nonzero(input_state)[0]
+        self.input_raster_history[nnz_input_state, self.t] = 1
 
-        else:
-            if self.t < self.learning_off_time:
-                self._step_wta(input_state)
+        if self.t < self.learning_off_time:
+            self._step_wta(input_state)
 
         self.t += 1
         self.last_layer_input = layer_input.copy()
@@ -815,6 +732,8 @@ class SingleLayer(object):
             lr = 0.01
             self.weights[best_rf, :] = lr * state_to_learn + (1.0 - lr) * self.weights[best_rf, :]
 
+            self.rfs_0_raster_history[best_rf, self.t] = 1
+
             # expected activity per RF: 1/N frames
             num_rf = self.weights.shape[0]
 
@@ -826,77 +745,34 @@ class SingleLayer(object):
         rfs_im = make_im(self.weights, num_bins_per_pixel=self.num_bins_per_pixel,
                          input_im_dim=self.input_im_dim,
                          im_final_dim=3000,
-                         mod_for_disp=20)
+                         mod_for_disp=20,
+                         normalize_weights=True)
+
+        # do plot
+
+        do_plots = False
+        if do_plots:
+
+            self.ax.cla()
+            num_rf = self.input_raster_history.shape[0]
+            raster_plot = np.transpose(np.multiply(self.input_raster_history[0:num_rf, max(0, self.t - 200):self.t],
+                                                   np.arange(num_rf)[:, np.newaxis]))
+            t = np.arange(raster_plot.shape[0])
+            self.ax.plot(t, raster_plot, color='b', marker='.', linestyle='')
+            self.fig.savefig("raster_layer_input.png", dpi=100)
+
+            self.ax.cla()
+            num_rf = self.rfs_0_raster_history.shape[0]
+            raster_plot = np.transpose(np.multiply(self.rfs_0_raster_history[0:num_rf, max(0, self.t - 200):self.t],
+                                                   np.arange(num_rf)[:, np.newaxis]))
+            t = np.arange(raster_plot.shape[0])
+            self.ax.plot(t, raster_plot, color='b', marker='.', linestyle='')
+            self.fig.savefig("raster_layer_0.png", dpi=100)
+
 
         return rfs_im
 
 
-
-
-
-class MultiLayerSeqNNBrainWithPredict(object):
-    def __init__(self, params):
-        '''
-
-        FOR LATER
-
-        :param params:
-        '''
-
-    def process_input(self, input_im):
-        '''
-
-        :param input_im:
-        :return:
-        '''
-
-        for layer_n in range(self.num_layers):
-
-            # define layer_input
-
-            self._process_layer(layer_n=layer_n, layer_input=layer_input)
-
-    def _process_layer(self, layer_input):
-        '''
-
-        :param layer_input:
-        :return:
-        '''
-
-        # layer is composed of two stages:
-        #   "sparsify"
-        #   "predict"
-
-        self._do_stage_sparsify(layer_input)
-        #self._do_stage_predict(layer_input)
-
-    def _do_stage_sparsify(self, layer_input):
-        '''
-
-        (1) compute sparsify stage events -> training for predictive stage
-        (2) learn sparsify stage given layer input
-
-        :param layer_input:
-        :return:
-        '''
-
-    def _do_stage_predict(self, layer_input):
-        '''
-
-        (1) compute predictive stage events -> input to next layer
-        (2) learn predictive stage given sparsify stage events
-
-        :param layer_input:
-        :return:
-        '''
-
-    def get_table_ims(self):
-        '''
-
-        :return:
-        '''
-
-        return ims_list, ims_names_list
 
 
 

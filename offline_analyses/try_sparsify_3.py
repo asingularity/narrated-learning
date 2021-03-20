@@ -94,7 +94,7 @@ def _collapse_binned_columns_to_pixels(arr_exp, num_bins_per_pixel):
     return arr, weights
 
 
-def make_im(input_arrays, num_bins_per_pixel, input_im_dim, im_final_dim=1600, mod_for_disp=5):
+def make_im(input_arrays, num_bins_per_pixel, input_im_dim, im_final_dim=1600, mod_for_disp=5, normalize_weights=False):
 
     tmp_im_all = None
     tmp_im = None
@@ -107,9 +107,13 @@ def make_im(input_arrays, num_bins_per_pixel, input_im_dim, im_final_dim=1600, m
         im0 = arr[r_tmp, :].reshape((input_im_dim, input_im_dim))  # rf_dim
         im1 = weights[r_tmp, :].reshape((input_im_dim, input_im_dim))
 
+        if normalize_weights:
+            max_w = np.amax(im1)
+            im1 = im1 * (1.0 / max_w)
+
         # im1 = 0.5 * (im1 + 1)
 
-        spacer1 = 0.5 * np.ones((im0.shape[0], 3))
+        spacer1 = 0.2 * np.ones((im0.shape[0], 3))
 
         tmp2 = np.hstack((im0, spacer1, im1))
 
@@ -123,7 +127,7 @@ def make_im(input_arrays, num_bins_per_pixel, input_im_dim, im_final_dim=1600, m
             if tmp_im_all is None:
                 tmp_im_all = tmp_im.copy()
             else:
-                spacer = 0.5 * np.ones((tmp_im_all.shape[0], 3))
+                spacer = 0.8 * np.ones((tmp_im_all.shape[0], 3))
                 tmp_im_all = np.hstack((tmp_im_all, spacer, tmp_im))
 
             tmp_im = None

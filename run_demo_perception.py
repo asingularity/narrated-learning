@@ -72,7 +72,7 @@ def get_brain_params():
 def get_visualizer_params():
     params = {
         'color_enabled': False,
-        'fps_display_interval': 3,
+        'fps_display_interval': 6,
         'image_display_secs_fast': 3,  # 8+ for good speed
         'waitKey_time_fast': 1,  # 1, 100, 5000
         'image_display_secs_slow': 0.0,#2,  # 0: every frame
