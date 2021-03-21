@@ -453,6 +453,8 @@ class MultiLayerSeqNNBrain(object):
         self.bins_per_pixel = 6
         self.input_im_dim = params['input_im_dim']
 
+        self.do_raster_plots = True
+
         self.display_im_dim = 3000
 
         self.arbitrary_viz_constant = 20  # 60 for 3200 cuda table rows; 10 for 400 cuda table rows
@@ -500,7 +502,7 @@ class MultiLayerSeqNNBrain(object):
         layer_output_0 = self.layers[0].step(layer_input=input_exp_1, change_to_diff_image=True)
 
         # TODO enable next layer!
-        # layer_output_1 = self.layers[1].step(layer_input=layer_output_0, change_to_diff_image=False)
+        layer_output_1 = self.layers[1].step(layer_input=layer_output_0, change_to_diff_image=False)
 
         # multi-layer later:
         # for layer_n in range(self.num_layers):
@@ -562,7 +564,7 @@ class MultiLayerSeqNNBrain(object):
         ims_list = []
         ims_names_list = []
 
-        l0_rfs_im = self.layers[0]._get_rfs_im()
+        l0_rfs_im = self.layers[0].get_rfs_im()
         if l0_rfs_im is not None:
             ims_list.append(l0_rfs_im)
             ims_names_list.append('layer_0_rfs')
@@ -571,6 +573,10 @@ class MultiLayerSeqNNBrain(object):
         if l1_rfs_im is not None:
             ims_list.append(l1_rfs_im)
             ims_names_list.append('layer_1_rfs')
+
+        if self.do_raster_plots:
+            self.layers[0].do_plots()
+            self.layers[1].do_plots()
 
         return ims_list, ims_names_list
 
@@ -782,7 +788,7 @@ class SingleLayer(object):
 
         return layer_output
 
-    def _get_rfs_im(self):
+    def get_rfs_im(self):
 
         if self.input_im_dim is not None and self.num_bins_per_pixel is not None:
             # this is a pixel-bin RF:
@@ -795,31 +801,24 @@ class SingleLayer(object):
             rfs_im = None
             # custom solution: needs to reference pixel-bin images; probably in superclass
 
-        # do plot
-
-        do_plots = False
-        if do_plots:
-
-            self.ax.cla()
-            num_rf = self.input_raster_history.shape[0]
-            raster_plot = np.transpose(np.multiply(self.input_raster_history[0:num_rf, max(0, self.t - 200):self.t],
-                                                   np.arange(num_rf)[:, np.newaxis]))
-            t = np.arange(raster_plot.shape[0])
-            self.ax.plot(t, raster_plot, color='b', marker='.', linestyle='')
-            self.fig.savefig("raster_layer_input.png", dpi=100)
-
-            self.ax.cla()
-            num_rf = self.rfs_0_raster_history.shape[0]
-            raster_plot = np.transpose(np.multiply(self.rfs_0_raster_history[0:num_rf, max(0, self.t - 200):self.t],
-                                                   np.arange(num_rf)[:, np.newaxis]))
-            t = np.arange(raster_plot.shape[0])
-            self.ax.plot(t, raster_plot, color='b', marker='.', linestyle='')
-            self.fig.savefig("raster_layer_0.png", dpi=100)
-
-
         return rfs_im
 
+    def do_plots(self):
+        self.ax.cla()
+        num_rf = self.input_raster_history.shape[0]
+        raster_plot = np.transpose(np.multiply(self.input_raster_history[0:num_rf, max(0, self.t - 200):self.t],
+                                               np.arange(num_rf)[:, np.newaxis]))
+        t = np.arange(raster_plot.shape[0])
+        self.ax.plot(t, raster_plot, color='b', marker='.', linestyle='')
+        self.fig.savefig("raster_" + self.layer_name + "_input.png", dpi=100)
 
+        self.ax.cla()
+        num_rf = self.rfs_0_raster_history.shape[0]
+        raster_plot = np.transpose(np.multiply(self.rfs_0_raster_history[0:num_rf, max(0, self.t - 200):self.t],
+                                               np.arange(num_rf)[:, np.newaxis]))
+        t = np.arange(raster_plot.shape[0])
+        self.ax.plot(t, raster_plot, color='b', marker='.', linestyle='')
+        self.fig.savefig("raster_" + self.layer_name + "_output.png", dpi=100)
 
 
 
