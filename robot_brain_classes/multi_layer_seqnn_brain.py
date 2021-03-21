@@ -453,7 +453,8 @@ class MultiLayerSeqNNBrain(object):
         self.bins_per_pixel = 6
         self.input_im_dim = params['input_im_dim']
 
-        self.do_raster_plots = True
+        self.do_raster_plots_every_k_im = 10
+        self.ims_since_raster = 0
 
         self.display_im_dim = 3000
 
@@ -558,6 +559,8 @@ class MultiLayerSeqNNBrain(object):
 
         # how to display? show (top?) component RFs and their relative weights;
 
+
+
         return None
 
     def get_table_ims(self):
@@ -574,9 +577,12 @@ class MultiLayerSeqNNBrain(object):
             ims_list.append(l1_rfs_im)
             ims_names_list.append('layer_1_rfs')
 
-        if self.do_raster_plots:
-            self.layers[0].do_plots()
-            self.layers[1].do_plots()
+        if self.do_raster_plots_every_k_im is not None:
+            self.ims_since_raster += 1
+            if self.ims_since_raster > self.do_raster_plots_every_k_im:
+                self.layers[0].do_plots()
+                self.layers[1].do_plots()
+                self.ims_since_raster = 0
 
         return ims_list, ims_names_list
 
