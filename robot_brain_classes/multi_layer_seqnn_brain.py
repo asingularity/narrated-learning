@@ -457,16 +457,30 @@ class MultiLayerSeqNNBrain(object):
 
         self.arbitrary_viz_constant = 20  # 60 for 3200 cuda table rows; 10 for 400 cuda table rows
 
-        layer_paras = {'input_state_dim': self.input_im_dim * self.input_im_dim * self.bins_per_pixel,
-                        'layer_name': '0',
-                        'cuda_table_rows': 400, #1600,
-                        'rf_training_times': [np.inf],  # [10000],  # [20000, 40000, 80000],
-                        'input_im_dim': params['input_im_dim'],
-                        'num_bins_per_pixel': self.bins_per_pixel,
-                        'display_im_dim': self.display_im_dim,
-                       'learning_off_time': params['learning_off_time']}
+        num_rfs_layer_0 = 800
+        num_rfs_layer_1 = 100
 
-        self.layers = [SingleLayer(params=layer_paras)]
+        layer_0_paras = {'input_state_dim': self.input_im_dim * self.input_im_dim * self.bins_per_pixel,
+                         'input_concat_timesteps': 2,
+                         'layer_name': '0',
+                         'num_rfs': num_rfs_layer_0,
+                         'rf_training_times': [np.inf],  # [10000],  # [20000, 40000, 80000],
+                         'input_im_dim': params['input_im_dim'],
+                         'num_bins_per_pixel': self.bins_per_pixel,
+                         'display_im_dim': self.display_im_dim,
+                         'learning_off_time': params['learning_off_time']}
+
+        layer_1_paras = {'input_state_dim': num_rfs_layer_0,
+                         'input_concat_timesteps': 4,
+                         'layer_name': '1',
+                         'num_rfs': num_rfs_layer_1,
+                         'rf_training_times': [np.inf],  # [10000],  # [20000, 40000, 80000],
+                         'input_im_dim': None,
+                         'num_bins_per_pixel': None,
+                         'display_im_dim': self.display_im_dim,
+                         'learning_off_time': params['learning_off_time']}
+
+        self.layers = [SingleLayer(params=layer_0_paras), SingleLayer(params=layer_1_paras)]
 
     def process_input(self, input_im):
         '''
@@ -483,7 +497,10 @@ class MultiLayerSeqNNBrain(object):
 
         self.last_input_im = input_pixels_1.copy()
 
-        layer_output = self.layers[0].step(layer_input=input_exp_1)
+        layer_output_0 = self.layers[0].step(layer_input=input_exp_1, change_to_diff_image=True)
+
+        # TODO enable next layer!
+        # layer_output_1 = self.layers[1].step(layer_input=layer_output_0, change_to_diff_image=False)
 
         # multi-layer later:
         # for layer_n in range(self.num_layers):
@@ -535,14 +552,12 @@ class MultiLayerSeqNNBrain(object):
         return cuda_table_im
 
     def _get_rfs_im(self):
+        # TODO for second layer need something custom showing components of RF
         return self.layers[0]._get_rfs_im()
 
     def get_table_ims(self):
         ims_list = []
         ims_names_list = []
-
-        #ims_list.append(self._get_cuda_table_im())
-        #ims_names_list.append('layer_0_cuda_table')
 
         rfs_im = self._get_rfs_im()
         if rfs_im is not None:
@@ -649,6 +664,12 @@ class SingleLayer(object):
         self.num_bins_per_pixel = params['num_bins_per_pixel']  # used for sparse features
 
         self.input_state_dim = params['input_state_dim']
+        self.input_concat_timesteps = params['input_concat_timesteps']
+
+        self.input_history = StatesLimitedHistory(params={'max_delay': self.input_concat_timesteps,
+                                                          'states_dim_list': [self.input_state_dim],
+                                                          'store_extra_data': False})
+
         self.layer_name = params['layer_name']
 
         self.display_im_dim = params['display_im_dim']
@@ -664,8 +685,9 @@ class SingleLayer(object):
 
         # WTA experiment
         # 400
-        num_rfs = 800
+        num_rfs = params['num_rfs']  # 800
         self.weights = np.zeros((num_rfs, self.input_state_dim))
+        self.num_rfs = num_rfs
 
         self.pixel_bin_counts = np.zeros(self.input_state_dim)
         self.pixel_bin_count_steps = 1000  # 10000
@@ -684,39 +706,34 @@ class SingleLayer(object):
         self.ax.get_yaxis().get_major_formatter().set_scientific(False)
 
 
-    def step(self, layer_input):
+    def step(self, layer_input, change_to_diff_image):
 
         input_state = layer_input.flatten().astype(np.float32)
 
-        # TODO this is an option!
-        # change it into a diff image
-        change_to_diff_image = True
         if change_to_diff_image:
             if self.last_layer_input is not None:
                 input_state = input_state - self.last_layer_input.flatten().astype(np.float32)
                 input_state[input_state < 0] = 0
-        input_state_before_append = input_state.copy()
-
-        if self.last_last_last_input_state is not None:
-            input_state = input_state + self.last_input_state + self.last_last_input_state + self.last_last_last_input_state
-            input_state[input_state > 1] = 1
 
         nnz_input_state = np.nonzero(input_state)[0]
         self.input_raster_history[nnz_input_state, self.t] = 1
 
+        self.input_history.store_new_states(newest_states_list=[input_state])
+
+        input_states_seq = self.input_history.get_state_sequence(state_index=0,
+                                                                    delay_short=0,
+                                                                    delay_long=self.input_concat_timesteps - 1,
+                                                                    oldest_first=True)
+        #print(input_states_seq.shape)  # (4, 864)
+        sum_input_states = np.sum(input_states_seq, axis=0)
+        sum_input_states[sum_input_states > 1] = 1
+
         if self.t < self.learning_off_time:
-            self._step_wta(input_state)
+            layer_output = self._step_wta(sum_input_states)
 
         self.t += 1
         self.last_layer_input = layer_input.copy()
 
-        if self.last_last_input_state is not None:
-            self.last_last_last_input_state = self.last_last_input_state.copy()
-        if self.last_input_state is not None:
-            self.last_last_input_state = self.last_input_state.copy()
-        self.last_input_state = input_state_before_append.copy()
-
-        layer_output = None
         return layer_output
 
     def _step_wta(self, input_state):
@@ -752,13 +769,23 @@ class SingleLayer(object):
             slow_unlearn = True
             if slow_unlearn:
                 self.weights *= (1.0 - 0.00001 * 0.5)
+        layer_output = np.zeros(self.num_rfs)
+        layer_output[best_rf] = 1
+
+        return layer_output
 
     def _get_rfs_im(self):
-        rfs_im = make_im(self.weights, num_bins_per_pixel=self.num_bins_per_pixel,
-                         input_im_dim=self.input_im_dim,
-                         im_final_dim=3000,
-                         mod_for_disp=20,
-                         normalize_weights=True)
+
+        if self.input_im_dim is not None and self.num_bins_per_pixel is not None:
+            # this is a pixel-bin RF:
+            rfs_im = make_im(self.weights, num_bins_per_pixel=self.num_bins_per_pixel,
+                             input_im_dim=self.input_im_dim,
+                             im_final_dim=3000,
+                             mod_for_disp=20,
+                             normalize_weights=True)
+        else:
+            rfs_im = None
+            # custom solution: needs to reference pixel-bin images; probably in superclass
 
         # do plot
 
