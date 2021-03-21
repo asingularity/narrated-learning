@@ -551,18 +551,26 @@ class MultiLayerSeqNNBrain(object):
 
         return cuda_table_im
 
-    def _get_rfs_im(self):
+    def _get_rfs_im_composite(self):
         # TODO for second layer need something custom showing components of RF
-        return self.layers[0]._get_rfs_im()
+
+        # how to display? show (top?) component RFs and their relative weights;
+
+        return None
 
     def get_table_ims(self):
         ims_list = []
         ims_names_list = []
 
-        rfs_im = self._get_rfs_im()
-        if rfs_im is not None:
-            ims_list.append(rfs_im)
+        l0_rfs_im = self.layers[0]._get_rfs_im()
+        if l0_rfs_im is not None:
+            ims_list.append(l0_rfs_im)
             ims_names_list.append('layer_0_rfs')
+
+        l1_rfs_im = self._get_rfs_im_composite()
+        if l1_rfs_im is not None:
+            ims_list.append(l1_rfs_im)
+            ims_names_list.append('layer_1_rfs')
 
         return ims_list, ims_names_list
 
