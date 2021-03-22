@@ -748,7 +748,7 @@ class SingleLayer(object):
         self.predicted_pixel_bin = None
 
         # raster stuff
-        max_time = 2000000
+        max_time = 20000000
         self.input_raster_history = np.zeros((self.input_state_dim, max_time), np.uint8)
         self.rfs_0_raster_history = np.zeros((num_rfs, max_time), np.uint8)
 
@@ -801,30 +801,28 @@ class SingleLayer(object):
         #state_to_learn = self.last_input_state.copy()
         state_to_learn = input_state.copy()
 
-        # TODO True means not conditioned; otherwise condition on one pixel
-        if True:  # input_state[self.predicted_pixel_bin] == 1:
+        #err_frame = np.sum(np.abs(self.weights - self.last_input_state), axis=1)
+        #best_rf = np.argmin(err_frame)
 
-            #err_frame = np.sum(np.abs(self.weights - self.last_input_state), axis=1)
-            #best_rf = np.argmin(err_frame)
+        tmp_1 = np.multiply(self.weights, state_to_learn)
+        tmp_2_cpu = np.sum(tmp_1, axis=1)
+        tmp_3_cpu = np.sum(self.weights, axis=1)
+        eff_frame = np.divide(tmp_2_cpu, tmp_3_cpu)
+        best_rf = np.argmax(eff_frame)
 
-            tmp_1 = np.multiply(self.weights, state_to_learn)
-            tmp_2_cpu = np.sum(tmp_1, axis=1)
-            tmp_3_cpu = np.sum(self.weights, axis=1)
-            eff_frame = np.divide(tmp_2_cpu, tmp_3_cpu)
-            best_rf = np.argmax(eff_frame)
+        if learning_on:
+            lr = 0.01
+            self.weights[best_rf, :] = lr * state_to_learn + (1.0 - lr) * self.weights[best_rf, :]
 
-            if learning_on:
-                lr = 0.01
-                self.weights[best_rf, :] = lr * state_to_learn + (1.0 - lr) * self.weights[best_rf, :]
+        self.rfs_0_raster_history[best_rf, self.t] = 1
 
-            self.rfs_0_raster_history[best_rf, self.t] = 1
+        # expected activity per RF: 1/N frames
+        num_rf = self.weights.shape[0]
 
-            # expected activity per RF: 1/N frames
-            num_rf = self.weights.shape[0]
+        slow_unlearn = True
+        if slow_unlearn:
+            self.weights *= (1.0 - 0.00001 * 0.5)
 
-            slow_unlearn = True
-            if slow_unlearn:
-                self.weights *= (1.0 - 0.00001 * 0.5)
         layer_output = np.zeros(self.num_rfs)
         layer_output[best_rf] = 1
 
