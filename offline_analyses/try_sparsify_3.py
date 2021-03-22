@@ -99,6 +99,8 @@ def make_im(input_arrays, num_bins_per_pixel, input_im_dim, im_final_dim=1600, m
     tmp_im_all = None
     tmp_im = None
 
+    rf_ims_dict = {}
+
     arr, weights = _collapse_binned_columns_to_pixels(arr_exp=input_arrays,
                                                       num_bins_per_pixel=num_bins_per_pixel)
 
@@ -116,6 +118,7 @@ def make_im(input_arrays, num_bins_per_pixel, input_im_dim, im_final_dim=1600, m
         spacer1 = 0.2 * np.ones((im0.shape[0], 3))
 
         tmp2 = np.hstack((im0, spacer1, im1))
+        rf_ims_dict[r_tmp] = tmp2.copy()
 
         if tmp_im is None:
             tmp_im = tmp2.copy()
@@ -138,7 +141,7 @@ def make_im(input_arrays, num_bins_per_pixel, input_im_dim, im_final_dim=1600, m
     imscale = im_final_dim / max_dim  # 0.2: full table, 2.0
     tmp_im = cv2.resize(tmp_all_im, dsize=(0, 0), fx=imscale, fy=imscale, interpolation=cv2.INTER_NEAREST)
 
-    return tmp_im
+    return tmp_im, rf_ims_dict
 
 
 def _get_matching_rows(data_set, pattern_exp):

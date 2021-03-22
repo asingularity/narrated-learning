@@ -471,6 +471,7 @@ class MultiLayerSeqNNBrain(object):
                          'input_im_dim': params['input_im_dim'],
                          'num_bins_per_pixel': self.bins_per_pixel,
                          'display_im_dim': self.display_im_dim,
+                         'learning_start_time': 0,
                          'learning_off_time': params['learning_off_time']}
 
         layer_1_paras = {'input_state_dim': num_rfs_layer_0,
@@ -481,6 +482,7 @@ class MultiLayerSeqNNBrain(object):
                          'input_im_dim': None,
                          'num_bins_per_pixel': None,
                          'display_im_dim': self.display_im_dim,
+                         'learning_start_time': 20000,
                          'learning_off_time': params['learning_off_time']}
 
         self.layers = [SingleLayer(params=layer_0_paras), SingleLayer(params=layer_1_paras)]
@@ -554,25 +556,55 @@ class MultiLayerSeqNNBrain(object):
 
         return cuda_table_im
 
-    def _get_rfs_im_composite(self):
-        # TODO for second layer need something custom showing components of RF
+    def _get_rfs_im_composite(self, l0_rfs_ims_info):
+        '''
 
-        # how to display? show (top?) component RFs and their relative weights;
+        :param l0_rfs_ims_info: packaged in right way, from get_rfs_im() call of layer 0
+        :return:
+        '''
 
+        # for second layer need something custom showing components of RF
+        #   how to display? show (top?) component RFs and their relative weights
 
+        top_k_components = 4
 
-        return None
+        l1_weights = self.layers[1].get_weights()
+
+        tmp_all_im = None
+        for l1_rf_ind in range(l1_weights.shape[0]):
+            rf_weights = l1_weights[l1_rf_ind, :]
+            l0_rf_index = np.argsort(rf_weights)[::-1]  # [::-1]: largest weights' indices first
+
+            tmp_im = None
+
+            for k in range(top_k_components):
+                if tmp_im is None:
+                    tmp_im = l0_rfs_ims_info[l0_rf_index[k]].copy()
+                else:
+                    tmp3 = 0.8 * np.ones((2, tmp_im.shape[1]))
+                    tmp_im = np.vstack((tmp_im, tmp3, l0_rfs_ims_info[l0_rf_index[k]].copy()))
+
+            if tmp_all_im is None:
+                tmp_all_im = tmp_im.copy()
+            else:
+                tmp4 = 0.8 * np.ones((tmp_im.shape[0], 2))
+                tmp_all_im = np.hstack((tmp_all_im, tmp4, tmp_im.copy()))
+
+        return tmp_all_im
 
     def get_table_ims(self):
         ims_list = []
         ims_names_list = []
 
-        l0_rfs_im = self.layers[0].get_rfs_im()
+        l0_rfs_im, l0_rfs_ims_info = self.layers[0].get_rfs_im()
         if l0_rfs_im is not None:
             ims_list.append(l0_rfs_im)
             ims_names_list.append('layer_0_rfs')
 
-        l1_rfs_im = self._get_rfs_im_composite()
+        l1_rfs_im = self._get_rfs_im_composite(l0_rfs_ims_info)
+        scale_l1_im = 2.0
+        l1_rfs_im = cv2.resize(l1_rfs_im, dsize=(0, 0), fx=scale_l1_im, fy=scale_l1_im, interpolation=cv2.INTER_NEAREST)
+
         if l1_rfs_im is not None:
             ims_list.append(l1_rfs_im)
             ims_names_list.append('layer_1_rfs')
@@ -679,6 +711,7 @@ class SingleLayer(object):
         '''
 
         self.learning_off_time = params['learning_off_time']
+        self.learning_start_time = params['learning_start_time']
 
         self.input_im_dim = params['input_im_dim']  # used for sparse features
         self.num_bins_per_pixel = params['num_bins_per_pixel']  # used for sparse features
@@ -725,6 +758,8 @@ class SingleLayer(object):
         self.ax.get_xaxis().get_major_formatter().set_scientific(False)
         self.ax.get_yaxis().get_major_formatter().set_scientific(False)
 
+    def get_weights(self):
+        return self.weights.copy()
 
     def step(self, layer_input, change_to_diff_image):
 
@@ -748,15 +783,15 @@ class SingleLayer(object):
         sum_input_states = np.sum(input_states_seq, axis=0)
         sum_input_states[sum_input_states > 1] = 1
 
-        if self.t < self.learning_off_time:
-            layer_output = self._step_wta(sum_input_states)
+        learning_on = self.learning_start_time <= self.t < self.learning_off_time
+        layer_output = self._step_wta(sum_input_states, learning_on)
 
         self.t += 1
         self.last_layer_input = layer_input.copy()
 
         return layer_output
 
-    def _step_wta(self, input_state):
+    def _step_wta(self, input_state, learning_on):
         '''
 
         :param input_state:
@@ -778,8 +813,9 @@ class SingleLayer(object):
             eff_frame = np.divide(tmp_2_cpu, tmp_3_cpu)
             best_rf = np.argmax(eff_frame)
 
-            lr = 0.01
-            self.weights[best_rf, :] = lr * state_to_learn + (1.0 - lr) * self.weights[best_rf, :]
+            if learning_on:
+                lr = 0.01
+                self.weights[best_rf, :] = lr * state_to_learn + (1.0 - lr) * self.weights[best_rf, :]
 
             self.rfs_0_raster_history[best_rf, self.t] = 1
 
@@ -798,16 +834,17 @@ class SingleLayer(object):
 
         if self.input_im_dim is not None and self.num_bins_per_pixel is not None:
             # this is a pixel-bin RF:
-            rfs_im = make_im(self.weights, num_bins_per_pixel=self.num_bins_per_pixel,
+            rfs_im, rf_ims_dict = make_im(self.weights, num_bins_per_pixel=self.num_bins_per_pixel,
                              input_im_dim=self.input_im_dim,
                              im_final_dim=3000,
                              mod_for_disp=20,
                              normalize_weights=True)
         else:
             rfs_im = None
+            rf_ims_dict = None
             # custom solution: needs to reference pixel-bin images; probably in superclass
 
-        return rfs_im
+        return rfs_im, rf_ims_dict
 
     def do_plots(self):
         self.ax.cla()

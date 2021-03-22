@@ -37,8 +37,8 @@ def get_sensors_params():
         'output_image_dim': RF_IM_DIM,  # output image dim provided from class; must be smaller than or equal to 'image_dim'. affects how much of the image we actually use
         'output_image_start_RC': (128 - int(RF_IM_DIM/2), 128 - int(RF_IM_DIM/2)),  # relative to 'image_dim'. affects which subimage of the image we actually use
         'video_dir': '/srv/projects/video-downloads/',
-        'video_filename': 'sea-turtles-yLuEx-XH3Uc.mp4',
-        #'video_filename': 'seattle-driving-fkps18H3SXY.mp4',
+        #'video_filename': 'sea-turtles-yLuEx-XH3Uc.mp4',
+        'video_filename': 'seattle-driving-fkps18H3SXY.mp4',
         'stop_preload_at_frames': PRELOAD_FRAMES,  # None: use whole video
         'use_full_frame': True,  # use the whole image
         'partial_frame_factor': 4,  # from center, what factor to use - larger factor ~ smaller part of image
