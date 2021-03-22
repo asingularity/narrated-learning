@@ -464,7 +464,10 @@ class MultiLayerSeqNNBrain(object):
         num_rfs_layer_1 = 50
 
         layer_0_paras = {'input_state_dim': self.input_im_dim * self.input_im_dim * self.bins_per_pixel,
-                         'input_concat_timesteps': 2,  # 4
+                         'max_input_concat_timesteps': 10,
+                         'default_concat_timesteps': 2,
+                         'target_rf_sum': 60,
+                         'enable_target_rf': False,
                          'layer_name': '0',
                          'num_rfs': num_rfs_layer_0,
                          'rf_training_times': [np.inf],  # [10000],  # [20000, 40000, 80000],
@@ -475,7 +478,10 @@ class MultiLayerSeqNNBrain(object):
                          'learning_off_time': params['learning_off_time']}
 
         layer_1_paras = {'input_state_dim': num_rfs_layer_0,
-                         'input_concat_timesteps': 4,
+                         'max_input_concat_timesteps': 10,
+                         'default_concat_timesteps': 4,
+                         'target_rf_sum': 5,
+                         'enable_target_rf': False,
                          'layer_name': '1',
                          'num_rfs': num_rfs_layer_1,
                          'rf_training_times': [np.inf],  # [10000],  # [20000, 40000, 80000],
@@ -717,9 +723,14 @@ class SingleLayer(object):
         self.num_bins_per_pixel = params['num_bins_per_pixel']  # used for sparse features
 
         self.input_state_dim = params['input_state_dim']
-        self.input_concat_timesteps = params['input_concat_timesteps']
+        self.max_input_concat_timesteps = params['max_input_concat_timesteps']
+        self.target_rf_sum = params['target_rf_sum']
 
-        self.input_history = StatesLimitedHistory(params={'max_delay': self.input_concat_timesteps,
+        self.enable_target_rf = params['enable_target_rf']
+
+        self.default_concat_timesteps = params['default_concat_timesteps']
+
+        self.input_history = StatesLimitedHistory(params={'max_delay': self.max_input_concat_timesteps,
                                                           'states_dim_list': [self.input_state_dim],
                                                           'store_extra_data': False})
 
@@ -755,6 +766,9 @@ class SingleLayer(object):
         self.release_num = int(self.release_prop * self.num_rfs)
         self.total_released = 0
 
+        # target rf and current concat time steps
+        self.per_rf_concat_timesteps = self.default_concat_timesteps * np.ones(self.num_rfs)
+
         # raster stuff
         max_time = 8000000
         self.input_raster_history = np.zeros((self.input_state_dim, max_time), np.uint8)
@@ -765,6 +779,10 @@ class SingleLayer(object):
         self.ax.cla()
         self.ax.get_xaxis().get_major_formatter().set_scientific(False)
         self.ax.get_yaxis().get_major_formatter().set_scientific(False)
+
+        self.last_rfs_sums = None
+        self.last_state_to_learn = None
+        self.last_per_rf_time_index = None
 
     def get_weights(self):
         return self.weights.copy()
@@ -784,11 +802,11 @@ class SingleLayer(object):
         self.input_history.store_new_states(newest_states_list=[input_state])
 
         input_states_seq = self.input_history.get_state_sequence(state_index=0,
-                                                                    delay_short=0,
-                                                                    delay_long=self.input_concat_timesteps - 1,
-                                                                    oldest_first=True)
-        #print(input_states_seq.shape)  # (4, 864)
-        sum_input_states = np.sum(input_states_seq, axis=0)
+                                                                 delay_short=0,
+                                                                 delay_long=self.max_input_concat_timesteps - 1,
+                                                                 oldest_first=False)
+        #print(input_states_seq.shape)  # (10, 864)
+        sum_input_states = np.cumsum(input_states_seq, axis=0)  # shape: (10, 864)
         sum_input_states[sum_input_states > 1] = 1
 
         learning_on = self.learning_start_time <= self.t < self.learning_off_time
@@ -817,15 +835,51 @@ class SingleLayer(object):
         #err_frame = np.sum(np.abs(self.weights - state_to_learn), axis=1)
         #best_rf = np.argmin(err_frame)
 
-        tmp_1 = np.multiply(self.weights[0:self.total_released, :], state_to_learn)
-        tmp_2_cpu = np.sum(tmp_1, axis=1)
+        # print(self.weights.shape, state_to_learn.shape)
+        #             (400, 864)      (10, 864)
+        # print(state_to_learn)
+
+        # adjust per-rf-concat-timesteps based on rf size
         tmp_3_cpu = np.sum(self.weights[0:self.total_released, :], axis=1)
+
+        self.last_rfs_sums = tmp_3_cpu.copy()
+
+        self.last_state_to_learn = state_to_learn.copy()
+
+        #nnz_below = np.nonzero(tmp_3_cpu < self.target_rf_sum)[0]
+        #nnz_above = np.nonzero(tmp_3_cpu > self.target_rf_sum)[0]
+        #self.weights[nnz_below, :] *= 1.00001
+        #self.weights[nnz_above, :] *= (1.0 - 0.00001)
+
+        #self.per_rf_concat_timesteps[nnz_below] += 0.0005 #*= (1.0 + 0.001)
+        #self.per_rf_concat_timesteps[nnz_above] -= 0.0005 #*= (1.0 - 0.001)
+        #self.per_rf_concat_timesteps[self.per_rf_concat_timesteps < 1] = 1
+        #self.per_rf_concat_timesteps[self.per_rf_concat_timesteps >= self.max_input_concat_timesteps] = self.max_input_concat_timesteps - 1e-3
+
+        per_rf_time_index = self.per_rf_concat_timesteps.astype(np.int)
+
+        self.last_per_rf_time_index = per_rf_time_index.copy()
+
+        tmp_1 = np.multiply(self.weights[0:self.total_released, :], state_to_learn[per_rf_time_index, :])
+        tmp_2_cpu = np.sum(tmp_1, axis=1)
         eff_frame = np.divide(tmp_2_cpu, tmp_3_cpu)
         best_rf = np.argmax(eff_frame)
 
         if learning_on:
-            lr = 0.01  # 0.01
-            self.weights[best_rf, :] = lr * state_to_learn + (1.0 - lr) * self.weights[best_rf, :]
+            lr = 0.01 * 0.25  # 0.01
+
+            self.weights[best_rf, :] = lr * state_to_learn[per_rf_time_index[best_rf], :] + (1.0 - lr) * self.weights[best_rf, :]
+
+            if self.enable_target_rf:
+                if tmp_3_cpu[best_rf] < self.target_rf_sum:
+                    self.per_rf_concat_timesteps[best_rf] += 0.0005
+                else:
+                    self.per_rf_concat_timesteps[best_rf] -= 0.0005
+
+                if self.per_rf_concat_timesteps[best_rf] >= self.max_input_concat_timesteps:
+                    self.per_rf_concat_timesteps[best_rf] = self.max_input_concat_timesteps - 1e-3
+                if self.per_rf_concat_timesteps[best_rf] < 0:
+                    self.per_rf_concat_timesteps[best_rf] = 0
 
         self.rfs_0_raster_history[best_rf, self.t] = 1
 
@@ -844,13 +898,24 @@ class SingleLayer(object):
 
     def get_rfs_im(self):
 
+        if False:  # self.layer_name == '0':
+            print('****************')
+            print('concat timesteps:')
+            print(self.per_rf_concat_timesteps)
+            print('per rf time index:')
+            print(self.last_per_rf_time_index)
+            print('sums:')
+            print(self.last_rfs_sums)
+            print('state to learn cumsum:')
+            print(self.last_state_to_learn)
+
         if self.input_im_dim is not None and self.num_bins_per_pixel is not None:
             # this is a pixel-bin RF:
             rfs_im, rf_ims_dict = make_im(self.weights, num_bins_per_pixel=self.num_bins_per_pixel,
                              input_im_dim=self.input_im_dim,
                              im_final_dim=3000,  # 5000 for 1600 rfs
                              mod_for_disp=20,
-                             normalize_weights=True)
+                             normalize_weights=False)
         else:
             rfs_im = None
             rf_ims_dict = None
