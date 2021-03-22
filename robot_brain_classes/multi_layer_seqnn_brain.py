@@ -460,11 +460,11 @@ class MultiLayerSeqNNBrain(object):
 
         self.arbitrary_viz_constant = 20  # 60 for 3200 cuda table rows; 10 for 400 cuda table rows
 
-        num_rfs_layer_0 = 800
-        num_rfs_layer_1 = 100
+        num_rfs_layer_0 = 400
+        num_rfs_layer_1 = 50
 
         layer_0_paras = {'input_state_dim': self.input_im_dim * self.input_im_dim * self.bins_per_pixel,
-                         'input_concat_timesteps': 2,
+                         'input_concat_timesteps': 2,  # 4
                          'layer_name': '0',
                          'num_rfs': num_rfs_layer_0,
                          'rf_training_times': [np.inf],  # [10000],  # [20000, 40000, 80000],
@@ -747,8 +747,16 @@ class SingleLayer(object):
 
         self.predicted_pixel_bin = None
 
+        # release for learning over time
+        self.release_prop = 1.0  #0.1
+        self.release_steps = 5000  # 5000
+
+        # computed:
+        self.release_num = int(self.release_prop * self.num_rfs)
+        self.total_released = 0
+
         # raster stuff
-        max_time = 20000000
+        max_time = 8000000
         self.input_raster_history = np.zeros((self.input_state_dim, max_time), np.uint8)
         self.rfs_0_raster_history = np.zeros((num_rfs, max_time), np.uint8)
 
@@ -798,20 +806,25 @@ class SingleLayer(object):
         :return:
         '''
 
+        if (self.t == 0 or self.t % self.release_steps == 0) and self.total_released < self.num_rfs:
+            self.total_released += self.release_num
+            if self.total_released > self.num_rfs:
+                self.total_released = self.num_rfs
+
         #state_to_learn = self.last_input_state.copy()
         state_to_learn = input_state.copy()
 
         #err_frame = np.sum(np.abs(self.weights - state_to_learn), axis=1)
         #best_rf = np.argmin(err_frame)
 
-        tmp_1 = np.multiply(self.weights, state_to_learn)
+        tmp_1 = np.multiply(self.weights[0:self.total_released, :], state_to_learn)
         tmp_2_cpu = np.sum(tmp_1, axis=1)
-        tmp_3_cpu = np.sum(self.weights, axis=1)
+        tmp_3_cpu = np.sum(self.weights[0:self.total_released, :], axis=1)
         eff_frame = np.divide(tmp_2_cpu, tmp_3_cpu)
         best_rf = np.argmax(eff_frame)
 
         if learning_on:
-            lr = 0.01
+            lr = 0.01  # 0.01
             self.weights[best_rf, :] = lr * state_to_learn + (1.0 - lr) * self.weights[best_rf, :]
 
         self.rfs_0_raster_history[best_rf, self.t] = 1
@@ -821,7 +834,8 @@ class SingleLayer(object):
 
         slow_unlearn = True
         if slow_unlearn:
-            self.weights *= (1.0 - 0.00001 * 0.5)
+            pass
+            #self.weights *= (1.0 - 0.0001 * 0.5)  # (1.0 - 0.00001 * 0.5)
 
         layer_output = np.zeros(self.num_rfs)
         layer_output[best_rf] = 1
@@ -834,7 +848,7 @@ class SingleLayer(object):
             # this is a pixel-bin RF:
             rfs_im, rf_ims_dict = make_im(self.weights, num_bins_per_pixel=self.num_bins_per_pixel,
                              input_im_dim=self.input_im_dim,
-                             im_final_dim=3000,
+                             im_final_dim=3000,  # 5000 for 1600 rfs
                              mod_for_disp=20,
                              normalize_weights=True)
         else:
