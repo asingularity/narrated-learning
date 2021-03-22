@@ -801,7 +801,7 @@ class SingleLayer(object):
         #state_to_learn = self.last_input_state.copy()
         state_to_learn = input_state.copy()
 
-        #err_frame = np.sum(np.abs(self.weights - self.last_input_state), axis=1)
+        #err_frame = np.sum(np.abs(self.weights - state_to_learn), axis=1)
         #best_rf = np.argmin(err_frame)
 
         tmp_1 = np.multiply(self.weights, state_to_learn)
