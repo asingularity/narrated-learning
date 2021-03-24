@@ -793,6 +793,8 @@ class SingleLayer(object):
         self.rate_calc_timescale = 800
         self.scale_factor_delta = 0.001
 
+        self.lr = 0.01 # * 0.25  # * 0.05
+
         self.last_adjust_time = 0
 
     def get_weights(self):
@@ -916,7 +918,7 @@ class SingleLayer(object):
         #self.scaling_factor = np.ones(self.num_rfs)
 
         if learning_on:
-            lr = 0.01 #* 0.25  # 0.01
+            lr = self.lr  # 0.01
 
             self.weights[best_rf, :] = lr * state_to_learn[per_rf_time_index[best_rf], :] + (1.0 - lr) * self.weights[best_rf, :]
 
