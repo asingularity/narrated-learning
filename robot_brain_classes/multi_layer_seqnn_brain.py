@@ -460,8 +460,8 @@ class MultiLayerSeqNNBrain(object):
 
         self.arbitrary_viz_constant = 20  # 60 for 3200 cuda table rows; 10 for 400 cuda table rows
 
-        num_rfs_layer_0 = 400
-        num_rfs_layer_1 = 50
+        num_rfs_layer_0 = 800
+        num_rfs_layer_1 = 100
 
         layer_0_paras = {'input_state_dim': self.input_im_dim * self.input_im_dim * self.bins_per_pixel,
                          'max_input_concat_timesteps': 10,  # UNUSED
@@ -949,7 +949,7 @@ class SingleLayer(object):
 
     def get_rfs_im(self):
 
-        if self.layer_name == '0':
+        if False:  #self.layer_name == '0':
             print('************')
             print('mean_rates')
             print(self.mean_rates)
