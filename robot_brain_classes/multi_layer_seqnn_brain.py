@@ -464,7 +464,7 @@ class MultiLayerSeqNNBrain(object):
         num_rfs_layer_1 = 100
 
         layer_0_paras = {'input_state_dim': self.input_im_dim * self.input_im_dim * self.bins_per_pixel,
-                         'max_input_concat_timesteps': 10,  # UNUSED
+                         'max_input_concat_timesteps': 2,  # UNUSED  # TODO if equals default, error: bug?
                          'default_concat_timesteps': 2,
                          'target_rf_sum': 60,  # UNUSED
                          'enable_target_rf': False,
@@ -478,7 +478,7 @@ class MultiLayerSeqNNBrain(object):
                          'learning_off_time': params['learning_off_time']}
 
         layer_1_paras = {'input_state_dim': num_rfs_layer_0,
-                         'max_input_concat_timesteps': 10,  # UNUSED
+                         'max_input_concat_timesteps': 4,  # UNUSED
                          'default_concat_timesteps': 4,
                          'target_rf_sum': 5,  # UNUSED
                          'enable_target_rf': False,
@@ -770,7 +770,7 @@ class SingleLayer(object):
         self.per_rf_concat_timesteps = self.default_concat_timesteps * np.ones(self.num_rfs)
 
         # raster stuff
-        max_time = 8000000
+        max_time = 2000000
         self.input_raster_history = np.zeros((self.input_state_dim, max_time), np.uint8)
         self.rfs_0_raster_history = np.zeros((num_rfs, max_time), np.uint8)
 
@@ -820,6 +820,8 @@ class SingleLayer(object):
                                                                  oldest_first=False)
         #print(input_states_seq.shape)  # (10, 864)
         sum_input_states = np.cumsum(input_states_seq, axis=0)  # shape: (10, 864)
+
+        # TODO this shouldn't be here
         sum_input_states[sum_input_states > 1] = 1
 
         learning_on = self.learning_start_time <= self.t < self.learning_off_time
@@ -869,7 +871,7 @@ class SingleLayer(object):
         #self.per_rf_concat_timesteps[self.per_rf_concat_timesteps < 1] = 1
         #self.per_rf_concat_timesteps[self.per_rf_concat_timesteps >= self.max_input_concat_timesteps] = self.max_input_concat_timesteps - 1e-3
 
-        per_rf_time_index = self.per_rf_concat_timesteps.astype(np.int)
+        per_rf_time_index = self.per_rf_concat_timesteps.astype(np.int) - 1
 
         self.last_per_rf_time_index = per_rf_time_index.copy()
 
