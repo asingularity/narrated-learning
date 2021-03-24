@@ -464,9 +464,9 @@ class MultiLayerSeqNNBrain(object):
         num_rfs_layer_1 = 50
 
         layer_0_paras = {'input_state_dim': self.input_im_dim * self.input_im_dim * self.bins_per_pixel,
-                         'max_input_concat_timesteps': 10,
+                         'max_input_concat_timesteps': 10,  # UNUSED
                          'default_concat_timesteps': 2,
-                         'target_rf_sum': 60,
+                         'target_rf_sum': 60,  # UNUSED
                          'enable_target_rf': False,
                          'layer_name': '0',
                          'num_rfs': num_rfs_layer_0,
@@ -478,9 +478,9 @@ class MultiLayerSeqNNBrain(object):
                          'learning_off_time': params['learning_off_time']}
 
         layer_1_paras = {'input_state_dim': num_rfs_layer_0,
-                         'max_input_concat_timesteps': 10,
+                         'max_input_concat_timesteps': 10,  # UNUSED
                          'default_concat_timesteps': 4,
-                         'target_rf_sum': 5,
+                         'target_rf_sum': 5,  # UNUSED
                          'enable_target_rf': False,
                          'layer_name': '1',
                          'num_rfs': num_rfs_layer_1,
@@ -784,6 +784,17 @@ class SingleLayer(object):
         self.last_state_to_learn = None
         self.last_per_rf_time_index = None
 
+        self.scaling_factor = np.ones(self.num_rfs)
+        self.mean_rates = np.zeros(self.num_rfs)
+        self.last_event_times = np.zeros(self.num_rfs)
+
+        # adjust scaling factor based on firing rates
+        self.target_rate = 1.0 / self.num_rfs  # since this is a single-WTA, we want even on average
+        self.rate_calc_timescale = 800
+        self.scale_factor_delta = 0.001
+
+        self.last_adjust_time = 0
+
     def get_weights(self):
         return self.weights.copy()
 
@@ -863,10 +874,49 @@ class SingleLayer(object):
         tmp_1 = np.multiply(self.weights[0:self.total_released, :], state_to_learn[per_rf_time_index, :])
         tmp_2_cpu = np.sum(tmp_1, axis=1)
         eff_frame = np.divide(tmp_2_cpu, tmp_3_cpu)
+
+        scaling_on = True
+        if scaling_on:
+            eff_frame = np.multiply(eff_frame, self.scaling_factor)
+
         best_rf = np.argmax(eff_frame)
 
+        # adjust scaling factor based on firing rates
+
+        if self.t > self.rate_calc_timescale:
+
+            if self.t - self.last_adjust_time > self.rate_calc_timescale:  # adjust all
+                counts = np.sum(self.rfs_0_raster_history[:, self.t - self.rate_calc_timescale:self.t], axis=1)
+                self.mean_rates[:] = counts * 1.0 / 200
+
+                below = np.nonzero(self.mean_rates < self.target_rate)
+                above = np.nonzero(self.mean_rates > self.target_rate)
+
+                self.scaling_factor[below] = self.scaling_factor[below] + self.scale_factor_delta
+                self.scaling_factor[above] = self.scaling_factor[above] - self.scale_factor_delta
+                self.scaling_factor[self.scaling_factor < self.scale_factor_delta] = self.scale_factor_delta
+
+                self.last_adjust_time = self.t
+
+            if 0:  # only winner
+                counts = np.sum(self.rfs_0_raster_history[:, self.t - 200:self.t], axis=1)
+                self.mean_rates[:] = counts * 1.0/200
+
+                if self.mean_rates[best_rf] > target_rate:
+                    self.scaling_factor[best_rf] -= 0.001
+                    self.scaling_factor[best_rf] = max(0.001, self.scaling_factor[best_rf])
+
+                if self.mean_rates[best_rf] < target_rate:
+                    self.scaling_factor[best_rf] += 0.001
+
+
+
+
+        # adjust scaling factors, for those that haven't fired based on if they were to fire next step (so continuously scale up)
+        #self.scaling_factor = np.ones(self.num_rfs)
+
         if learning_on:
-            lr = 0.01 * 0.25  # 0.01
+            lr = 0.01 #* 0.25  # 0.01
 
             self.weights[best_rf, :] = lr * state_to_learn[per_rf_time_index[best_rf], :] + (1.0 - lr) * self.weights[best_rf, :]
 
@@ -882,6 +932,7 @@ class SingleLayer(object):
                     self.per_rf_concat_timesteps[best_rf] = 0
 
         self.rfs_0_raster_history[best_rf, self.t] = 1
+        self.last_event_times[best_rf] = self.t
 
         # expected activity per RF: 1/N frames
         num_rf = self.weights.shape[0]
@@ -897,6 +948,13 @@ class SingleLayer(object):
         return layer_output
 
     def get_rfs_im(self):
+
+        if self.layer_name == '0':
+            print('************')
+            print('mean_rates')
+            print(self.mean_rates)
+            print('scaling factor')
+            print(self.scaling_factor)
 
         if False:  # self.layer_name == '0':
             print('****************')
