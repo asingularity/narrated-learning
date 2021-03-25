@@ -101,8 +101,10 @@ def make_im(input_arrays, num_bins_per_pixel, input_im_dim, im_final_dim=1600, m
 
     rf_ims_dict = {}
 
-    arr, weights = _collapse_binned_columns_to_pixels(arr_exp=input_arrays,
-                                                      num_bins_per_pixel=num_bins_per_pixel)
+    #arr, weights = _collapse_binned_columns_to_pixels(arr_exp=input_arrays,
+    #                                                  num_bins_per_pixel=num_bins_per_pixel)
+    arr = input_arrays
+    weights = input_arrays
 
     for r_tmp in range(weights.shape[0]):  # per rf
 

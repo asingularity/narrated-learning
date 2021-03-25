@@ -36,6 +36,8 @@ matplotlib.rcParams['agg.path.chunksize'] = 10000
 import matplotlib.pyplot as plt
 from math import log
 
+np.set_printoptions(suppress=True, precision=2)
+
 
 class AnotherBrain(object):
     def __init__(self, params):
@@ -450,7 +452,7 @@ class MultiLayerSeqNNBrain(object):
         '''
 
         self.last_input_im = None
-        self.bins_per_pixel = 6
+        self.bins_per_pixel = 1
         self.input_im_dim = params['input_im_dim']
 
         self.do_raster_plots_every_k_im = 10
@@ -464,8 +466,8 @@ class MultiLayerSeqNNBrain(object):
         num_rfs_layer_1 = 100
 
         layer_0_paras = {'input_state_dim': self.input_im_dim * self.input_im_dim * self.bins_per_pixel,
-                         'max_input_concat_timesteps': 2,  # UNUSED  # TODO if equals default, error: bug?
-                         'default_concat_timesteps': 2,
+                         'max_input_concat_timesteps': 1,  # UNUSED  # TODO if equals default, error: bug?
+                         'default_concat_timesteps': 1,
                          'target_rf_sum': 60,  # UNUSED
                          'enable_target_rf': False,
                          'layer_name': '0',
@@ -504,7 +506,9 @@ class MultiLayerSeqNNBrain(object):
         input_pixels_1 = input_im
         input_pixels_flat = input_pixels_1.flatten()
         input_arr_1 = input_pixels_flat[np.newaxis, :]
-        input_exp_1 = self._bin_pixels_expand_columns(arr=input_arr_1, num_bins_per_pixel=self.bins_per_pixel)
+
+        input_exp_1 = input_arr_1
+        #input_exp_1 = self._bin_pixels_expand_columns(arr=input_arr_1, num_bins_per_pixel=self.bins_per_pixel)
 
         self.last_input_im = input_pixels_1.copy()
 
@@ -770,7 +774,7 @@ class SingleLayer(object):
         self.per_rf_concat_timesteps = self.default_concat_timesteps * np.ones(self.num_rfs)
 
         # raster stuff
-        max_time = 2000000
+        max_time = 8000000
         self.input_raster_history = np.zeros((self.input_state_dim, max_time), np.uint8)
         self.rfs_0_raster_history = np.zeros((num_rfs, max_time), np.uint8)
 
@@ -790,10 +794,10 @@ class SingleLayer(object):
 
         # adjust scaling factor based on firing rates
         self.target_rate = 1.0 / self.num_rfs  # since this is a single-WTA, we want even on average
-        self.rate_calc_timescale = 800
+        self.rate_calc_timescale = 3000
         self.scale_factor_delta = 0.001
 
-        self.lr = 0.01 # * 0.25  # * 0.05
+        self.lr = 0.001  #0.01 * 0.25  # * 0.05
 
         self.last_adjust_time = 0
 
@@ -822,7 +826,7 @@ class SingleLayer(object):
         sum_input_states = np.cumsum(input_states_seq, axis=0)  # shape: (10, 864)
 
         # TODO this shouldn't be here
-        sum_input_states[sum_input_states > 1] = 1
+        # sum_input_states[sum_input_states > 1] = 1
 
         learning_on = self.learning_start_time <= self.t < self.learning_off_time
         layer_output = self._step_wta(sum_input_states, learning_on)
@@ -846,9 +850,6 @@ class SingleLayer(object):
 
         #state_to_learn = self.last_input_state.copy()
         state_to_learn = input_state.copy()
-
-        #err_frame = np.sum(np.abs(self.weights - state_to_learn), axis=1)
-        #best_rf = np.argmin(err_frame)
 
         # print(self.weights.shape, state_to_learn.shape)
         #             (400, 864)      (10, 864)
@@ -875,15 +876,28 @@ class SingleLayer(object):
 
         self.last_per_rf_time_index = per_rf_time_index.copy()
 
-        tmp_1 = np.multiply(self.weights[0:self.total_released, :], state_to_learn[per_rf_time_index, :])
-        tmp_2_cpu = np.sum(tmp_1, axis=1)
-        eff_frame = np.divide(tmp_2_cpu, tmp_3_cpu)
+        if False:
+            tmp_1 = np.multiply(self.weights[0:self.total_released, :], state_to_learn[per_rf_time_index, :])
+            tmp_2_cpu = np.sum(tmp_1, axis=1)
+            eff_frame = np.divide(tmp_2_cpu, tmp_3_cpu)
 
-        scaling_on = True
-        if scaling_on:
-            eff_frame = np.multiply(eff_frame, self.scaling_factor)
+            scaling_on = True
+            if scaling_on:
+                eff_frame = np.multiply(eff_frame, self.scaling_factor)
 
-        best_rf = np.argmax(eff_frame)
+            best_rf = np.argmax(eff_frame)
+        else:
+            err_frame = np.sum(np.abs(self.weights - state_to_learn[per_rf_time_index, :]), axis=1)
+            #err_frame = np.divide(err_frame, tmp_3_cpu + 1e-9)
+
+            scaling_on = True  # TODO UNSURE IF NEED? PROBABLY. NEED TO MEASURE AND PLOT!!!
+            if scaling_on:
+                err_frame = np.multiply(err_frame, self.scaling_factor)
+
+            best_rf = np.argmin(err_frame)
+
+
+
 
         # adjust scaling factor based on firing rates
 
@@ -896,9 +910,12 @@ class SingleLayer(object):
                 below = np.nonzero(self.mean_rates < self.target_rate)
                 above = np.nonzero(self.mean_rates > self.target_rate)
 
-                self.scaling_factor[below] = self.scaling_factor[below] + self.scale_factor_delta
-                self.scaling_factor[above] = self.scaling_factor[above] - self.scale_factor_delta
-                self.scaling_factor[self.scaling_factor < self.scale_factor_delta] = self.scale_factor_delta
+                self.scaling_factor[below] = self.scaling_factor[below] * (1.0 - self.scale_factor_delta)
+                self.scaling_factor[above] = self.scaling_factor[above] * (1.0 + self.scale_factor_delta)
+
+                #self.scaling_factor[below] = self.scaling_factor[below] + self.scale_factor_delta
+                #self.scaling_factor[above] = self.scaling_factor[above] - self.scale_factor_delta
+                #self.scaling_factor[self.scaling_factor < self.scale_factor_delta] = self.scale_factor_delta
 
                 self.last_adjust_time = self.t
 
@@ -956,7 +973,7 @@ class SingleLayer(object):
         if False:  #self.layer_name == '0':
             print('************')
             print('mean_rates')
-            print(self.mean_rates)
+            print(1.0 / (1e-9 + self.mean_rates))
             print('scaling factor')
             print(self.scaling_factor)
 
@@ -977,7 +994,7 @@ class SingleLayer(object):
                              input_im_dim=self.input_im_dim,
                              im_final_dim=3000,  # 5000 for 1600 rfs
                              mod_for_disp=20,
-                             normalize_weights=False)
+                             normalize_weights=True)
         else:
             rfs_im = None
             rf_ims_dict = None
