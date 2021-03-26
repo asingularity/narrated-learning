@@ -133,7 +133,12 @@ def make_im(input_arrays, num_bins_per_pixel, input_im_dim, im_final_dim=1600, m
 
         spacer1 = 0.2 * np.ones((im0.shape[0], 3))
 
-        tmp2 = np.hstack((im0, spacer1, im1))
+        use_both_ims = False  # i.e. if you want to also display only one of the lobes
+        if use_both_ims:
+            tmp2 = np.hstack((im0, spacer1, im1))
+        else:
+            tmp2 = im1
+
         rf_ims_dict[r_tmp] = tmp2.copy()
 
         if tmp_im is None:

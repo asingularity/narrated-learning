@@ -462,8 +462,8 @@ class MultiLayerSeqNNBrain(object):
 
         self.arbitrary_viz_constant = 20  # 60 for 3200 cuda table rows; 10 for 400 cuda table rows
 
-        num_rfs_layer_0 = 400
-        num_rfs_layer_1 = 50
+        num_rfs_layer_0 = 400  # 800
+        num_rfs_layer_1 = 50  # 100
 
         layer_0_paras = {'input_state_dim': 2 * self.input_im_dim * self.input_im_dim * self.bins_per_pixel,
                          'max_input_concat_timesteps': 2,  # UNUSED  # TODO if equals default, error: bug?
@@ -471,6 +471,7 @@ class MultiLayerSeqNNBrain(object):
                          'target_rf_sum': 60,  # UNUSED
                          'enable_target_rf': False,
                          'layer_name': '0',
+                         'lr': 0.01,
                          'num_rfs': num_rfs_layer_0,
                          'rf_training_times': [np.inf],  # [10000],  # [20000, 40000, 80000],
                          'input_im_dim': params['input_im_dim'],
@@ -485,6 +486,7 @@ class MultiLayerSeqNNBrain(object):
                          'target_rf_sum': 5,  # UNUSED
                          'enable_target_rf': False,
                          'layer_name': '1',
+                         'lr': 0.001,
                          'num_rfs': num_rfs_layer_1,
                          'rf_training_times': [np.inf],  # [10000],  # [20000, 40000, 80000],
                          'input_im_dim': None,
@@ -797,7 +799,7 @@ class SingleLayer(object):
         self.rate_calc_timescale = 800
         self.scale_factor_delta = 0.001
 
-        self.lr = 0.01  #0.01 * 0.25  # * 0.05
+        self.lr = params['lr']  #0.01 * 0.25  # * 0.05
 
         self.last_adjust_time = 0
 
@@ -1004,7 +1006,7 @@ class SingleLayer(object):
             # this is a pixel-bin RF:
             rfs_im, rf_ims_dict = make_im(self.weights, num_bins_per_pixel=self.num_bins_per_pixel,
                              input_im_dim=self.input_im_dim,
-                             im_final_dim=int(self.num_rfs * 3000 / 800),  # 5000 for 1600 rfs
+                             im_final_dim=int(self.num_rfs * 3000 / 1600),  # /800 for two-im per rf display
                              mod_for_disp=20,
                              normalize_weights=True)
         else:
