@@ -106,14 +106,28 @@ def make_im(input_arrays, num_bins_per_pixel, input_im_dim, im_final_dim=1600, m
     arr = input_arrays
     weights = input_arrays
 
+    im_len = int(arr.shape[1] / 2)
+
     for r_tmp in range(weights.shape[0]):  # per rf
 
-        im0 = arr[r_tmp, :].reshape((input_im_dim, input_im_dim))  # rf_dim
-        im1 = weights[r_tmp, :].reshape((input_im_dim, input_im_dim))
+        arr_p = arr[r_tmp, 0:im_len]
+        arr_n = arr[r_tmp, im_len::]
+
+        #im0 = (0.5 - arr_n + arr_p).reshape((input_im_dim, input_im_dim))  # rf_dim
+        #im1 = im0.copy()
+
+        im0 = arr_p.reshape((input_im_dim, input_im_dim))  # rf_dim
+        im1 = arr_n.reshape((input_im_dim, input_im_dim))  # rf_dim
 
         if normalize_weights:
-            max_w = np.amax(im1)
-            im1 = im1 * (1.0 / max_w)
+            max_1 = np.amax(im1)
+            max_0 = np.amax(im0)
+
+            max_all = max(max_1, max_0)
+
+            im1 = 0.5 + im0 * 0.5/max_all - im1 * 0.5/max_all
+
+            im0 = im0 * 1.0 / max_0
 
         # im1 = 0.5 * (im1 + 1)
 

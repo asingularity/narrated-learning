@@ -465,7 +465,7 @@ class MultiLayerSeqNNBrain(object):
         num_rfs_layer_0 = 400
         num_rfs_layer_1 = 50
 
-        layer_0_paras = {'input_state_dim': self.input_im_dim * self.input_im_dim * self.bins_per_pixel,
+        layer_0_paras = {'input_state_dim': 2 * self.input_im_dim * self.input_im_dim * self.bins_per_pixel,
                          'max_input_concat_timesteps': 2,  # UNUSED  # TODO if equals default, error: bug?
                          'default_concat_timesteps': 2,
                          'target_rf_sum': 60,  # UNUSED
@@ -810,8 +810,20 @@ class SingleLayer(object):
 
         if change_to_diff_image:
             if self.last_layer_input is not None:
-                input_state = input_state - self.last_layer_input.flatten().astype(np.float32)
-                input_state[input_state < 0] = 0
+                input_state_diff = input_state - self.last_layer_input.flatten().astype(np.float32)
+
+                input_state_p = input_state_diff.copy()
+                input_state_n = -input_state_diff.copy()
+
+                input_state_p[input_state_p < 0] = 0
+                input_state_n[input_state_n < 0] = 0
+
+                input_state = np.concatenate((input_state_p, input_state_n))
+            else:
+                layer_output = np.zeros(self.num_rfs)
+                self.last_layer_input = layer_input.copy()
+
+                return layer_output
 
         nnz_input_state = np.nonzero(input_state)[0]
         self.input_raster_history[nnz_input_state, self.t] = 1
@@ -992,7 +1004,7 @@ class SingleLayer(object):
             # this is a pixel-bin RF:
             rfs_im, rf_ims_dict = make_im(self.weights, num_bins_per_pixel=self.num_bins_per_pixel,
                              input_im_dim=self.input_im_dim,
-                             im_final_dim=3000,  # 5000 for 1600 rfs
+                             im_final_dim=int(self.num_rfs * 3000 / 800),  # 5000 for 1600 rfs
                              mod_for_disp=20,
                              normalize_weights=True)
         else:
