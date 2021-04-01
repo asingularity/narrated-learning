@@ -14,14 +14,24 @@ class FPSCounter(object):
         self.frames = 0
         self.last_time = time.time()
 
-    def update(self):
+    def update(self, delta_frames=1, display_more=None, force_display=False, display_more_same_line=False):
         measured_fps = None
-        if time.time() - self.last_time > self.display_every_k_seconds:
+        if (time.time() - self.last_time > self.display_every_k_seconds) or force_display:
             measured_fps = self.frames / (time.time() - self.last_time)
-            print ('FPS:', measured_fps)
+            
+            to_disp = 'FPS: ' + str(measured_fps)
+            
+            if display_more is not None:
+                if display_more_same_line:
+                    to_disp = to_disp + '    ' + display_more
+                else:
+                    to_disp = to_disp + '\n' + '    ' + display_more
+            
+            print(to_disp)
+
             self.frames = 0
             self.last_time = time.time()
 
-        self.frames += 1
+        self.frames += delta_frames
 
         return measured_fps

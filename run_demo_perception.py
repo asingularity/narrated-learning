@@ -32,20 +32,20 @@ PRELOAD_FRAMES = 1 * 60 * 60 * 30
 
 def get_sensors_params():
 
+    # 'video_filename': 'seattle-driving-fkps18H3SXY.mp4',
+
+    square_crop = (128 - int(RF_IM_DIM / 2), 128 - int(RF_IM_DIM / 2), RF_IM_DIM)
+
     params_video_playback = {
-        'image_dim': 256,  # video is cropped to square, then resized (scaled) to this square size. changing this resets preload of pickle.
-        'output_image_dim': RF_IM_DIM,  # output image dim provided from class; must be smaller than or equal to 'image_dim'. affects how much of the image we actually use
-        'output_image_start_RC': (128 - int(RF_IM_DIM/2), 128 - int(RF_IM_DIM/2)),  # relative to 'image_dim'. affects which subimage of the image we actually use
-        'video_dir': '/srv/projects/video-downloads/',
-        'video_filename': 'sea-turtles-yLuEx-XH3Uc.mp4',
-        #'video_filename': 'seattle-driving-fkps18H3SXY.mp4',
-        'stop_preload_at_frames': PRELOAD_FRAMES,  # None: use whole video
-        'use_full_frame': True,  # use the whole image
-        'partial_frame_factor': 4,  # from center, what factor to use - larger factor ~ smaller part of image
-        'return_type': np.float32,  # 32 or 64
-        'skip_frame_count': 1,  # Normal is 1 (not 0!); += K frames from video on each step; so we can see prediction better for high frame rate videos
-        'prop_use_for_holdout': 0.0,
-        'switch_to_holdout_frame': None  # TODO re-introduce later for when training is done
+        'pickle_im_square_crop': None,
+        'pickle_im_square_resize': 256,
+        'force_reload_to_pkl': False,
+        'gb_per_pkl_file': 1,
+        'returned_im_square_crop': square_crop,
+        'returned_im_dtype': np.float32,  # only np.float32 supported
+        'returned_im_use_color': False,  # only False supported for now
+        'video_dir': '/srv/projects/video-downloads',
+        'video_filename': 'sea-turtles-yLuEx-XH3Uc.mp4'
     }
 
     return params_video_playback
