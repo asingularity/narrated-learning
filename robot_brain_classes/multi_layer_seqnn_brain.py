@@ -497,6 +497,10 @@ class MultiLayerSeqNNBrain(object):
 
         self.layers = [SingleLayer(params=layer_0_paras), SingleLayer(params=layer_1_paras)]
 
+    def set_plots_folder(self, folder):
+        self.layers[0].set_plots_folder(folder)
+        self.layers[1].set_plots_folder(folder)
+
     def process_input(self, input_im):
         '''
 
@@ -780,11 +784,16 @@ class SingleLayer(object):
         self.input_raster_history = np.zeros((self.input_state_dim, max_time), np.uint8)
         self.rfs_0_raster_history = np.zeros((num_rfs, max_time), np.uint8)
 
-        self.fig = plt.figure(figsize=(40, 20))
-        self.ax = self.fig.add_subplot(1, 1, 1)
-        self.ax.cla()
-        self.ax.get_xaxis().get_major_formatter().set_scientific(False)
-        self.ax.get_yaxis().get_major_formatter().set_scientific(False)
+        self.fig = plt.figure(figsize=(30, 20))
+        self.ax_1 = self.fig.add_subplot(2, 1, 1)
+        self.ax_1.cla()
+        self.ax_1.get_xaxis().get_major_formatter().set_scientific(False)
+        self.ax_1.get_yaxis().get_major_formatter().set_scientific(False)
+        self.ax_2 = self.fig.add_subplot(2, 1, 2)
+        self.ax_2.cla()
+        self.ax_2.get_xaxis().get_major_formatter().set_scientific(False)
+        self.ax_2.get_yaxis().get_major_formatter().set_scientific(False)
+
 
         self.last_rfs_sums = None
         self.last_state_to_learn = None
@@ -802,6 +811,11 @@ class SingleLayer(object):
         self.lr = params['lr']  #0.01 * 0.25  # * 0.05
 
         self.last_adjust_time = 0
+
+        self.plots_folder = "."
+
+    def set_plots_folder(self, folder):
+        self.plots_folder = folder
 
     def get_weights(self):
         return self.weights.copy()
@@ -1017,21 +1031,21 @@ class SingleLayer(object):
         return rfs_im, rf_ims_dict
 
     def do_plots(self):
-        self.ax.cla()
+        self.ax_1.cla()
         num_rf = self.input_raster_history.shape[0]
         raster_plot = np.transpose(np.multiply(self.input_raster_history[0:num_rf, max(0, self.t - 200):self.t],
                                                np.arange(num_rf)[:, np.newaxis]))
         t = np.arange(raster_plot.shape[0])
-        self.ax.plot(t, raster_plot, color='b', marker='.', linestyle='')
-        self.fig.savefig("raster_" + self.layer_name + "_input.png", dpi=100)
+        self.ax_1.plot(t, raster_plot, color='b', marker='.', linestyle='')
+        #self.fig.savefig(self.plots_folder + "/raster_" + self.layer_name + "_input.png", dpi=100)
 
-        self.ax.cla()
+        self.ax_2.cla()
         num_rf = self.rfs_0_raster_history.shape[0]
         raster_plot = np.transpose(np.multiply(self.rfs_0_raster_history[0:num_rf, max(0, self.t - 200):self.t],
                                                np.arange(num_rf)[:, np.newaxis]))
         t = np.arange(raster_plot.shape[0])
-        self.ax.plot(t, raster_plot, color='b', marker='.', linestyle='')
-        self.fig.savefig("raster_" + self.layer_name + "_output.png", dpi=100)
+        self.ax_2.plot(t, raster_plot, color='b', marker='.', linestyle='')
+        self.fig.savefig(self.plots_folder + "/raster_" + self.layer_name + "_input_output.png", dpi=100)
 
 
 

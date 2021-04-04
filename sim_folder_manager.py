@@ -8,14 +8,18 @@ class SimFolderManager(object):
         self.sim_prefix = params['sim_prefix']
 
         now = datetime.datetime.now().isoformat()
-        self.sim_folder_path = params['sim_folders_path'] + '/' + now
+        self.sim_folder_path = params['sim_folders_path'] + '/' + self.sim_prefix + '_' + now
         os.makedirs(self.sim_folder_path)
 
         self.models_save_folder = self.sim_folder_path
         self.plots_save_folder = self.sim_folder_path
 
         # TODO fix this again or just use git commit id
-        file_list = []
+        file_list = ['run_demo_perception.py',
+                     'robot_brain_classes/multi_layer_seqnn_brain.py',
+                     'offline_analyses/try_sparsify_3.py',  # plot make image
+                     'robot_sensor_classes/video_playback.py']
+
         # file_list = ['robot_brain.py',
         #              'robot_model.py',
         #              'robot_environment.py',

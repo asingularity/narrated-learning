@@ -53,7 +53,7 @@ def get_sensors_params():
 
 def get_sim_folder_manager_params():
     params = {
-        'sim_prefix': 'test',
+        'sim_prefix': 'perception',
         'sim_folders_path': '/srv/projects/NL-sim/',
         'scripts_folder_path': '/srv/projects/NL/'
     }
@@ -100,6 +100,8 @@ def run_demo(demo_components):
     robot_sensors = demo_components['robot_sensors']
     visualizer = demo_components['visualizer']
     sim_folder_manager = demo_components['sim_folder_manager']
+
+    robot_brain.set_plots_folder(sim_folder_manager.get_plots_save_folder())
 
     random.seed(1233)
 
