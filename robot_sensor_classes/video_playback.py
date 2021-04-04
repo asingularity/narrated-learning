@@ -268,14 +268,14 @@ if __name__ == '__main__':
                                       'returned_im_dtype': np.float32,  # only np.float32 supported
                                       'returned_im_use_color': False,  # only False supported for now
                                       'video_dir': '/srv/projects/video-downloads',
-                                      'video_filename': 'sea-turtles-yLuEx-XH3Uc.mp4'
+                                      'video_filename': 'seattle-driving-fkps18H3SXY.mp4'
                                       })
 
     print()
     print('VideoPlaybackSensor init done!')
     print()
 
-    view_debug = False
+    view_debug = True
     fps = FPSCounter()
 
     while not vid.done():
