@@ -780,7 +780,7 @@ class SingleLayer(object):
         self.per_rf_concat_timesteps = self.default_concat_timesteps * np.ones(self.num_rfs)
 
         # raster stuff
-        max_time = 8000000
+        max_time = 800000
         self.input_raster_history = np.zeros((self.input_state_dim, max_time), np.uint8)
         self.rfs_0_raster_history = np.zeros((num_rfs, max_time), np.uint8)
 
@@ -802,6 +802,10 @@ class SingleLayer(object):
         self.scaling_factor = np.ones(self.num_rfs)
         self.mean_rates = np.zeros(self.num_rfs)
         self.last_event_times = np.zeros(self.num_rfs)
+
+        # histories for plotting
+        self.mean_rates_history = np.zeros((self.num_rfs, max_time))
+        self.scaling_factor_history = np.zeros((self.num_rfs, max_time))
 
         # adjust scaling factor based on firing rates
         self.target_rate = 1.0 / self.num_rfs  # since this is a single-WTA, we want even on average
@@ -930,10 +934,9 @@ class SingleLayer(object):
         # adjust scaling factor based on firing rates
 
         if self.t > self.rate_calc_timescale:
-
             if self.t - self.last_adjust_time > self.rate_calc_timescale:  # adjust all
                 counts = np.sum(self.rfs_0_raster_history[:, self.t - self.rate_calc_timescale:self.t], axis=1)
-                self.mean_rates[:] = counts * 1.0 / 200
+                self.mean_rates[:] = counts * 1.0 / self.rate_calc_timescale
 
                 below = np.nonzero(self.mean_rates < self.target_rate)
                 above = np.nonzero(self.mean_rates > self.target_rate)
@@ -946,6 +949,9 @@ class SingleLayer(object):
                 self.scaling_factor[self.scaling_factor < self.scale_factor_delta] = self.scale_factor_delta
 
                 self.last_adjust_time = self.t
+
+            self.mean_rates_history[:, self.t] = self.mean_rates[:]
+            self.scaling_factor_history[:, self.t] = self.scaling_factor[:]
 
             if 0:  # only winner
                 counts = np.sum(self.rfs_0_raster_history[:, self.t - 200:self.t], axis=1)
@@ -1031,6 +1037,14 @@ class SingleLayer(object):
         return rfs_im, rf_ims_dict
 
     def do_plots(self):
+        self.ax_1.cla()
+        self.ax_2.cla()
+        # plot mean_rates, scaling_factor over time
+        self.ax_1.plot(np.transpose(self.mean_rates_history[:, max(0, self.t - 200000):self.t]))
+        self.ax_2.plot(np.transpose(self.scaling_factor_history[:, max(0, self.t - 200000):self.t]))
+        self.fig.savefig(self.plots_folder + "/activity_" + self.layer_name + "_rates_scaling.png", dpi=100)
+
+
         self.ax_1.cla()
         num_rf = self.input_raster_history.shape[0]
         raster_plot = np.transpose(np.multiply(self.input_raster_history[0:num_rf, max(0, self.t - 200):self.t],
