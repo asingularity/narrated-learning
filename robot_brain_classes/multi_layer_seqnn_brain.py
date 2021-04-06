@@ -455,7 +455,7 @@ class MultiLayerSeqNNBrain(object):
         self.bins_per_pixel = 1
         self.input_im_dim = params['input_im_dim']
 
-        self.do_raster_plots_every_k_im = 10
+        self.do_raster_plots_every_k_im = 4  # 10 before for speed
         self.ims_since_raster = 0
 
         self.display_im_dim = 3000
@@ -774,7 +774,6 @@ class SingleLayer(object):
 
         # computed:
         self.release_num = int(self.release_prop * self.num_rfs)
-        self.total_released = 0
 
         # target rf and current concat time steps
         self.per_rf_concat_timesteps = self.default_concat_timesteps * np.ones(self.num_rfs)
@@ -794,17 +793,24 @@ class SingleLayer(object):
         self.ax_2.get_xaxis().get_major_formatter().set_scientific(False)
         self.ax_2.get_yaxis().get_major_formatter().set_scientific(False)
 
+        self.fig_bar = plt.figure(figsize=(40, 20))
+        self.ax_bar = self.fig_bar.add_subplot(1, 1, 1)
+        self.ax_bar.cla()
+        self.ax_bar.get_xaxis().get_major_formatter().set_scientific(False)
+        self.ax_bar.get_yaxis().get_major_formatter().set_scientific(False)
 
         self.last_rfs_sums = None
         self.last_state_to_learn = None
         self.last_per_rf_time_index = None
 
         self.scaling_factor = np.ones(self.num_rfs)
-        self.mean_rates = np.zeros(self.num_rfs)
+        # self.mean_rates = np.zeros(self.num_rfs)
+        self.instant_rates = np.zeros(self.num_rfs)
         self.last_event_times = np.zeros(self.num_rfs)
 
         # histories for plotting
         self.mean_rates_history = np.zeros((self.num_rfs, max_time))
+        self.instant_rates_history = np.zeros((self.num_rfs, max_time))
         self.scaling_factor_history = np.zeros((self.num_rfs, max_time))
 
         # adjust scaling factor based on firing rates
@@ -815,6 +821,9 @@ class SingleLayer(object):
         self.lr = params['lr']  #0.01 * 0.25  # * 0.05
 
         self.last_adjust_time = 0
+
+        self.time_since_last_event = np.zeros(self.num_rfs)
+        self.time_between_last_events = np.zeros(self.num_rfs)
 
         self.plots_folder = "."
 
@@ -875,11 +884,6 @@ class SingleLayer(object):
         :return:
         '''
 
-        if (self.t == 0 or self.t % self.release_steps == 0) and self.total_released < self.num_rfs:
-            self.total_released += self.release_num
-            if self.total_released > self.num_rfs:
-                self.total_released = self.num_rfs
-
         #state_to_learn = self.last_input_state.copy()
         state_to_learn = input_state.copy()
 
@@ -888,28 +892,17 @@ class SingleLayer(object):
         # print(state_to_learn)
 
         # adjust per-rf-concat-timesteps based on rf size
-        tmp_3_cpu = np.sum(self.weights[0:self.total_released, :], axis=1)
+        tmp_3_cpu = np.sum(self.weights, axis=1)
 
         self.last_rfs_sums = tmp_3_cpu.copy()
-
         self.last_state_to_learn = state_to_learn.copy()
-
-        #nnz_below = np.nonzero(tmp_3_cpu < self.target_rf_sum)[0]
-        #nnz_above = np.nonzero(tmp_3_cpu > self.target_rf_sum)[0]
-        #self.weights[nnz_below, :] *= 1.00001
-        #self.weights[nnz_above, :] *= (1.0 - 0.00001)
-
-        #self.per_rf_concat_timesteps[nnz_below] += 0.0005 #*= (1.0 + 0.001)
-        #self.per_rf_concat_timesteps[nnz_above] -= 0.0005 #*= (1.0 - 0.001)
-        #self.per_rf_concat_timesteps[self.per_rf_concat_timesteps < 1] = 1
-        #self.per_rf_concat_timesteps[self.per_rf_concat_timesteps >= self.max_input_concat_timesteps] = self.max_input_concat_timesteps - 1e-3
 
         per_rf_time_index = self.per_rf_concat_timesteps.astype(np.int) - 1
 
         self.last_per_rf_time_index = per_rf_time_index.copy()
 
         if True:
-            tmp_1 = np.multiply(self.weights[0:self.total_released, :], state_to_learn[per_rf_time_index, :])
+            tmp_1 = np.multiply(self.weights, state_to_learn[per_rf_time_index, :])
             tmp_2_cpu = np.sum(tmp_1, axis=1)
             eff_frame = np.divide(tmp_2_cpu, tmp_3_cpu)
 
@@ -920,62 +913,43 @@ class SingleLayer(object):
             best_rf = np.argmax(eff_frame)
         else:
             err_frame = np.sum(np.abs(self.weights - state_to_learn[per_rf_time_index, :]), axis=1)
-            #err_frame = np.divide(err_frame, tmp_3_cpu + 1e-9)
+            # err_frame = np.divide(err_frame, tmp_3_cpu + 1e-9)
 
             scaling_on = True  # TODO UNSURE IF NEED? PROBABLY. NEED TO MEASURE AND PLOT!!!
             if scaling_on:
-                err_frame = np.multiply(err_frame, self.scaling_factor)
+                err_frame = np.multiply(err_frame, 1.0 / self.scaling_factor)
 
             best_rf = np.argmin(err_frame)
 
-
-
-
         # adjust scaling factor based on firing rates
+        # self._do_scaling_first_attemp()
 
-        if self.t > self.rate_calc_timescale:
-            if self.t - self.last_adjust_time > self.rate_calc_timescale:  # adjust all
-                counts = np.sum(self.rfs_0_raster_history[:, self.t - self.rate_calc_timescale:self.t], axis=1)
-                self.mean_rates[:] = counts * 1.0 / self.rate_calc_timescale
+        # TODO re-enable scaling better !!!
+        # self._do_scaling_better(win_rf=best_rf)
 
-                below = np.nonzero(self.mean_rates < self.target_rate)
-                above = np.nonzero(self.mean_rates > self.target_rate)
-
-                #self.scaling_factor[below] = self.scaling_factor[below] * (1.0 - self.scale_factor_delta)
-                #self.scaling_factor[above] = self.scaling_factor[above] * (1.0 + self.scale_factor_delta)
-
-                self.scaling_factor[below] = self.scaling_factor[below] + self.scale_factor_delta
-                self.scaling_factor[above] = self.scaling_factor[above] - self.scale_factor_delta
-                self.scaling_factor[self.scaling_factor < self.scale_factor_delta] = self.scale_factor_delta
-
-                self.last_adjust_time = self.t
-
-            self.mean_rates_history[:, self.t] = self.mean_rates[:]
-            self.scaling_factor_history[:, self.t] = self.scaling_factor[:]
-
-            if 0:  # only winner
-                counts = np.sum(self.rfs_0_raster_history[:, self.t - 200:self.t], axis=1)
-                self.mean_rates[:] = counts * 1.0/200
-
-                if self.mean_rates[best_rf] > target_rate:
-                    self.scaling_factor[best_rf] -= 0.001
-                    self.scaling_factor[best_rf] = max(0.001, self.scaling_factor[best_rf])
-
-                if self.mean_rates[best_rf] < target_rate:
-                    self.scaling_factor[best_rf] += 0.001
-
-
-
-
-        # adjust scaling factors, for those that haven't fired based on if they were to fire next step (so continuously scale up)
-        #self.scaling_factor = np.ones(self.num_rfs)
+        layer_output = np.zeros(self.num_rfs)
+        layer_output[best_rf] = 1
 
         if learning_on:
+
             lr = self.lr  # 0.01
 
-            self.weights[best_rf, :] = lr * state_to_learn[per_rf_time_index[best_rf], :] + (1.0 - lr) * self.weights[best_rf, :]
+            if True:
+                self.weights[best_rf, :] = lr * state_to_learn[per_rf_time_index[best_rf], :] + (1.0 - lr) * self.weights[best_rf, :]
+            else:
+                # instead of scaling:
+                sorted_rfs = np.argsort(eff_frame)[::-1]  # high to low
+                # # assert sorted_rfs[0] == best_rf  # sometimes false if all equal
 
-            if self.enable_target_rf:
+                for tmp_in in range(len(sorted_rfs)):
+                    rf_index = sorted_rfs[tmp_in]
+                    self.weights[rf_index, :] = lr * state_to_learn[per_rf_time_index[rf_index], :] + (
+                                1.0 - lr) * self.weights[rf_index, :]
+
+                    lr *= 0.1
+                    #lr = max(0.0001 * self.lr, lr)
+
+            if False:  # self.enable_target_rf:
                 if tmp_3_cpu[best_rf] < self.target_rf_sum:
                     self.per_rf_concat_timesteps[best_rf] += 0.0005
                 else:
@@ -989,6 +963,84 @@ class SingleLayer(object):
         self.rfs_0_raster_history[best_rf, self.t] = 1
         self.last_event_times[best_rf] = self.t
 
+        return layer_output
+
+    def _do_scaling_better(self, win_rf):
+        '''
+
+        :return:
+        '''
+
+        #self.weights = self.weights * (1.0 - (self.lr * (1.0 / self.num_rfs)))
+        #return
+
+        # first, update firing rate estimate per RF:
+        #   1.0 / (time_since_last_event + time_between_last_events)
+
+        self.time_since_last_event[:] = self.time_since_last_event[:] + 1
+
+        self.time_between_last_events[win_rf] = self.time_since_last_event[win_rf]
+        self.time_since_last_event[win_rf] = 1e-9  # 0 but avoid any divide by zero
+
+        # no 0.5
+        self.instant_rates = 1.0 / (0.5 * (self.time_since_last_event + self.time_between_last_events))
+        self.instant_rates_history[:, self.t] = self.instant_rates[:]
+
+        # compute and update mean rates
+        #self.mean_rates = 0.99
+        #self.mean_rates_history[:, self.t] =
+
+        # print()
+        # print('***')
+        # print()
+        # print(self.target_rate)
+        # print()
+        # print(self.instant_rates)
+        # print()
+        #
+
+        # TODO replace with self.target_rate at some point
+        target_rate = 1.0 / self.num_rfs  # 2.0/
+
+        delta_scale_factor = (target_rate - self.instant_rates) * (self.lr * .1)  # TODO proper effective learning rate for this
+        self.scaling_factor = np.multiply(self.scaling_factor, 1.0 + delta_scale_factor)
+        self.scaling_factor_history[:, self.t] = self.scaling_factor[:]
+
+    def _do_scaling_first_attemp(self):
+        if self.t > self.rate_calc_timescale:
+            if self.t - self.last_adjust_time > self.rate_calc_timescale:  # adjust all
+                counts = np.sum(self.rfs_0_raster_history[:, self.t - self.rate_calc_timescale:self.t], axis=1)
+                self.instant_rates[:] = counts * 1.0 / self.rate_calc_timescale
+
+                below = np.nonzero(self.instant_rates < self.target_rate)
+                above = np.nonzero(self.instant_rates > self.target_rate)
+
+                #self.scaling_factor[below] = self.scaling_factor[below] * (1.0 - self.scale_factor_delta)
+                #self.scaling_factor[above] = self.scaling_factor[above] * (1.0 + self.scale_factor_delta)
+
+                self.scaling_factor[below] = self.scaling_factor[below] + self.scale_factor_delta
+                self.scaling_factor[above] = self.scaling_factor[above] - self.scale_factor_delta
+                self.scaling_factor[self.scaling_factor < self.scale_factor_delta] = self.scale_factor_delta
+
+                self.last_adjust_time = self.t
+
+            self.mean_rates_history[:, self.t] = self.instant_rates[:]
+            self.scaling_factor_history[:, self.t] = self.scaling_factor[:]
+
+            if 0:  # only winner
+                counts = np.sum(self.rfs_0_raster_history[:, self.t - 200:self.t], axis=1)
+                self.mean_rates[:] = counts * 1.0/200
+
+                if self.mean_rates[best_rf] > target_rate:
+                    self.scaling_factor[best_rf] -= 0.001
+                    self.scaling_factor[best_rf] = max(0.001, self.scaling_factor[best_rf])
+
+                if self.mean_rates[best_rf] < target_rate:
+                    self.scaling_factor[best_rf] += 0.001
+
+        # adjust scaling factors, for those that haven't fired based on if they were to fire next step (so continuously scale up)
+        #self.scaling_factor = np.ones(self.num_rfs)
+
         # expected activity per RF: 1/N frames
         num_rf = self.weights.shape[0]
 
@@ -997,17 +1049,12 @@ class SingleLayer(object):
             pass
             #self.weights *= (1.0 - 0.0001 * 0.5)  # (1.0 - 0.00001 * 0.5)
 
-        layer_output = np.zeros(self.num_rfs)
-        layer_output[best_rf] = 1
-
-        return layer_output
-
     def get_rfs_im(self):
 
         if False:  #self.layer_name == '0':
             print('************')
-            print('mean_rates')
-            print(1.0 / (1e-9 + self.mean_rates))
+            print('instant_rates')
+            print(1.0 / (1e-9 + self.instant_rates))
             print('scaling factor')
             print(self.scaling_factor)
 
@@ -1039,11 +1086,17 @@ class SingleLayer(object):
     def do_plots(self):
         self.ax_1.cla()
         self.ax_2.cla()
-        # plot mean_rates, scaling_factor over time
-        self.ax_1.plot(np.transpose(self.mean_rates_history[:, max(0, self.t - 200000):self.t]))
-        self.ax_2.plot(np.transpose(self.scaling_factor_history[:, max(0, self.t - 200000):self.t]))
+        # plot instant_rates, scaling_factor over time
+        #tmp_num_plot = min(self.num_rfs, 5)
+        tmp_num_plot = self.num_rfs
+        self.ax_1.plot(np.transpose(self.instant_rates_history[0:self.num_rfs:8, max(0, self.t - 20000):self.t]))
+        self.ax_2.plot(np.transpose(self.scaling_factor_history[0:self.num_rfs:8, max(0, self.t - 20000):self.t]))
         self.fig.savefig(self.plots_folder + "/activity_" + self.layer_name + "_rates_scaling.png", dpi=100)
 
+        # activity histogram
+        self.ax_bar.cla()
+        self.ax_bar.bar(np.arange(self.num_rfs), np.sum(self.rfs_0_raster_history[:, max(0, self.t - 20000):self.t], axis=1))
+        self.fig_bar.savefig(self.plots_folder + "/rfs_activity_" + self.layer_name + ".png", dpi=100)
 
         self.ax_1.cla()
         num_rf = self.input_raster_history.shape[0]
@@ -1060,7 +1113,6 @@ class SingleLayer(object):
         t = np.arange(raster_plot.shape[0])
         self.ax_2.plot(t, raster_plot, color='b', marker='.', linestyle='')
         self.fig.savefig(self.plots_folder + "/raster_" + self.layer_name + "_input_output.png", dpi=100)
-
 
 
 

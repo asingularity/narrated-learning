@@ -46,6 +46,7 @@ def get_sensors_params():
         'returned_im_use_color': False,  # only False supported for now
         'video_dir': '/srv/projects/video-downloads',
         'video_filename': 'sea-turtles-yLuEx-XH3Uc.mp4'
+        #'video_filename': 'seattle-driving-fkps18H3SXY.mp4',
     }
 
     return params_video_playback
