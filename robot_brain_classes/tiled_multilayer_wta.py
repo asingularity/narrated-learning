@@ -153,7 +153,10 @@ class SeqNNSeqKMeansBrain(object):
         best_rf = None
 
         if self.seq_nn_t_start <= self.t < self.seq_nn_t_end:
-            best_rf = self._step_seq_nn(input_state=sum_input_states)
+            if self.init_kmeans_with_seq_nn:
+                best_rf = self._step_seq_nn(input_state=sum_input_states)
+            else:
+                best_rf = 0
         elif self.t == self.seq_nn_t_end:
             print()
             print('*** Finished Seq-NN, starting seq-kmeans! ***')
