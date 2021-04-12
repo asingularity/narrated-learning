@@ -45,6 +45,7 @@ class SeqNNSeqKMeansBrain(object):
         self.num_rfs = 800
         self.lr = 0.01  # 0.1
         self.init_kmeans_with_seq_nn = True  # if False, inits kmeans table at same time with just zeros
+        self.kmeans_dist_metric = 0  #  0: normalized match, 1: norm, as in seq-knn
 
         # init
         self.input_state_dim = 2 * self.input_im_dim * self.input_im_dim  # why 2? + and - changes
@@ -235,13 +236,23 @@ class SeqNNSeqKMeansBrain(object):
 
     def _step_seq_kmeans(self, input_state):
         state_to_learn = input_state.copy()
-        tmp_3_cpu = np.sum(self.weights, axis=1)
 
-        tmp_1 = np.multiply(self.weights, state_to_learn)
-        tmp_2_cpu = np.sum(tmp_1, axis=1)
-        eff_frame = np.divide(tmp_2_cpu, tmp_3_cpu)
+        if self.kmeans_dist_metric == 0:
+            # this one gets a less skewed histogram. normalization by weight required:
 
-        best_rf = np.argmax(eff_frame)
+            tmp_3_cpu = np.sum(self.weights, axis=1)
+            tmp_1 = np.multiply(self.weights, state_to_learn)
+            tmp_2_cpu = np.sum(tmp_1, axis=1)
+            eff_frame = np.divide(tmp_2_cpu, tmp_3_cpu)
+            best_rf = np.argmax(eff_frame)
+        elif self.kmeans_dist_metric == 1:
+            # this one gets a skewed histogram. normalization by weight would make only one winner all the time:
+
+            err_frame = np.sum(np.abs(self.weights - state_to_learn), axis=1)
+            best_rf = np.argmin(err_frame)
+        else:
+            assert False, 'unrecognized self.kmeans_dist_metric: ' + str(self.kmeans_dist_metric)
+
 
         # TODO fix this to represent correct kmeans from papers
         lr = self.lr
