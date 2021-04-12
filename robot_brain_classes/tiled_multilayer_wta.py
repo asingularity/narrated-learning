@@ -36,20 +36,20 @@ class SeqNNSeqKMeansBrain(object):
 
         # params
 
-        max_time = 800000
+        self.max_time = 800000
+        self.skip_start_frames = 30 * 30
         self.seq_nn_learn_time = 50000
         self.input_im_dim = params['input_im_dim']
-        self.input_concat_timesteps = 2
+        self.input_concat_timesteps = 2  # 1
         self.display_im_dim = 3000
         self.num_rfs = 800
-        self.lr = 0.01
+        self.lr = 0.01  # 0.1
         self.init_kmeans_with_seq_nn = True  # if False, inits kmeans table at same time with just zeros
 
         # init
-
         self.input_state_dim = 2 * self.input_im_dim * self.input_im_dim  # why 2? + and - changes
 
-        self.seq_nn_t_start = 0
+        self.seq_nn_t_start = self.skip_start_frames
         self.seq_nn_t_end = self.seq_nn_t_start + self.seq_nn_learn_time
 
         self.seq_kmeans_t_start = self.seq_nn_t_end + 1
@@ -62,7 +62,7 @@ class SeqNNSeqKMeansBrain(object):
                                                           'states_dim_list': [self.input_state_dim],
                                                           'store_extra_data': False})
 
-        self.rfs_raster_history = np.zeros((self.num_rfs, max_time), np.uint8)
+        self.rfs_raster_history = np.zeros((self.num_rfs, self.max_time), np.uint8)
 
         self.last_layer_input = None
 
@@ -108,6 +108,10 @@ class SeqNNSeqKMeansBrain(object):
         print()
 
     def process_input(self, input_im):
+
+        if self.t >= self.max_time:
+            return
+
         input_pixels_1 = input_im
         input_pixels_flat = input_pixels_1.flatten()
         input_arr_1 = input_pixels_flat[np.newaxis, :]
@@ -152,7 +156,9 @@ class SeqNNSeqKMeansBrain(object):
 
         best_rf = None
 
-        if self.seq_nn_t_start <= self.t < self.seq_nn_t_end:
+        if self.t < self.seq_nn_t_start:
+            best_rf = 0
+        elif self.seq_nn_t_start <= self.t < self.seq_nn_t_end:
             if self.init_kmeans_with_seq_nn:
                 best_rf = self._step_seq_nn(input_state=sum_input_states)
             else:
