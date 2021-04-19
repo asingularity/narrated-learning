@@ -29,7 +29,7 @@ from robot_sensor_classes.video_playback import VideoPlaybackSensor
 
 DISABLE_BRAIN = False  # for testing input by itself; also starts slow display
 RF_IM_DIM = 8  # 8, 16, 32, 64
-PRELOAD_FRAMES = 1 * 60 * 60 * 30
+
 
 def get_sensors_params():
 
@@ -46,8 +46,9 @@ def get_sensors_params():
         'returned_im_dtype': np.float32,  # only np.float32 supported
         'returned_im_use_color': False,  # only False supported for now
         'video_dir': '/srv/projects/video-downloads',
-        'video_filename': 'sea-turtles-yLuEx-XH3Uc.mp4'
-        #'video_filename': 'seattle-driving-fkps18H3SXY.mp4',
+        #'video_filename': 'sea-turtles-yLuEx-XH3Uc.mp4'
+        #'video_filename': 'seattle-driving-fkps18H3SXY.mp4'
+        'video_filename': 'sea-turtles-11hr-spxtEt6RaS4.mp4'
     }
 
     return params_video_playback
@@ -77,7 +78,7 @@ def get_visualizer_params():
         'fps_display_interval': 6,
         'image_display_secs_fast': 3,  # 8+ for good speed
         'waitKey_time_fast': 1,  # 1, 100, 5000
-        'image_display_secs_slow': 0.0,#2,  # 0: every frame
+        'image_display_secs_slow': 0.0, # 0.01  # 2,  # 0: every frame
         'waitKey_time_slow': 1,  # 1, 100, 5000
         'scale_camera_factor': 1,
         'auto_switch_to_slow_disp_time': None,

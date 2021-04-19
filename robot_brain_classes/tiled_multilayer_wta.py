@@ -38,14 +38,17 @@ class SeqNNSeqKMeansBrain(object):
 
         self.max_time = 800000
         self.skip_start_frames = 30 * 30
-        self.seq_nn_learn_time = 50000
+        self.seq_nn_learn_time = 50000  # 800000  # 10000
         self.input_im_dim = params['input_im_dim']
         self.input_concat_timesteps = 2  # 1
         self.display_im_dim = 3000
-        self.num_rfs = 800
-        self.lr = 0.01  # 0.1
+        self.num_rfs = 800  # * 4
+        self.lr = 0.01  # 0.001
         self.init_kmeans_with_seq_nn = True  # if False, inits kmeans table at same time with just zeros
         self.kmeans_dist_metric = 0  #  0: normalized match, 1: norm, as in seq-knn
+
+        # for plotting:
+        self.error_mean_time = 40000
 
         # init
         self.input_state_dim = 2 * self.input_im_dim * self.input_im_dim  # why 2? + and - changes
@@ -73,6 +76,9 @@ class SeqNNSeqKMeansBrain(object):
         self._init_seq_kmeans()
 
         self._init_plotting()
+
+        self.mean_error = np.zeros(self.max_time)
+        self.error = np.zeros(self.max_time)
 
     def _init_plotting(self):
 
@@ -156,22 +162,31 @@ class SeqNNSeqKMeansBrain(object):
         # exit(1)
 
         best_rf = None
+        error = None
 
         if self.t < self.seq_nn_t_start:
             best_rf = 0
+            error = 0
         elif self.seq_nn_t_start <= self.t < self.seq_nn_t_end:
             if self.init_kmeans_with_seq_nn:
-                best_rf = self._step_seq_nn(input_state=sum_input_states)
+                best_rf, error = self._step_seq_nn(input_state=sum_input_states)
             else:
                 best_rf = 0
+                error = 0
         elif self.t == self.seq_nn_t_end:
             print()
             print('*** Finished Seq-NN, starting seq-kmeans! ***')
             print()
             self._transition_nn_to_kmeans()
             best_rf = 0
+            error = 0
         elif self.seq_kmeans_t_start <= self.t <= self.seq_kmeans_t_end:
-            best_rf = self._step_seq_kmeans(input_state=sum_input_states)
+            best_rf, error = self._step_seq_kmeans(input_state=sum_input_states)
+
+        assert error is not None
+        # TODO error, mean error
+        self.error[self.t] = error
+        self.mean_error[self.t] = np.mean(self.error[max(0, self.t-self.error_mean_time):self.t])
 
         self.rfs_raster_history[best_rf, self.t] = 1
 
@@ -232,10 +247,12 @@ class SeqNNSeqKMeansBrain(object):
             self.num_row_changes_for_disp += 1
         self.frames_since_row_change_disp += 1
 
-        return new_min_ind
+        error = new_min_dist
+        return new_min_ind, error
 
     def _step_seq_kmeans(self, input_state):
         state_to_learn = input_state.copy()
+        error = None
 
         if self.kmeans_dist_metric == 0:
             # this one gets a less skewed histogram. normalization by weight required:
@@ -245,20 +262,29 @@ class SeqNNSeqKMeansBrain(object):
             tmp_2_cpu = np.sum(tmp_1, axis=1)
             eff_frame = np.divide(tmp_2_cpu, tmp_3_cpu)
             best_rf = np.argmax(eff_frame)
+
+
+            #error = eff_frame[best_rf]
+            error = np.sum(np.abs(self.weights[best_rf, :] - state_to_learn))
+
         elif self.kmeans_dist_metric == 1:
             # this one gets a skewed histogram. normalization by weight would make only one winner all the time:
 
             err_frame = np.sum(np.abs(self.weights - state_to_learn), axis=1)
             best_rf = np.argmin(err_frame)
+            error = err_frame[best_rf]
         else:
+            error = None
             assert False, 'unrecognized self.kmeans_dist_metric: ' + str(self.kmeans_dist_metric)
 
-
-        # TODO fix this to represent correct kmeans from papers
+        # fix this to represent correct kmeans from papers: already is the forgetful one
+        # TODO implement exp decreases: non forgetful one
         lr = self.lr
         self.weights[best_rf, :] = lr * state_to_learn + (1.0 - lr) * self.weights[best_rf, :]
 
-        return best_rf
+        assert error is not None
+
+        return best_rf, error
 
     def _transition_nn_to_kmeans(self):
 
@@ -326,28 +352,11 @@ class SeqNNSeqKMeansBrain(object):
         self.ax_1.plot(t, raster_plot, color='b', marker='.', linestyle='')
         self.fig_1.savefig(self.plots_folder + "/raster_rfs.png", dpi=100)
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+        # plot error
+        self.ax_bar.cla()
+        self.ax_1.cla()
+        self.ax_1.plot(self.mean_error[0:self.t], color='k', marker='.')
+        self.fig_1.savefig(self.plots_folder + "/mean_error_vs_t.png", dpi=100)
 
 
 class TiledMultilayerWTABrain(object):
