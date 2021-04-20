@@ -46,7 +46,7 @@ class SeqNNSeqKMeansBrain(object):
         self.num_rfs = 800  # * 4
         self.lr = 0.1  # 0.1, 0.001
         # TODO lr=0.1, rfs=800 was a good combo: 979990
-        self.kmeans_dist_metric = 0  #  0: normalized match, 1: norm, as in seq-knn
+        self.kmeans_dist_metric = 1  #  0: normalized match, 1: norm, as in seq-knn
 
         self.enable_reset_rfs = False
         self.reset_rf_time = 40000

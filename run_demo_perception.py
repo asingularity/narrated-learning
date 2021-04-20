@@ -56,7 +56,7 @@ def get_sensors_params():
 
 def get_sim_folder_manager_params():
     params = {
-        'sim_prefix': 'perception_new_kmeans_constraint',
+        'sim_prefix': 'perception_metric_1_no_resets',
         'sim_folders_path': '/srv/projects/NL-sim/',
         'scripts_folder_path': '/srv/projects/NL/'
     }
