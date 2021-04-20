@@ -38,13 +38,13 @@ class SeqNNSeqKMeansBrain(object):
 
         self.max_time = 800000
         self.skip_start_frames = 30 * 30
-        self.seq_nn_learn_time = 50000  # 800000  # 10000
+        self.init_kmeans_with_seq_nn = False  # if False, inits kmeans table at self.seq_nn_learn_time with just zeros
+        self.seq_nn_learn_time = 0   # 800000  # 10000
         self.input_im_dim = params['input_im_dim']
         self.input_concat_timesteps = 2  # 1
         self.display_im_dim = 3000
         self.num_rfs = 800  # * 4
         self.lr = 0.01  # 0.001
-        self.init_kmeans_with_seq_nn = True  # if False, inits kmeans table at same time with just zeros
         self.kmeans_dist_metric = 0  #  0: normalized match, 1: norm, as in seq-knn
 
         # for plotting:
@@ -204,6 +204,8 @@ class SeqNNSeqKMeansBrain(object):
         new_min_ind = sorted_dist_indices[0]
         new_min_dist = dists[new_min_ind]
 
+        error = np.sum(np.abs(self.cuda_table.table_i[new_min_ind, :] - input_state))
+
         if self.init_I_row_num is None:
             self.init_I_row_num = 0
 
@@ -247,7 +249,8 @@ class SeqNNSeqKMeansBrain(object):
             self.num_row_changes_for_disp += 1
         self.frames_since_row_change_disp += 1
 
-        error = new_min_dist
+        #error = new_min_dist
+
         return new_min_ind, error
 
     def _step_seq_kmeans(self, input_state):
