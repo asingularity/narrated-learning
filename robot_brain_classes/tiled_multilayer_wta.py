@@ -44,15 +44,15 @@ class SeqNNSeqKMeansBrain(object):
         self.input_concat_timesteps = 2  # 1
         self.display_im_dim = 3000
         self.num_rfs = 800  # * 4
-        self.lr = 0.1  # 0.1, 0.001
+        self.lr = 0.01  # 0.1, 0.001
         # TODO lr=0.1, rfs=800 was a good combo: 979990
-        self.kmeans_dist_metric = 1  #  0: normalized match, 1: norm, as in seq-knn
+        self.kmeans_dist_metric = 0  #  0: normalized match, 1: norm, as in seq-knn
 
         self.enable_reset_rfs = False
         self.reset_rf_time = 40000
 
         # for plotting:
-        self.error_mean_time = 1  # 40000
+        self.error_mean_time = 40000  # 40000
 
         # init
         self.input_state_dim = 2 * self.input_im_dim * self.input_im_dim  # why 2? + and - changes
@@ -147,6 +147,9 @@ class SeqNNSeqKMeansBrain(object):
 
                 input_state_p[input_state_p < 0] = 0
                 input_state_n[input_state_n < 0] = 0
+
+                input_state_p[input_state_p > 0] = 1  # input_state[input_state_p > 0]
+                input_state_n[input_state_n > 0] = 1  # input_state[input_state_n > 0]
 
                 input_state = np.concatenate((input_state_p, input_state_n))
             else:
