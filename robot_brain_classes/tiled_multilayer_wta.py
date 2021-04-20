@@ -44,11 +44,15 @@ class SeqNNSeqKMeansBrain(object):
         self.input_concat_timesteps = 2  # 1
         self.display_im_dim = 3000
         self.num_rfs = 800  # * 4
-        self.lr = 0.01  # 0.001
+        self.lr = 0.1  # 0.1, 0.001
+        # TODO lr=0.1, rfs=800 was a good combo: 979990
         self.kmeans_dist_metric = 0  #  0: normalized match, 1: norm, as in seq-knn
 
+        self.enable_reset_rfs = False
+        self.reset_rf_time = 40000
+
         # for plotting:
-        self.error_mean_time = 40000
+        self.error_mean_time = 1  # 40000
 
         # init
         self.input_state_dim = 2 * self.input_im_dim * self.input_im_dim  # why 2? + and - changes
@@ -107,6 +111,9 @@ class SeqNNSeqKMeansBrain(object):
 
     def _init_seq_kmeans(self):
         self.weights = np.zeros((self.num_rfs, self.input_state_dim))
+        self.last_event_time = np.zeros(self.num_rfs)
+        self.num_resets = 0
+        self.num_frames_disp_resets = 0
 
     def set_plots_folder(self, folder):
         self.plots_folder = folder
@@ -285,6 +292,15 @@ class SeqNNSeqKMeansBrain(object):
         lr = self.lr
         self.weights[best_rf, :] = lr * state_to_learn + (1.0 - lr) * self.weights[best_rf, :]
 
+        # activity constraint
+        if self.enable_reset_rfs:
+            self.last_event_time[best_rf] = self.t
+            reset_rfs = np.nonzero(self.t - self.last_event_time > self.reset_rf_time)[0]
+            self.weights[reset_rfs, :] = 0.0
+            self.num_resets += len(reset_rfs)
+
+        self.num_frames_disp_resets += 1
+
         assert error is not None
 
         return best_rf, error
@@ -307,7 +323,11 @@ class SeqNNSeqKMeansBrain(object):
                 self.do_plots()
                 self.ims_since_raster = 0
 
-        print('    mean frames between row replaces: ', self.frames_since_row_change_disp / (self.num_row_changes_for_disp + 1e-9))
+        #print('    mean frames between row replaces: ', self.frames_since_row_change_disp / (self.num_row_changes_for_disp + 1e-9))
+        print('    num resets per frame: ', self.num_resets / self.num_frames_disp_resets)
+        self.num_frames_disp_resets = 0
+        self.num_resets = 0
+
         #self.num_row_changes_for_disp = 0
         #self.frames_since_row_change_disp = 0
 
