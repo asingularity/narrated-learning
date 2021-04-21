@@ -41,7 +41,7 @@ class SeqNNSeqKMeansBrain(object):
         self.init_kmeans_with_seq_nn = False  # if False, inits kmeans table at self.seq_nn_learn_time with just zeros
         self.seq_nn_learn_time = 0   # 800000  # 10000
         self.input_im_dim = params['input_im_dim']
-        self.input_concat_timesteps = 2  # 1
+        self.input_concat_timesteps = 1  # 1
         self.display_im_dim = 3000
         self.num_rfs = 800  # * 4
         self.lr = 0.01  # 0.1, 0.001
@@ -112,6 +112,7 @@ class SeqNNSeqKMeansBrain(object):
     def _init_seq_kmeans(self):
         self.weights = np.zeros((self.num_rfs, self.input_state_dim))
         self.last_event_time = np.zeros(self.num_rfs)
+        self.rf_counts = np.zeros(self.num_rfs)
         self.num_resets = 0
         self.num_frames_disp_resets = 0
 
@@ -274,6 +275,10 @@ class SeqNNSeqKMeansBrain(object):
             tmp_1 = np.multiply(self.weights, state_to_learn)
             tmp_2_cpu = np.sum(tmp_1, axis=1)
             eff_frame = np.divide(tmp_2_cpu, tmp_3_cpu)
+
+            delete_from = int(self.t / 10000) * 100
+            #eff_frame[delete_from::] = 0
+
             best_rf = np.argmax(eff_frame)
 
 
@@ -293,7 +298,14 @@ class SeqNNSeqKMeansBrain(object):
         # fix this to represent correct kmeans from papers: already is the forgetful one
         # TODO implement exp decreases: non forgetful one
         lr = self.lr
-        self.weights[best_rf, :] = lr * state_to_learn + (1.0 - lr) * self.weights[best_rf, :]
+
+        forgetful = False
+        if forgetful:
+            self.weights[best_rf, :] = lr * state_to_learn + (1.0 - lr) * self.weights[best_rf, :]
+        else:
+            self.rf_counts[best_rf] += 1
+            self.weights[best_rf, :] = self.weights[best_rf, :] + (1.0 / self.rf_counts[best_rf]) * (state_to_learn - self.weights[best_rf, :])
+            #self.weights[delete_from::, :] = 0.0
 
         # activity constraint
         if self.enable_reset_rfs:
