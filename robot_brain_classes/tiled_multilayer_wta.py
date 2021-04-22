@@ -36,23 +36,24 @@ class SeqNNSeqKMeansBrain(object):
 
         # params
 
+        self.input_im_dim = params['input_im_dim']
+
         self.max_time = 800000
         self.skip_start_frames = 30 * 30
         self.init_kmeans_with_seq_nn = False  # if False, inits kmeans table at self.seq_nn_learn_time with just zeros
-        self.seq_nn_learn_time = 0   # 800000  # 10000
-        self.input_im_dim = params['input_im_dim']
-        self.input_concat_timesteps = 1  # 1
+        self.seq_nn_learn_time = 0
+        self.input_concat_timesteps = 1
         self.display_im_dim = 3000
-        self.num_rfs = 800  # * 4
+        self.num_rfs = 800
         self.lr = 0.01  # 0.1, 0.001
-        # TODO lr=0.1, rfs=800 was a good combo: 979990
         self.kmeans_dist_metric = 0  #  0: normalized match, 1: norm, as in seq-knn
+        self.forgetful_kmeans = False
 
         self.enable_reset_rfs = False
         self.reset_rf_time = 40000
 
         # for plotting:
-        self.error_mean_time = 40000  # 40000
+        self.error_mean_time = 40000
 
         # init
         self.input_state_dim = 2 * self.input_im_dim * self.input_im_dim  # why 2? + and - changes
@@ -299,7 +300,7 @@ class SeqNNSeqKMeansBrain(object):
         # TODO implement exp decreases: non forgetful one
         lr = self.lr
 
-        forgetful = False
+        forgetful = self.forgetful_kmeans  # False
         if forgetful:
             self.weights[best_rf, :] = lr * state_to_learn + (1.0 - lr) * self.weights[best_rf, :]
         else:
