@@ -22,6 +22,38 @@ from math import log
 np.set_printoptions(suppress=True, precision=2)
 
 
+def _compute_match(rfs, input_arr):
+
+    tmp_3_cpu = np.sum(rfs, axis=1)
+    tmp_1 = np.multiply(rfs, input_arr)
+    tmp_2_cpu = np.sum(tmp_1, axis=1)
+    eff_frame = np.divide(tmp_2_cpu, tmp_3_cpu)
+
+    return eff_frame
+
+
+def _compute_error(rfs, input_arr, single_rf=False):
+
+    if single_rf:
+        err_frame = np.sum(np.abs(rfs - input_arr))
+    else:
+        err_frame = np.sum(np.abs(rfs - input_arr), axis=1)
+
+    return err_frame
+
+
+class CandidateQueue(object):
+    def __init__(self, params):
+
+        self.queue_length = params['queue_length']
+        self.input_dim = params['input_dim']
+
+        # what to use for determining WTA winner? _error (norm) min or _match max?
+        self.kmeans_dist_metric = params['kmeans_dist_metric'] #  0: normalized match, 1: norm, as in seq-knn
+
+
+
+
 class SeqNNSeqKMeansBrain(object):
     '''
         first seq-nn
@@ -48,6 +80,7 @@ class SeqNNSeqKMeansBrain(object):
         self.lr = 0.01  # 0.1, 0.001
         self.kmeans_dist_metric = 0  #  0: normalized match, 1: norm, as in seq-knn
         self.forgetful_kmeans = False
+        self.kmeans_enable_adaptation = True
 
         self.enable_reset_rfs = False
         self.reset_rf_time = 40000
@@ -84,6 +117,15 @@ class SeqNNSeqKMeansBrain(object):
 
         self.mean_error = np.zeros(self.max_time)
         self.error = np.zeros(self.max_time)
+
+        self._init_candidate_queue()
+
+    def _init_candidate_queue(self):
+        cq = CandidateQueue(params={
+            'queue_length': 4000,
+            'input_dim': self.input_state_dim,
+            'kmeans_dist_metric': self.kmeans_dist_metric
+        })
 
     def _init_plotting(self):
 
@@ -272,41 +314,31 @@ class SeqNNSeqKMeansBrain(object):
         if self.kmeans_dist_metric == 0:
             # this one gets a less skewed histogram. normalization by weight required:
 
-            tmp_3_cpu = np.sum(self.weights, axis=1)
-            tmp_1 = np.multiply(self.weights, state_to_learn)
-            tmp_2_cpu = np.sum(tmp_1, axis=1)
-            eff_frame = np.divide(tmp_2_cpu, tmp_3_cpu)
-
-            delete_from = int(self.t / 10000) * 100
-            #eff_frame[delete_from::] = 0
+            eff_frame = _compute_match(rfs=self.weights, input_arr=state_to_learn)
 
             best_rf = np.argmax(eff_frame)
-
-
-            #error = eff_frame[best_rf]
-            error = np.sum(np.abs(self.weights[best_rf, :] - state_to_learn))
+            error = _compute_error(rfs=self.weights[best_rf, :], input_arr=state_to_learn, single_rf=True)
 
         elif self.kmeans_dist_metric == 1:
             # this one gets a skewed histogram. normalization by weight would make only one winner all the time:
 
-            err_frame = np.sum(np.abs(self.weights - state_to_learn), axis=1)
+            err_frame = _compute_error(rfs=self.weights, input_arr=state_to_learn)
+
             best_rf = np.argmin(err_frame)
             error = err_frame[best_rf]
         else:
             error = None
             assert False, 'unrecognized self.kmeans_dist_metric: ' + str(self.kmeans_dist_metric)
 
-        # fix this to represent correct kmeans from papers: already is the forgetful one
-        # TODO implement exp decreases: non forgetful one
-        lr = self.lr
-
-        forgetful = self.forgetful_kmeans  # False
-        if forgetful:
-            self.weights[best_rf, :] = lr * state_to_learn + (1.0 - lr) * self.weights[best_rf, :]
-        else:
-            self.rf_counts[best_rf] += 1
-            self.weights[best_rf, :] = self.weights[best_rf, :] + (1.0 / self.rf_counts[best_rf]) * (state_to_learn - self.weights[best_rf, :])
-            #self.weights[delete_from::, :] = 0.0
+        if self.kmeans_enable_adaptation:
+            forgetful = self.forgetful_kmeans  # False
+            if forgetful:
+                lr = self.lr
+                self.weights[best_rf, :] = lr * state_to_learn + (1.0 - lr) * self.weights[best_rf, :]
+            else:
+                self.rf_counts[best_rf] += 1
+                self.weights[best_rf, :] = self.weights[best_rf, :] + (1.0 / self.rf_counts[best_rf]) * (state_to_learn - self.weights[best_rf, :])
+                #self.weights[delete_from::, :] = 0.0
 
         # activity constraint
         if self.enable_reset_rfs:
