@@ -51,8 +51,31 @@ class CandidateQueue(object):
         # what to use for determining WTA winner? _error (norm) min or _match max?
         self.kmeans_dist_metric = params['kmeans_dist_metric'] #  0: normalized match, 1: norm, as in seq-knn
 
+    def step(self, new_input, rfs):
+        '''
+            # pop_rf, pop_rf_mean_err_reduce = self.cq.step(new_input=state_to_learn, rfs=self.weights)
+            # push new rf onto queue; test all candidates on current input vs. rfs default winner; pop end of queue RF
+            # returns popped rf, and its mean error reduction per frame (integrated over time; NOT per its activation)
 
 
+            (1) push new_input onto queue
+                - implemented with circular buffer
+
+            (2) update total err reduce per candidate
+
+            (3) pop oldest candidate and its mean err reduction per frame
+
+                mean err reduction for a candidate:
+                    say the queue length is 10000
+                    candidate would've won the WTA against the best RF in the kmeans rfs 432 times
+                    mean err reduction = sum of differences between (candidate-error vs. best-rf-error) for all times it would've won,
+                                         divided by total time steps (queue len) 10000
+
+        '''
+
+
+
+        return pop_rf, pop_rf_mean_err_reduce
 
 class SeqNNSeqKMeansBrain(object):
     '''
@@ -81,6 +104,8 @@ class SeqNNSeqKMeansBrain(object):
         self.kmeans_dist_metric = 0  #  0: normalized match, 1: norm, as in seq-knn
         self.forgetful_kmeans = False
         self.kmeans_enable_adaptation = True
+
+        self.cq_on = False
 
         self.enable_reset_rfs = False
         self.reset_rf_time = 40000
@@ -121,7 +146,7 @@ class SeqNNSeqKMeansBrain(object):
         self._init_candidate_queue()
 
     def _init_candidate_queue(self):
-        cq = CandidateQueue(params={
+        self.cq = CandidateQueue(params={
             'queue_length': 4000,
             'input_dim': self.input_state_dim,
             'kmeans_dist_metric': self.kmeans_dist_metric
@@ -339,6 +364,31 @@ class SeqNNSeqKMeansBrain(object):
                 self.rf_counts[best_rf] += 1
                 self.weights[best_rf, :] = self.weights[best_rf, :] + (1.0 / self.rf_counts[best_rf]) * (state_to_learn - self.weights[best_rf, :])
                 #self.weights[delete_from::, :] = 0.0
+
+        if self.cq_on:
+            assert self.kmeans_enable_adaptation is False, 'cannot be enabled together for now! in sequence is ok'
+
+            if self.t < self.num_rfs:
+                # just assign newest one
+                self.weights[self.t, :] = state_to_learn[:]
+            else:
+
+                # this is probably? not necessary:
+                # assert self.kmeans_dist_metric == 0, 'below assumes match: higher the better; implement other option!'
+
+                # push new rf onto queue; test all candidates on current input vs. rfs default winner; pop end of queue RF
+                # returns popped rf, and its mean error reduction per frame (integrated over time; NOT per its activation)
+
+                pop_rf, pop_rf_mean_err_reduce = self.cq.step(new_input=state_to_learn, rfs=self.weights)
+
+                if pop_rf is not None:
+                    if pop_rf_mean_err_reduce > worst_rf_mean_err_reduce:
+
+                        # overwrite worst RF with popped RF
+                        self.weights[worst_rf_index, :] = pop_rf[:]
+
+                        # TODO reset mean err reduce for this RF
+
 
         # activity constraint
         if self.enable_reset_rfs:
