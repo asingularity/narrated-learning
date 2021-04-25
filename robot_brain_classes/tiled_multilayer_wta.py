@@ -51,7 +51,17 @@ class CandidateQueue(object):
         # what to use for determining WTA winner? _error (norm) min or _match max?
         self.kmeans_dist_metric = params['kmeans_dist_metric'] #  0: normalized match, 1: norm, as in seq-knn
 
-    def step(self, new_input, rfs):
+        self.err_reduce_lr = params['err_reduce_lr']
+
+        self.rf_queue = np.zeros((self.queue_length, self.input_dim))
+        self.circ_index_oldest = 0  # will increment once before first used
+        self.circ_index_newest = -1  # will increment once before first used
+
+        self.mean_error_reduce = np.zeros(self.queue_length)
+
+        self.t = 0
+
+    def step(self, new_input, rfs, best_rf_error, select_criterion):
         '''
             # pop_rf, pop_rf_mean_err_reduce = self.cq.step(new_input=state_to_learn, rfs=self.weights)
             # push new rf onto queue; test all candidates on current input vs. rfs default winner; pop end of queue RF
@@ -73,9 +83,81 @@ class CandidateQueue(object):
 
         '''
 
+        self._update_error_reduction(new_input=new_input, best_rf_select_criterion=select_criterion, best_rf_error=best_rf_error)  # get all rfs from queue with error lower than best_rf_error and they would be hypothetical winners
+        self._push_onto_queue(new_input=new_input)
+        pop_rf, pop_rf_mean_err_reduce = self._pop_oldest_candidate()
 
+        self.t += 1
 
         return pop_rf, pop_rf_mean_err_reduce
+
+    def _update_error_reduction(self, new_input, best_rf_select_criterion, best_rf_error):
+        if self.kmeans_dist_metric == 0:
+            eff_frame = _compute_match(rfs=self.rf_queue, input_arr=new_input)
+            win_candidates = np.nonzero(eff_frame > best_rf_select_criterion)[0]
+            err_frame = _compute_error(rfs=self.rf_queue, input_arr=new_input)
+
+            debug_print_here = False
+            if debug_print_here:
+                print()
+                print('****************')
+                print(self.t)
+                print(len(win_candidates))
+                print(np.amin(eff_frame), np.amax(eff_frame))
+                print(np.sum(np.sum(self.rf_queue)))
+                print()
+
+        elif self.kmeans_dist_metric == 1:
+            assert best_rf_error == best_rf_select_criterion
+
+            err_frame = _compute_error(rfs=self.rf_queue, input_arr=new_input)
+            win_candidates = np.nonzero(err_frame < best_rf_error)
+        else:
+            assert False, 'Invalid kmeans distance metric! can only be 1 or 0. ' + str(self.kmeans_dist_metric)
+
+        # TODO parameter; has to match the one in other class; refactor!
+        lr_error_reduce = self.err_reduce_lr  # this is just a guess, on same order as queue len
+
+        mean_err_before = self.mean_error_reduce[win_candidates]
+        # all rfs except winner adapt as if they did not reduce error at all (since we care about integral):
+        self.mean_error_reduce = (1.0 - lr_error_reduce) * self.mean_error_reduce + lr_error_reduce * 0.0
+        # winner has reduced error
+        self.mean_error_reduce[win_candidates] = (1.0 - lr_error_reduce) * mean_err_before + lr_error_reduce * (best_rf_error - err_frame[win_candidates])
+
+    def _push_onto_queue(self, new_input):
+
+        self.circ_index_newest += 1
+        if self.circ_index_newest == self.queue_length:
+            self.circ_index_newest = 0
+
+        self.circ_index_oldest += 1
+        if self.circ_index_oldest == self.queue_length:
+            self.circ_index_oldest = 0
+
+        debug_print_here = False
+        if debug_print_here:
+            print()
+            print('pushing onto queue...')
+            print('    ', 'self.circ_index_newest:', self.circ_index_newest)
+            print('    ', 'self.circ_index_oldest:', self.circ_index_oldest)
+            print()
+
+        self.rf_queue[self.circ_index_newest, :] = new_input[:]
+
+    def _pop_oldest_candidate(self):
+        pop_rf = None
+        pop_rf_mean_err_reduce = None
+
+        if self.t < self.queue_length:
+            return pop_rf, pop_rf_mean_err_reduce
+
+        pop_rf = self.rf_queue[self.circ_index_oldest, :]
+        pop_rf_mean_err_reduce = self.mean_error_reduce[self.circ_index_oldest]
+
+        self.mean_error_reduce[self.circ_index_oldest] = 0
+
+        return pop_rf, pop_rf_mean_err_reduce
+
 
 class SeqNNSeqKMeansBrain(object):
     '''
@@ -103,9 +185,11 @@ class SeqNNSeqKMeansBrain(object):
         self.lr = 0.01  # 0.1, 0.001
         self.kmeans_dist_metric = 0  #  0: normalized match, 1: norm, as in seq-knn
         self.forgetful_kmeans = False
-        self.kmeans_enable_adaptation = True
-
+        self.kmeans_cq_length = 4000  # 4000
+        self.kmeans_err_reduce_lr = 0.1 / self.kmeans_cq_length
+        self.kmeans_queue_err_reduce_lr = 1.0 / self.kmeans_cq_length
         self.cq_on = False
+        self.kmeans_enable_adaptation = True  # TODO should be false at first if cq_on is True!
 
         self.enable_reset_rfs = False
         self.reset_rf_time = 40000
@@ -147,10 +231,15 @@ class SeqNNSeqKMeansBrain(object):
 
     def _init_candidate_queue(self):
         self.cq = CandidateQueue(params={
-            'queue_length': 4000,
+            'queue_length': self.kmeans_cq_length,
             'input_dim': self.input_state_dim,
-            'kmeans_dist_metric': self.kmeans_dist_metric
+            'kmeans_dist_metric': self.kmeans_dist_metric,
+            'err_reduce_lr': self.kmeans_queue_err_reduce_lr
         })
+
+        self.mean_error_reduce = np.zeros(self.num_rfs)
+        self.rf_ages = np.zeros(self.num_rfs)
+        self.rfs_init_already = 0
 
     def _init_plotting(self):
 
@@ -168,6 +257,12 @@ class SeqNNSeqKMeansBrain(object):
 
         self.do_raster_plots_every_k_im = 4
         self.ims_since_raster = 0
+
+        self.fig_bar2 = plt.figure(figsize=(20, 20))
+        self.ax_bar2 = self.fig_bar2.add_subplot(1, 1, 1)
+        self.ax_bar2.cla()
+        self.ax_bar2.get_xaxis().get_major_formatter().set_scientific(False)
+        self.ax_bar2.get_yaxis().get_major_formatter().set_scientific(False)
 
     def _init_seq_nn(self):
         self.cuda_table = CudaTable(num_entries=self.num_rfs,
@@ -335,6 +430,7 @@ class SeqNNSeqKMeansBrain(object):
     def _step_seq_kmeans(self, input_state):
         state_to_learn = input_state.copy()
         error = None
+        select_criterion = None
 
         if self.kmeans_dist_metric == 0:
             # this one gets a less skewed histogram. normalization by weight required:
@@ -342,7 +438,13 @@ class SeqNNSeqKMeansBrain(object):
             eff_frame = _compute_match(rfs=self.weights, input_arr=state_to_learn)
 
             best_rf = np.argmax(eff_frame)
+            select_criterion = eff_frame[best_rf]
             error = _compute_error(rfs=self.weights[best_rf, :], input_arr=state_to_learn, single_rf=True)
+
+            # get next best
+            eff_frame[best_rf] = -np.inf
+            next_best_rf = np.argmax(eff_frame)
+            next_error = _compute_error(rfs=self.weights[next_best_rf, :], input_arr=state_to_learn, single_rf=True)
 
         elif self.kmeans_dist_metric == 1:
             # this one gets a skewed histogram. normalization by weight would make only one winner all the time:
@@ -351,8 +453,19 @@ class SeqNNSeqKMeansBrain(object):
 
             best_rf = np.argmin(err_frame)
             error = err_frame[best_rf]
+            select_criterion = error
+            # get next best
+            err_frame[best_rf] = np.inf
+            next_best_rf = np.argmin(err_frame)
+            next_error = err_frame[next_best_rf]
+
         else:
+            best_rf = None
             error = None
+
+            next_best_rf = None
+            next_error = None
+
             assert False, 'unrecognized self.kmeans_dist_metric: ' + str(self.kmeans_dist_metric)
 
         if self.kmeans_enable_adaptation:
@@ -366,29 +479,68 @@ class SeqNNSeqKMeansBrain(object):
                 #self.weights[delete_from::, :] = 0.0
 
         if self.cq_on:
-            assert self.kmeans_enable_adaptation is False, 'cannot be enabled together for now! in sequence is ok'
+            # TODO should this be true?
+            #assert self.kmeans_enable_adaptation is False, 'cannot be enabled together for now! in sequence is ok'
 
-            if self.t < self.num_rfs:
+            if self.rfs_init_already < self.num_rfs:
                 # just assign newest one
-                self.weights[self.t, :] = state_to_learn[:]
+                self.weights[self.rfs_init_already, :] = state_to_learn[:]
+                self.rfs_init_already += 1
             else:
+                # update all RF error reduces
+                # need:
+                #   best_rf, error
+                #   next_best_rf, next_error
 
-                # this is probably? not necessary:
-                # assert self.kmeans_dist_metric == 0, 'below assumes match: higher the better; implement other option!'
+                lr_error_reduce = self.kmeans_err_reduce_lr  # this is just a guess, on same order as queue len
+                # this may not follow unless using distance metric 1:
+                debug_print_here_0 = (self.kmeans_dist_metric == 1)
+                if debug_print_here_0:
+                    if error > next_error:
+                        print()
+                        print("!!! error of winner should always be less than error of next best; otherwise? weird?" + " error: " + str(error) + " next error: " + str(next_error))
+                        print()
+                    else:
+                        pass
+                        #print()
+                        #print('ALL GOOD')
+                        #print()
 
-                # push new rf onto queue; test all candidates on current input vs. rfs default winner; pop end of queue RF
-                # returns popped rf, and its mean error reduction per frame (integrated over time; NOT per its activation)
+                mean_err_before = self.mean_error_reduce[best_rf]
+                # all rfs except winner adapt as if they did not reduce error at all (since we care about integral):
+                self.mean_error_reduce = (1.0 - lr_error_reduce) * self.mean_error_reduce + lr_error_reduce * 0.0
+                # winner has reduced error
+                debug_print_here = False
+                if debug_print_here:
+                    print()
+                    print('    setting mean error reduce best rf:')
+                    print('    lr_error_reduce:', lr_error_reduce)
+                    print('    mean_err_before:', mean_err_before)
+                    print('    error, rf:', error, best_rf)
+                    print('    next_error, rf:', next_error, next_best_rf)
+                    print('    (next_error - error):', (next_error - error))
+                    print()
+                self.mean_error_reduce[best_rf] = (1.0 - lr_error_reduce) * mean_err_before + lr_error_reduce * (next_error - error)
+                self.rf_ages = self.rf_ages + 1
 
-                pop_rf, pop_rf_mean_err_reduce = self.cq.step(new_input=state_to_learn, rfs=self.weights)
+                # get worst rf:
+                #   only qualify if lifetime of rf (since last replacement) is greater than threshold (maybe self.kmeans_cq_length?)
+                #   get worst_rf_index, worst_rf_mean_err_reduce
+                qualified_rfs = np.nonzero(self.rf_ages > self.kmeans_cq_length)[0]
 
-                if pop_rf is not None:
+                pop_rf, pop_rf_mean_err_reduce = self.cq.step(new_input=state_to_learn, rfs=self.weights, best_rf_error=error, select_criterion=select_criterion)
+
+                if pop_rf is not None and len(qualified_rfs) > 0:
+
+                    worst_rf_index = qualified_rfs[np.argmin(self.mean_error_reduce[qualified_rfs])]
+                    worst_rf_mean_err_reduce = self.mean_error_reduce[worst_rf_index]
+
                     if pop_rf_mean_err_reduce > worst_rf_mean_err_reduce:
-
+                        self.num_resets += 1
                         # overwrite worst RF with popped RF
                         self.weights[worst_rf_index, :] = pop_rf[:]
-
-                        # TODO reset mean err reduce for this RF
-
+                        self.mean_error_reduce[worst_rf_index] = 0.0
+                        self.rf_ages[worst_rf_index] = 0
 
         # activity constraint
         if self.enable_reset_rfs:
@@ -422,7 +574,7 @@ class SeqNNSeqKMeansBrain(object):
                 self.ims_since_raster = 0
 
         #print('    mean frames between row replaces: ', self.frames_since_row_change_disp / (self.num_row_changes_for_disp + 1e-9))
-        print('    num resets per frame: ', self.num_resets / self.num_frames_disp_resets)
+        print('    num resets per frame: ', self.num_resets / self.num_frames_disp_resets, self.num_resets, self.num_frames_disp_resets)
         self.num_frames_disp_resets = 0
         self.num_resets = 0
 
@@ -478,6 +630,11 @@ class SeqNNSeqKMeansBrain(object):
         self.ax_1.cla()
         self.ax_1.plot(self.mean_error[0:self.t], color='k', marker='.')
         self.fig_1.savefig(self.plots_folder + "/mean_error_vs_t.png", dpi=100)
+
+        self.ax_bar2.cla()
+        self.ax_bar2.bar(np.arange(self.num_rfs), self.mean_error_reduce)
+        self.fig_bar2.savefig(self.plots_folder + '/mean_err_reduce.png', dpi=100)
+        print('egadasd', np.amin(self.mean_error_reduce), np.amax(self.mean_error_reduce))
 
 
 class TiledMultilayerWTABrain(object):
