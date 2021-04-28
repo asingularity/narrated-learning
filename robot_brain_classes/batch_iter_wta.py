@@ -21,6 +21,9 @@ from math import log
 
 np.set_printoptions(suppress=True, precision=2)
 
+random.seed(0)
+np.random.seed(0)
+
 
 def _compute_match(rfs, input_arr, normalize=True):
 
@@ -46,6 +49,9 @@ def _compute_error(rfs, input_arr, single_rf=False):
     return err_frame
 
 
+
+
+
 class BatchIterWTABrain(object):
     def __init__(self, params):
 
@@ -53,12 +59,12 @@ class BatchIterWTABrain(object):
         #self.max_time = 800000  # after this time, don't do anything at all, just keeps images displayed
 
         self.max_num_batches = 40
-        self.batch_length = 80000
+        self.batch_length = 20000
         self.iters_per_batch = 4
         self.num_rfs = 400
         self.input_concat_timesteps = 1
-        self.lr = 0.01  # 0.1, 0.001 -> only used if forgetful
-        self.forgetful_kmeans = True
+        self.lr = 0.1  # 0.1, 0.001 -> only used if forgetful
+        self.forgetful_kmeans = False
         self.enforce_max_firing = True
 
         # for plotting:
@@ -97,7 +103,7 @@ class BatchIterWTABrain(object):
 
         # for within batches during training: this is all created, and plotted, internally in the loop in one step
         self.t = 0
-
+        self.num_zero_inputs = 0
         # unknown if using?
 
         self.last_input_im = None
@@ -151,6 +157,10 @@ class BatchIterWTABrain(object):
         if input_state is None:
             return
 
+        if np.count_nonzero(input_state) == 0:
+            self.num_zero_inputs += 1
+            return
+
         # accumulate batch while testing on this new batch
         self.inputs_batch[self.curr_batch_accum_step, :] = input_state[:]
 
@@ -176,10 +186,13 @@ class BatchIterWTABrain(object):
             self._plot_rf_counts_test_period()
 
             print()
-            print('*** starting training on batch ***')
+            print('*** starting training on batch ***; curr_batch:', self.curr_batch)
             print()
+
             self._train_on_batch()
             self.curr_batch_accum_step = 0
+            self.curr_batch += 1
+
             print()
             print('*** ended training on batch ***')
             print()
@@ -190,8 +203,51 @@ class BatchIterWTABrain(object):
 
     # def _train_on_batch(self):
 
-    # def _train_on_batch_sequential(self):
     def _train_on_batch(self):
+
+        # first batch: init RFs evenly over batch
+        if self.curr_batch == 0:
+            # random init over batch
+            random_times = np.random.permutation(self.batch_length)[0:self.num_rfs]
+            for rfi in range(self.num_rfs):
+                self.weights[rfi, :] = self.inputs_batch[random_times[rfi], :]
+
+            return
+
+        # second and later batches:
+        # just one iteration for now
+
+        used_inputs = np.zeros(self.batch_length)
+
+        for rfi in range(self.num_rfs):
+            # using err backwards here
+            err_batch = _compute_error(rfs=self.inputs_batch, input_arr=self.weights[rfi, :])
+            err_batch[np.nonzero(used_inputs)] = np.inf
+            sorted_inds = np.argsort(err_batch)
+
+            # find best K matching time points, and adapt on these (non-forgetting)
+            # adapt
+            for ind in sorted_inds[0:self.num_firing_per_train_batch]:
+                input_state = self.inputs_batch[ind, :]
+                forgetful = self.forgetful_kmeans
+                if forgetful:
+                    lr = self.lr
+                    self.weights[rfi, :] = lr * input_state + (1.0 - lr) * self.weights[rfi, :]
+                else:
+                    self.rf_counts[rfi] += 1
+                    self.weights[rfi, :] = self.weights[rfi, :] + (1.0 / self.rf_counts[rfi]) * (
+                                input_state - self.weights[rfi, :])
+
+        # test on batch
+
+        rf_counts_batch = np.zeros(self.num_rfs)
+        for k in range(self.batch_length):
+            err_frame = _compute_error(rfs=self.weights, input_arr=self.inputs_batch[k, :])
+            best_rf = np.argmin(err_frame)
+            rf_counts_batch[best_rf] += 1
+        self._plot_rf_counts_train_period(rf_counts_batch)
+
+    def _train_on_batch_sequential(self):
 
         # if batch full, do iterations
 
@@ -249,12 +305,16 @@ class BatchIterWTABrain(object):
         # plot training error over batch iterations
 
         self._plot_training_error(mean_train_error)
-        self.curr_batch += 1
 
     def _plot_rf_counts_test_period(self):
         self.ax_bar.cla()
         self.ax_bar.bar(np.arange(self.num_rfs), self.rf_counts_test_period)
         self.fig_bar.savefig(self.plots_folder + '/rf_counts_test_batch_' + str(int(self.curr_batch)) + '.png', dpi=100)
+
+    def _plot_rf_counts_train_period(self, rf_counts):
+        self.ax_bar.cla()
+        self.ax_bar.bar(np.arange(self.num_rfs), rf_counts)
+        self.fig_bar.savefig(self.plots_folder + '/rf_counts_train_batch_' + str(int(self.curr_batch)) + '.png', dpi=100)
 
     def _plot_training_error(self, mean_train_error):
         # plot error
@@ -263,6 +323,11 @@ class BatchIterWTABrain(object):
         self.fig_train_error.savefig(self.plots_folder + "/train_error_batch_" + str(int(self.curr_batch)) + ".png", dpi=100)
 
     def get_table_ims(self):
+
+        print()
+        print('prop zero inputs: ', self.num_zero_inputs / self.t)
+        print()
+
         if self.do_raster_plots_every_k_im is not None:
             self.ims_since_raster += 1
             if self.ims_since_raster > self.do_raster_plots_every_k_im:
