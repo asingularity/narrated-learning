@@ -53,7 +53,7 @@ class BatchIterWTABrain(object):
         #self.max_time = 800000  # after this time, don't do anything at all, just keeps images displayed
 
         self.max_num_batches = 40
-        self.batch_length = 20000
+        self.batch_length = 80000
         self.iters_per_batch = 4
         self.num_rfs = 400
         self.input_concat_timesteps = 1
@@ -69,6 +69,8 @@ class BatchIterWTABrain(object):
         self.ims_since_raster = 0
 
         # init
+
+        self.rf_counts_test_period = np.zeros(self.num_rfs)
 
         assert self.batch_length / self.num_rfs == int(self.batch_length / self.num_rfs)
 
@@ -116,18 +118,23 @@ class BatchIterWTABrain(object):
 
     def _init_plotting(self):
 
-        self.fig_train_error = plt.figure(figsize=(20, 20))
+        self.fig_train_error = plt.figure(figsize=(40, 20))
         self.ax_train_error = self.fig_train_error.add_subplot(1, 1, 1)
         self.ax_train_error.cla()
         self.ax_train_error.get_xaxis().get_major_formatter().set_scientific(False)
         self.ax_train_error.get_yaxis().get_major_formatter().set_scientific(False)
 
-        self.fig_test_error = plt.figure(figsize=(20, 20))
+        self.fig_test_error = plt.figure(figsize=(40, 20))
         self.ax_test_error = self.fig_test_error.add_subplot(1, 1, 1)
         self.ax_test_error.cla()
         self.ax_test_error.get_xaxis().get_major_formatter().set_scientific(False)
         self.ax_test_error.get_yaxis().get_major_formatter().set_scientific(False)
 
+        self.fig_bar = plt.figure(figsize=(40, 20))
+        self.ax_bar = self.fig_bar.add_subplot(1, 1, 1)
+        self.ax_bar.cla()
+        self.ax_bar.get_xaxis().get_major_formatter().set_scientific(False)
+        self.ax_bar.get_yaxis().get_major_formatter().set_scientific(False)
 
     def set_plots_folder(self, folder):
         self.plots_folder = folder
@@ -147,9 +154,15 @@ class BatchIterWTABrain(object):
         # accumulate batch while testing on this new batch
         self.inputs_batch[self.curr_batch_accum_step, :] = input_state[:]
 
-        eff_frame = _compute_match(rfs=self.weights, input_arr=input_state)
-        best_rf = np.argmax(eff_frame)
-        select_criterion = eff_frame[best_rf]
+        if False:
+            eff_frame = _compute_match(rfs=self.weights, input_arr=input_state)
+            best_rf = np.argmax(eff_frame)
+            # select_criterion = eff_frame[best_rf]
+        else:
+            err_frame = _compute_error(rfs=self.weights, input_arr=input_state)
+            best_rf = np.argmin(err_frame)
+
+        self.rf_counts_test_period[best_rf] += 1
         error = _compute_error(rfs=self.weights[best_rf, :], input_arr=input_state, single_rf=True)
 
         self.error[self.t] = error
@@ -159,6 +172,9 @@ class BatchIterWTABrain(object):
 
         # training if batch is full
         if self.curr_batch_accum_step == self.batch_length:
+
+            self._plot_rf_counts_test_period()
+
             print()
             print('*** starting training on batch ***')
             print()
@@ -168,8 +184,13 @@ class BatchIterWTABrain(object):
             print('*** ended training on batch ***')
             print()
 
+            self.rf_counts_test_period[:] = 0
+
         self.t += 1
 
+    # def _train_on_batch(self):
+
+    # def _train_on_batch_sequential(self):
     def _train_on_batch(self):
 
         # if batch full, do iterations
@@ -189,11 +210,18 @@ class BatchIterWTABrain(object):
             for batch_t in range(self.batch_length):
                 input_state = self.inputs_batch[batch_t, :]
 
-                eff_frame = _compute_match(rfs=self.weights, input_arr=input_state)
-                if self.enforce_max_firing:
-                    eff_frame[num_active_this_batch >= self.num_firing_per_train_batch] = -np.inf
-                best_rf = np.argmax(eff_frame)
-                select_criterion = eff_frame[best_rf]
+                if False:
+                    eff_frame = _compute_match(rfs=self.weights, input_arr=input_state)
+                    if self.enforce_max_firing:
+                        eff_frame[num_active_this_batch >= self.num_firing_per_train_batch] = -np.inf
+                    best_rf = np.argmax(eff_frame)
+                else:
+                    err_frame = _compute_error(rfs=self.weights, input_arr=input_state)
+                    if self.enforce_max_firing:
+                        err_frame[num_active_this_batch >= self.num_firing_per_train_batch] = np.inf
+                    best_rf = np.argmin(err_frame)
+
+                # select_criterion = eff_frame[best_rf]
                 error = _compute_error(rfs=self.weights[best_rf, :], input_arr=input_state, single_rf=True)
 
                 num_active_this_batch[best_rf] += 1
@@ -222,6 +250,11 @@ class BatchIterWTABrain(object):
 
         self._plot_training_error(mean_train_error)
         self.curr_batch += 1
+
+    def _plot_rf_counts_test_period(self):
+        self.ax_bar.cla()
+        self.ax_bar.bar(np.arange(self.num_rfs), self.rf_counts_test_period)
+        self.fig_bar.savefig(self.plots_folder + '/rf_counts_test_batch_' + str(int(self.curr_batch)) + '.png', dpi=100)
 
     def _plot_training_error(self, mean_train_error):
         # plot error
