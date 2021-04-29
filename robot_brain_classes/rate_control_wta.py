@@ -55,7 +55,9 @@ class RateControlWTABRain(object):
         self.num_rfs = 400
         self.input_concat_timesteps = 1
         self.lr = 0.01  # 0.1, 0.001 -> only used if forgetful
+        self.rate_lr = 0.0001
         self.forgetful_kmeans = True
+        self.apply_rate_control = False
 
         self.max_time = 1000000
 
@@ -85,6 +87,13 @@ class RateControlWTABRain(object):
 
         self._init_plotting()
 
+        # rate control stuff
+        self._init_rate_control()
+
+    def _init_rate_control(self):
+        # target number of time steps between events
+        self.target_isi = self.num_rfs
+        self.last_win_time = np.zeros(self.num_rfs) - 1
 
     def _init_plotting(self):
 
@@ -122,6 +131,9 @@ class RateControlWTABRain(object):
         eff_frame = _compute_match(rfs=self.weights, input_arr=input_state, normalize=True)
         best_rf = np.argmax(eff_frame)
 
+        # Debug Print
+        #print(best_rf, np.amin(self.weights[best_rf]), np.amax(self.weights[best_rf]), eff_frame[best_rf])
+
         self.error[self.t] = _compute_error(rfs=self.weights[best_rf, :], input_arr=input_state, single_rf=True)
         #self.error[self.t] = eff_frame[best_rf]
         self.mean_error[self.t] = np.mean(self.error[max(0, self.t - self.error_mean_time):self.t])
@@ -134,7 +146,21 @@ class RateControlWTABRain(object):
             self.weights[best_rf, :] = self.weights[best_rf, :] + (1.0 / self.rf_counts[best_rf]) * (
                     input_state - self.weights[best_rf, :])
 
+        # rate control
+        if self.apply_rate_control and self.last_win_time[best_rf] >= 0:
+            last_isi = self.t - self.last_win_time[best_rf]
+
+            # if last_isi > target_isi: firing rate too slow: decrease weights
+            # if last_isi < target_isi: firing rate too fast: increase weights
+            lr_apply = -self.rate_lr * (last_isi - self.target_isi)
+
+            #self.weights[best_rf] = self.weights[best_rf] * (1.0 + lr_apply)
+            self.weights[best_rf] = self.weights[best_rf] + lr_apply
+            self.weights[best_rf][self.weights[best_rf] > 1] = 1
+            self.weights[best_rf][self.weights[best_rf] < 0] = 0
+
         self.rf_counts[best_rf] += 1
+        self.last_win_time[best_rf] = self.t
         self.t += 1
 
     def get_table_ims(self):
