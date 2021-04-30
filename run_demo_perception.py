@@ -21,9 +21,9 @@ import numpy as np
 random.seed(6)
 np.random.seed(6)
 
-from robot_brain_classes.multi_layer_seqnn_brain import MultiLayerSeqNNBrain
-from robot_brain_classes.tiled_multilayer_wta import SeqNNSeqKMeansBrain
-from robot_brain_classes.batch_iter_wta import BatchIterWTABrain
+#from robot_brain_classes.multi_layer_seqnn_brain import MultiLayerSeqNNBrain
+#from robot_brain_classes.tiled_multilayer_wta import SeqNNSeqKMeansBrain
+#from robot_brain_classes.batch_iter_wta import BatchIterWTABrain
 from robot_brain_classes.rate_control_wta import RateControlWTABRain
 from visualizer_classes.segment_visualizer import SegmentVisualizer
 from sim_folder_manager import SimFolderManager
@@ -31,6 +31,9 @@ from robot_sensor_classes.video_playback import VideoPlaybackSensor
 
 DISABLE_BRAIN = False  # for testing input by itself; also starts slow display
 RF_IM_DIM = 8  # 8, 16, 32, 64
+
+# ROOT_DIR = '/srv'
+ROOT_DIR = '/home/csaba'
 
 
 def get_sensors_params():
@@ -47,7 +50,7 @@ def get_sensors_params():
         'returned_im_square_crop': square_crop,
         'returned_im_dtype': np.float32,  # only np.float32 supported
         'returned_im_use_color': False,  # only False supported for now
-        'video_dir': '/srv/projects/video-downloads',
+        'video_dir': ROOT_DIR + '/projects/video-downloads',
         #'video_filename': 'sea-turtles-yLuEx-XH3Uc.mp4'
         #'video_filename': 'seattle-driving-fkps18H3SXY.mp4'
         'video_filename': 'sea-turtles-11hr-spxtEt6RaS4.mp4'
@@ -59,8 +62,8 @@ def get_sensors_params():
 def get_sim_folder_manager_params():
     params = {
         'sim_prefix': 'batch_iter_wta_',
-        'sim_folders_path': '/srv/projects/NL-sim/',
-        'scripts_folder_path': '/srv/projects/NL/'
+        'sim_folders_path': ROOT_DIR + '/projects/NL-sim2/',
+        'scripts_folder_path': ROOT_DIR + '/projects/NL/'
     }
     return params
 

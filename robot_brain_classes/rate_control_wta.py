@@ -6,12 +6,12 @@ import random
 import pickle
 from math import sqrt
 from brain_components_classes.states_history import StatesLimitedHistory
-from cython_eff import compute_eff
+#from cython_eff import compute_eff
 from offline_analyses.try_sparsify_3 import get_sparse_features, make_im
 
 from utils.one_time_messages import OneTimeMessages
 
-from cuda_dist_query import CudaTable
+#from cuda_dist_query import CudaTable
 
 import matplotlib
 matplotlib.use('Agg')
@@ -42,6 +42,17 @@ def _compute_match(rfs, input_arr, normalize=True):
 def _compute_error(rfs, input_arr, single_rf=False):
 
     if single_rf:
+        err_frame = np.sqrt(np.sum(np.square(rfs - input_arr)))
+    else:
+        err_frame = np.sqrt(np.sum(np.square(rfs - input_arr), axis=1))
+
+    return err_frame
+
+
+
+def _compute_error2(rfs, input_arr, single_rf=False):
+
+    if single_rf:
         err_frame = np.sum(np.abs(rfs - input_arr))
     else:
         err_frame = np.sum(np.abs(rfs - input_arr), axis=1)
@@ -52,10 +63,10 @@ def _compute_error(rfs, input_arr, single_rf=False):
 class RateControlWTABRain(object):
     def __init__(self, params):
         self.input_im_dim = params['input_im_dim']
-        self.num_rfs = 800
+        self.num_rfs = 400
         self.input_concat_timesteps = 1
-        self.lr = 0.01  # TODO CHANGE: 0.0001
-        self.rate_lr = 0.001  # TODO CHANGE: 0.0000001
+        self.lr = 0.01
+        self.rate_lr = 0.0001  # for threshold
         self.forgetful_kmeans = True
         self.apply_rate_control = True
 
@@ -69,8 +80,8 @@ class RateControlWTABRain(object):
 
         self.input_state_dim = 2 * self.input_im_dim * self.input_im_dim  # why 2? + and - changes
 
-        #self.weights = np.zeros((self.num_rfs, self.input_state_dim)) # + 1e-9
-        self.weights = np.random.random((self.num_rfs, self.input_state_dim)) * 1e-12
+        self.weights = np.zeros((self.num_rfs, self.input_state_dim)) # + 1e-9
+        #self.weights = np.random.random((self.num_rfs, self.input_state_dim)) * 1e-12
 
         self.rf_counts = np.zeros(self.num_rfs)
 
@@ -97,6 +108,7 @@ class RateControlWTABRain(object):
         # target number of time steps between events
         self.target_isi = self.num_rfs
         self.last_win_time = np.zeros(self.num_rfs) - 1
+        self.error_thresholds = 100 * np.ones(self.num_rfs)
 
     def _init_plotting(self):
 
@@ -131,14 +143,32 @@ class RateControlWTABRain(object):
             self.num_zero_inputs += 1
             return
 
-        eff_frame = _compute_match(rfs=self.weights, input_arr=input_state, normalize=True)
-        best_rf = np.argmax(eff_frame)
+        #print('HERE', self.t)
+
+        if False:
+            eff_frame = _compute_match(rfs=self.weights, input_arr=input_state, normalize=True)
+            best_rf = np.argmax(eff_frame)
+        else:
+            err_frame = _compute_error(rfs=self.weights, input_arr=input_state)
+
+            best_rf_before = np.argmin(err_frame)
+
+            if self.apply_rate_control:
+                # invalidate some based on threshold
+                err_frame[np.nonzero(np.greater(err_frame, self.error_thresholds))] = np.inf
+
+            if 0: #self.t > 40000:
+                print('***************')
+                print(err_frame)
+                print(self.error_thresholds)
+                print(self.t - self.last_win_time)
+
+            best_rf = np.argmin(err_frame)
 
         # Debug Print
         #print(best_rf, np.amin(self.weights[best_rf]), np.amax(self.weights[best_rf]), eff_frame[best_rf])
 
-        self.error[self.t] = _compute_error(rfs=self.weights[best_rf, :], input_arr=input_state, single_rf=True)
-        #self.error[self.t] = eff_frame[best_rf]
+        self.error[self.t] = _compute_error(rfs=self.weights[best_rf_before, :], input_arr=input_state, single_rf=True)
         self.mean_error[self.t] = np.mean(self.error[max(0, self.t - self.error_mean_time):self.t])
 
         if self.forgetful_kmeans:
@@ -150,18 +180,31 @@ class RateControlWTABRain(object):
                     input_state - self.weights[best_rf, :])
 
         # rate control
-        if self.apply_rate_control and self.last_win_time[best_rf] >= 0:
+        if False:  # self.apply_rate_control and self.last_win_time[best_rf] >= 0:
             last_isi = self.t - self.last_win_time[best_rf]
 
-            # if last_isi > target_isi: firing rate too slow: decrease weights
-            # if last_isi < target_isi: firing rate too fast: increase weights
-            lr_apply = -self.rate_lr * (last_isi - self.target_isi)
+            # if last_isi > target_isi: firing rate too slow: increase threshold
+            # if last_isi < target_isi: firing rate too fast: decrease threshold
+            lr_apply = self.rate_lr * (last_isi - self.target_isi)
 
-            self.weights[best_rf] = self.weights[best_rf] * (1.0 + lr_apply)
-            #self.weights[best_rf] = self.weights[best_rf] + lr_apply
+            #self.error_thresholds[best_rf] += lr_apply
+            self.error_thresholds[best_rf] *= (1 + lr_apply)
 
-            self.weights[best_rf][self.weights[best_rf] > 100] = 100  # TODO CHANGE: >1] = 1
-            self.weights[best_rf][self.weights[best_rf] < 0] = 0
+            if self.error_thresholds[best_rf] < 0:
+                self.error_thresholds[best_rf] = 0
+
+            #self.weights[best_rf] = self.weights[best_rf] * (1.0 + lr_apply)
+            ##self.weights[best_rf] = self.weights[best_rf] + lr_apply
+
+        if self.apply_rate_control:
+            last_isi = self.t - self.last_win_time
+            lr_apply = self.rate_lr * (last_isi - self.target_isi)
+
+            #self.error_thresholds = self.error_thresholds + lr_apply
+            self.error_thresholds = np.multiply(self.error_thresholds, 1.0 + lr_apply)
+
+            self.error_thresholds[self.error_thresholds < 0] = 0
+            self.error_thresholds[self.error_thresholds > 200] = 200
 
         self.rf_counts[best_rf] += 1
         self.last_win_time[best_rf] = self.t
@@ -206,6 +249,10 @@ class RateControlWTABRain(object):
         self.fig_bar.savefig(self.plots_folder + '/rf_counts.png', dpi=100)
         self.rf_counts[:] = 0.0
 
+        self.ax_bar.cla()
+        self.ax_bar.bar(np.arange(self.num_rfs), self.error_thresholds)
+        self.fig_bar.savefig(self.plots_folder + '/rf_thresholds.png', dpi=100)
+
 
     def _get_input_state(self, input_im):
 
@@ -233,6 +280,7 @@ class RateControlWTABRain(object):
                 input_state_p[input_state_p < 0] = 0
                 input_state_n[input_state_n < 0] = 0
 
+                # may want to comment this
                 #input_state_p[input_state_p > 0] = 1  # input_state[input_state_p > 0]
                 #input_state_n[input_state_n > 0] = 1  # input_state[input_state_n > 0]
 
