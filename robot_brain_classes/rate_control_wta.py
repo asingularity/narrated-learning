@@ -52,23 +52,26 @@ def _compute_error(rfs, input_arr, single_rf=False):
 class RateControlWTABRain(object):
     def __init__(self, params):
         self.input_im_dim = params['input_im_dim']
-        self.num_rfs = 400
+        self.num_rfs = 800
         self.input_concat_timesteps = 1
-        self.lr = 0.01  # 0.1, 0.001 -> only used if forgetful
-        self.rate_lr = 0.0001
+        self.lr = 0.01  # TODO CHANGE: 0.0001
+        self.rate_lr = 0.001  # TODO CHANGE: 0.0000001
         self.forgetful_kmeans = True
-        self.apply_rate_control = False
+        self.apply_rate_control = True
 
         self.max_time = 1000000
 
         # for plotting:
-        self.error_mean_time = 20000
+        self.error_mean_time = 50000
 
         self.do_raster_plots_every_k_im = 4
         self.ims_since_raster = 0
 
         self.input_state_dim = 2 * self.input_im_dim * self.input_im_dim  # why 2? + and - changes
-        self.weights = np.zeros((self.num_rfs, self.input_state_dim)) #+ 1e-9
+
+        #self.weights = np.zeros((self.num_rfs, self.input_state_dim)) # + 1e-9
+        self.weights = np.random.random((self.num_rfs, self.input_state_dim)) * 1e-12
+
         self.rf_counts = np.zeros(self.num_rfs)
 
         self.last_layer_input = None
@@ -154,9 +157,10 @@ class RateControlWTABRain(object):
             # if last_isi < target_isi: firing rate too fast: increase weights
             lr_apply = -self.rate_lr * (last_isi - self.target_isi)
 
-            #self.weights[best_rf] = self.weights[best_rf] * (1.0 + lr_apply)
-            self.weights[best_rf] = self.weights[best_rf] + lr_apply
-            self.weights[best_rf][self.weights[best_rf] > 1] = 1
+            self.weights[best_rf] = self.weights[best_rf] * (1.0 + lr_apply)
+            #self.weights[best_rf] = self.weights[best_rf] + lr_apply
+
+            self.weights[best_rf][self.weights[best_rf] > 100] = 100  # TODO CHANGE: >1] = 1
             self.weights[best_rf][self.weights[best_rf] < 0] = 0
 
         self.rf_counts[best_rf] += 1
@@ -229,8 +233,8 @@ class RateControlWTABRain(object):
                 input_state_p[input_state_p < 0] = 0
                 input_state_n[input_state_n < 0] = 0
 
-                input_state_p[input_state_p > 0] = 1  # input_state[input_state_p > 0]
-                input_state_n[input_state_n > 0] = 1  # input_state[input_state_n > 0]
+                #input_state_p[input_state_p > 0] = 1  # input_state[input_state_p > 0]
+                #input_state_n[input_state_n > 0] = 1  # input_state[input_state_n > 0]
 
                 input_state = np.concatenate((input_state_p, input_state_n))
             else:
