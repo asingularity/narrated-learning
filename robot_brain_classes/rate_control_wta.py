@@ -63,7 +63,7 @@ def _compute_error2(rfs, input_arr, single_rf=False):
 class RateControlWTABRain(object):
     def __init__(self, params):
         self.input_im_dim = params['input_im_dim']
-        self.num_rfs = 400
+        self.num_rfs = 1600
         self.input_concat_timesteps = 1
         self.lr = 0.01
         self.rate_lr = 0.0001  # for threshold
@@ -143,30 +143,15 @@ class RateControlWTABRain(object):
             self.num_zero_inputs += 1
             return
 
-        #print('HERE', self.t)
+        err_frame = _compute_error(rfs=self.weights, input_arr=input_state)
 
-        if False:
-            eff_frame = _compute_match(rfs=self.weights, input_arr=input_state, normalize=True)
-            best_rf = np.argmax(eff_frame)
-        else:
-            err_frame = _compute_error(rfs=self.weights, input_arr=input_state)
+        best_rf_before = np.argmin(err_frame)
 
-            best_rf_before = np.argmin(err_frame)
+        if self.apply_rate_control:
+            # invalidate some based on threshold
+            err_frame[np.nonzero(np.greater(err_frame, self.error_thresholds))] = np.inf
 
-            if self.apply_rate_control:
-                # invalidate some based on threshold
-                err_frame[np.nonzero(np.greater(err_frame, self.error_thresholds))] = np.inf
-
-            if 0: #self.t > 40000:
-                print('***************')
-                print(err_frame)
-                print(self.error_thresholds)
-                print(self.t - self.last_win_time)
-
-            best_rf = np.argmin(err_frame)
-
-        # Debug Print
-        #print(best_rf, np.amin(self.weights[best_rf]), np.amax(self.weights[best_rf]), eff_frame[best_rf])
+        best_rf = np.argmin(err_frame)
 
         self.error[self.t] = _compute_error(rfs=self.weights[best_rf_before, :], input_arr=input_state, single_rf=True)
         self.mean_error[self.t] = np.mean(self.error[max(0, self.t - self.error_mean_time):self.t])
@@ -180,22 +165,6 @@ class RateControlWTABRain(object):
                     input_state - self.weights[best_rf, :])
 
         # rate control
-        if False:  # self.apply_rate_control and self.last_win_time[best_rf] >= 0:
-            last_isi = self.t - self.last_win_time[best_rf]
-
-            # if last_isi > target_isi: firing rate too slow: increase threshold
-            # if last_isi < target_isi: firing rate too fast: decrease threshold
-            lr_apply = self.rate_lr * (last_isi - self.target_isi)
-
-            #self.error_thresholds[best_rf] += lr_apply
-            self.error_thresholds[best_rf] *= (1 + lr_apply)
-
-            if self.error_thresholds[best_rf] < 0:
-                self.error_thresholds[best_rf] = 0
-
-            #self.weights[best_rf] = self.weights[best_rf] * (1.0 + lr_apply)
-            ##self.weights[best_rf] = self.weights[best_rf] + lr_apply
-
         if self.apply_rate_control:
             last_isi = self.t - self.last_win_time
             lr_apply = self.rate_lr * (last_isi - self.target_isi)
@@ -281,8 +250,8 @@ class RateControlWTABRain(object):
                 input_state_n[input_state_n < 0] = 0
 
                 # may want to comment this
-                #input_state_p[input_state_p > 0] = 1  # input_state[input_state_p > 0]
-                #input_state_n[input_state_n > 0] = 1  # input_state[input_state_n > 0]
+                input_state_p[input_state_p > 0] = 1  # input_state[input_state_p > 0]
+                input_state_n[input_state_n > 0] = 1  # input_state[input_state_n > 0]
 
                 input_state = np.concatenate((input_state_p, input_state_n))
             else:

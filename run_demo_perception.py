@@ -32,8 +32,8 @@ from robot_sensor_classes.video_playback import VideoPlaybackSensor
 DISABLE_BRAIN = False  # for testing input by itself; also starts slow display
 RF_IM_DIM = 8  # 8, 16, 32, 64
 
-# ROOT_DIR = '/srv'
-ROOT_DIR = '/home/csaba'
+ROOT_DIR = '/srv'
+# ROOT_DIR = '/home/csaba'
 
 
 def get_sensors_params():
