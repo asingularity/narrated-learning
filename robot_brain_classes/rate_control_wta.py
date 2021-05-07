@@ -65,12 +65,12 @@ class RateControlWTABRain(object):
         self.input_im_dim = params['input_im_dim']
         self.num_rfs = 1600
         self.input_concat_timesteps = 1
-        self.lr = 0.01
-        self.rate_lr = 0.0001  # for threshold
+        self.lr = 0.01 * 10
+        self.rate_lr = 0.0001 * 10  # for threshold
         self.forgetful_kmeans = True
         self.apply_rate_control = True
 
-        self.max_time = 1000000
+        self.max_time = 10000000
 
         # for plotting:
         self.error_mean_time = 50000
@@ -152,6 +152,7 @@ class RateControlWTABRain(object):
             err_frame[np.nonzero(np.greater(err_frame, self.error_thresholds))] = np.inf
 
         best_rf = np.argmin(err_frame)
+        assert not np.isnan(best_rf), str(err_frame)
 
         self.error[self.t] = _compute_error(rfs=self.weights[best_rf_before, :], input_arr=input_state, single_rf=True)
         self.mean_error[self.t] = np.mean(self.error[max(0, self.t - self.error_mean_time):self.t])
@@ -169,8 +170,8 @@ class RateControlWTABRain(object):
             last_isi = self.t - self.last_win_time
             lr_apply = self.rate_lr * (last_isi - self.target_isi)
 
-            #self.error_thresholds = self.error_thresholds + lr_apply
-            self.error_thresholds = np.multiply(self.error_thresholds, 1.0 + lr_apply)
+            self.error_thresholds = self.error_thresholds + lr_apply
+            #self.error_thresholds = np.multiply(self.error_thresholds, 1.0 + lr_apply)
 
             self.error_thresholds[self.error_thresholds < 0] = 0
             self.error_thresholds[self.error_thresholds > 200] = 200
@@ -250,8 +251,8 @@ class RateControlWTABRain(object):
                 input_state_n[input_state_n < 0] = 0
 
                 # may want to comment this
-                input_state_p[input_state_p > 0] = 1  # input_state[input_state_p > 0]
-                input_state_n[input_state_n > 0] = 1  # input_state[input_state_n > 0]
+                # input_state_p[input_state_p > 0] = 1  # input_state[input_state_p > 0]
+                # input_state_n[input_state_n > 0] = 1  # input_state[input_state_n > 0]
 
                 input_state = np.concatenate((input_state_p, input_state_n))
             else:
