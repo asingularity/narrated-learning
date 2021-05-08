@@ -63,10 +63,10 @@ def _compute_error2(rfs, input_arr, single_rf=False):
 class RateControlWTABRain(object):
     def __init__(self, params):
         self.input_im_dim = params['input_im_dim']
-        self.num_rfs = 1600
+        self.num_rfs = 400
         self.input_concat_timesteps = 1
-        self.lr = 0.01 * 10
-        self.rate_lr = 0.0001 * 10  # for threshold
+        self.lr = 0.01 #* 10
+        self.rate_lr = 0.0001 #* 10  # for threshold
         self.forgetful_kmeans = True
         self.apply_rate_control = True
 
@@ -130,11 +130,12 @@ class RateControlWTABRain(object):
         print('setting plots folder: ', self.plots_folder)
         print()
 
-    def process_input(self, input_im):
+    def process_input(self, input_events_p, input_events_n):
         if self.t >= self.max_time:
             return
 
-        input_state = self._get_input_state(input_im=input_im)
+        # input_state = self._get_input_state(input_im=input_im)
+        input_state = np.concatenate((input_events_p, input_events_n))
 
         if input_state is None:
             return
@@ -154,7 +155,7 @@ class RateControlWTABRain(object):
         best_rf = np.argmin(err_frame)
         assert not np.isnan(best_rf), str(err_frame)
 
-        self.error[self.t] = _compute_error(rfs=self.weights[best_rf_before, :], input_arr=input_state, single_rf=True)
+        self.error[self.t] = _compute_error(rfs=self.weights[best_rf, :], input_arr=input_state, single_rf=True)
         self.mean_error[self.t] = np.mean(self.error[max(0, self.t - self.error_mean_time):self.t])
 
         if self.forgetful_kmeans:

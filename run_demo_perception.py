@@ -28,6 +28,8 @@ from robot_brain_classes.rate_control_wta import RateControlWTABRain
 from visualizer_classes.segment_visualizer import SegmentVisualizer
 from sim_folder_manager import SimFolderManager
 from robot_sensor_classes.video_playback import VideoPlaybackSensor
+from robot_preprocess_classes.event_pre_processor import EventPreProcessor
+
 
 DISABLE_BRAIN = False  # for testing input by itself; also starts slow display
 RF_IM_DIM = 8  # 8, 16, 32, 64
@@ -57,6 +59,14 @@ def get_sensors_params():
     }
 
     return params_video_playback
+
+
+def get_pre_proc_params():
+    params_pre_proc = {
+        'brightness_threshold': 10.0 / 255,
+        'im_dim': RF_IM_DIM
+    }
+    return params_pre_proc
 
 
 def get_sim_folder_manager_params():
@@ -111,6 +121,8 @@ def run_demo(demo_components):
     visualizer = demo_components['visualizer']
     sim_folder_manager = demo_components['sim_folder_manager']
 
+    pre_proc = EventPreProcessor(get_pre_proc_params())
+
     robot_brain.set_plots_folder(sim_folder_manager.get_plots_save_folder())
 
     random.seed(1233)
@@ -121,8 +133,11 @@ def run_demo(demo_components):
         # a = np.dot(np.random.random((200, 200)), np.random.random((200, 200)))
 
         im = robot_sensors.read_input()
+
+        events_p, events_n = pre_proc.step(input_frame=im)
+
         if not DISABLE_BRAIN:
-            robot_brain.process_input(input_im=im)
+            robot_brain.process_input(input_events_p=events_p, input_events_n=events_n)
 
         visualizer.visualize(input_im=im,
                              segment_brain=robot_brain,
