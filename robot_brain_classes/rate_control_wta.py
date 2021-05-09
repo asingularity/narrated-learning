@@ -65,12 +65,12 @@ class RateControlWTABRain(object):
         self.input_im_dim = params['input_im_dim']
         self.num_rfs = 400
         self.input_concat_timesteps = 1
-        self.lr = 0.01 #* 10
-        self.rate_lr = 0.0001 #* 10  # for threshold
+        self.lr = 0.01 * 1.0  #* 10
+        self.rate_lr = 0.0001 * 1.0  #* 10  # for threshold
         self.forgetful_kmeans = True
         self.apply_rate_control = True
 
-        self.max_time = 10000000
+        self.max_time = 100000000
 
         # for plotting:
         self.error_mean_time = 50000
@@ -108,7 +108,8 @@ class RateControlWTABRain(object):
         # target number of time steps between events
         self.target_isi = self.num_rfs
         self.last_win_time = np.zeros(self.num_rfs) - 1
-        self.error_thresholds = 100 * np.ones(self.num_rfs)
+        self.error_thresholds = 10 * np.ones(self.num_rfs)
+        self.error_multipliers = 1 * np.ones(self.num_rfs)
 
     def _init_plotting(self):
 
@@ -144,13 +145,24 @@ class RateControlWTABRain(object):
             self.num_zero_inputs += 1
             return
 
+        #if self.t < self.num_rfs:
+        #    self.weights[self.t, :] = input_state[:]
+        #    self.t += 1
+        #    return
+
         err_frame = _compute_error(rfs=self.weights, input_arr=input_state)
 
         best_rf_before = np.argmin(err_frame)
 
         if self.apply_rate_control:
             # invalidate some based on threshold
-            err_frame[np.nonzero(np.greater(err_frame, self.error_thresholds))] = np.inf
+            # print(np.amin(err_frame), np.amax(err_frame))
+
+            bad_rfs = np.nonzero(np.greater(err_frame, self.error_thresholds))[0]
+            err_frame[bad_rfs] = np.inf
+
+            # self.weights[bad_rfs, :] = (1.0 - self.rate_lr) * self.weights[bad_rfs, :]
+            # err_frame = np.multiply(err_frame, self.error_multipliers)
 
         best_rf = np.argmin(err_frame)
         assert not np.isnan(best_rf), str(err_frame)
@@ -175,7 +187,11 @@ class RateControlWTABRain(object):
             #self.error_thresholds = np.multiply(self.error_thresholds, 1.0 + lr_apply)
 
             self.error_thresholds[self.error_thresholds < 0] = 0
-            self.error_thresholds[self.error_thresholds > 200] = 200
+            self.error_thresholds[self.error_thresholds > 10] = 10
+
+            self.error_multipliers = self.error_multipliers - lr_apply  # lower multiplier if not enough fr
+            self.error_multipliers[self.error_multipliers < 0] = 0
+            self.error_multipliers[self.error_multipliers > 100] = 100
 
         self.rf_counts[best_rf] += 1
         self.last_win_time[best_rf] = self.t
@@ -222,7 +238,11 @@ class RateControlWTABRain(object):
 
         self.ax_bar.cla()
         self.ax_bar.bar(np.arange(self.num_rfs), self.error_thresholds)
-        self.fig_bar.savefig(self.plots_folder + '/rf_thresholds.png', dpi=100)
+        self.fig_bar.savefig(self.plots_folder + '/error_thresholds.png', dpi=100)
+
+        self.ax_bar.cla()
+        self.ax_bar.bar(np.arange(self.num_rfs), self.error_multipliers)
+        self.fig_bar.savefig(self.plots_folder + '/error_multipliers.png', dpi=100)
 
 
     def _get_input_state(self, input_im):

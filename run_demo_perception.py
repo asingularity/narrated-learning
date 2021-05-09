@@ -63,7 +63,7 @@ def get_sensors_params():
 
 def get_pre_proc_params():
     params_pre_proc = {
-        'brightness_threshold': 10.0 / 255,
+        'brightness_threshold': 1.0 / 255,
         'im_dim': RF_IM_DIM
     }
     return params_pre_proc
