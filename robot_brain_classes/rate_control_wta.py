@@ -42,20 +42,13 @@ def _compute_match(rfs, input_arr, normalize=True):
 def _compute_error(rfs, input_arr, single_rf=False):
 
     if single_rf:
-        err_frame = np.sqrt(np.sum(np.square(rfs - input_arr)))
+        #err_frame = np.sum(np.abs(rfs - input_arr)) / np.sum(rfs)  # unstable
+        err_frame = np.sum(np.abs(rfs - input_arr)) / np.sum(input_arr) # weird, goes up!
+        #err_frame = np.sqrt(np.sum(np.square(rfs - input_arr)))
     else:
-        err_frame = np.sqrt(np.sum(np.square(rfs - input_arr), axis=1))
-
-    return err_frame
-
-
-
-def _compute_error2(rfs, input_arr, single_rf=False):
-
-    if single_rf:
-        err_frame = np.sum(np.abs(rfs - input_arr))
-    else:
-        err_frame = np.sum(np.abs(rfs - input_arr), axis=1)
+        #err_frame = np.divide(np.sum(np.abs(rfs - input_arr), axis=1), np.sum(np.abs(rfs), axis=1))
+        err_frame = np.sum(np.abs(rfs - input_arr), axis=1) / np.sum(input_arr)
+        #err_frame = np.sqrt(np.sum(np.square(rfs - input_arr), axis=1))
 
     return err_frame
 
@@ -65,10 +58,10 @@ class RateControlWTABRain(object):
         self.input_im_dim = params['input_im_dim']
         self.num_rfs = 400
         self.input_concat_timesteps = 1
-        self.lr = 0.01 * 1.0  #* 10
-        self.rate_lr = 0.0001 * 1.0  #* 10  # for threshold
+        self.lr = 1.0 / 100
+        self.rate_lr = 1.0 / 10000
         self.forgetful_kmeans = True
-        self.apply_rate_control = True
+        self.apply_rate_control = False
 
         self.max_time = 10000000
 
@@ -80,7 +73,7 @@ class RateControlWTABRain(object):
 
         self.input_state_dim = 2 * self.input_im_dim * self.input_im_dim  # why 2? + and - changes
 
-        self.weights = np.zeros((self.num_rfs, self.input_state_dim)) # + 1e-9
+        self.weights = np.zeros((self.num_rfs, self.input_state_dim))  # + 1e-1
         #self.weights = np.random.random((self.num_rfs, self.input_state_dim)) * 1e-12
 
         self.rf_counts = np.zeros(self.num_rfs)
@@ -114,9 +107,14 @@ class RateControlWTABRain(object):
     def _init_rate_control(self):
         # target number of time steps between events
         self.target_isi = self.num_rfs
-        self.last_win_time = np.zeros(self.num_rfs) - 1
         self.error_thresholds = 10 * np.ones(self.num_rfs)
         self.error_multipliers = 1 * np.ones(self.num_rfs)
+
+        self.last_win_time = np.zeros(self.num_rfs) - 1
+
+        #self.target_fr = 1.0 / self.target_isi
+        #self.last_win_time = -np.inf* np.ones(self.num_rfs)
+        #self.last_isi = np.inf * np.ones(self.num_rfs)
 
     def _init_plotting(self):
 
@@ -166,9 +164,11 @@ class RateControlWTABRain(object):
         if self.apply_rate_control:
             # invalidate some based on threshold
             # print(np.amin(err_frame), np.amax(err_frame))
-
+            #print(err_frame)
             bad_rfs = np.nonzero(np.greater(err_frame, self.error_thresholds))[0]
             err_frame[bad_rfs] = np.inf
+
+            #print(len(bad_rfs))
 
             # self.weights[bad_rfs, :] = (1.0 - self.rate_lr) * self.weights[bad_rfs, :]
             # err_frame = np.multiply(err_frame, self.error_multipliers)
@@ -176,6 +176,7 @@ class RateControlWTABRain(object):
         best_rf = np.argmin(err_frame)
         assert not np.isnan(best_rf), str(err_frame)
 
+        #if self.t > self.error_mean_time:
         self.error[self.t] = _compute_error(rfs=self.weights[best_rf, :], input_arr=input_state, single_rf=True)
         self.mean_error[self.t] = np.mean(self.error[max(0, self.t - self.error_mean_time):self.t])
 
@@ -193,6 +194,11 @@ class RateControlWTABRain(object):
         if self.apply_rate_control:
             last_isi = self.t - self.last_win_time
             lr_apply = self.rate_lr * (last_isi - self.target_isi)
+
+            # self.last_isi[best_rf] = self.t - self.last_win_time[best_rf]
+            # fr_estimate = 1.0 / self.last_isi
+            # fr_error = fr_estimate - self.target_fr
+            # lr_apply = -self.rate_lr * fr_error
 
             self.error_thresholds = self.error_thresholds + lr_apply
             #self.error_thresholds = np.multiply(self.error_thresholds, 1.0 + lr_apply)
