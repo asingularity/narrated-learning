@@ -25,6 +25,7 @@ np.random.seed(6)
 #from robot_brain_classes.tiled_multilayer_wta import SeqNNSeqKMeansBrain
 #from robot_brain_classes.batch_iter_wta import BatchIterWTABrain
 from robot_brain_classes.rate_control_wta import RateControlWTABRain
+from robot_brain_classes.rate_control_som_wta import RateControlSomWtaBrain
 from visualizer_classes.segment_visualizer import SegmentVisualizer
 from sim_folder_manager import SimFolderManager
 from robot_sensor_classes.video_playback import VideoPlaybackSensor
@@ -108,6 +109,7 @@ def init_demo():
         #'robot_brain': SeqNNSeqKMeansBrain(get_brain_params()),
         #'robot_brain': BatchIterWTABrain(get_brain_params()),
         'robot_brain': RateControlWTABRain(get_brain_params()),
+        #'robot_brain': RateControlSomWtaBrain(get_brain_params()),
         'robot_sensors': VideoPlaybackSensor(get_sensors_params()),
         'visualizer': SegmentVisualizer(get_visualizer_params()),
         'sim_folder_manager': SimFolderManager(get_sim_folder_manager_params())

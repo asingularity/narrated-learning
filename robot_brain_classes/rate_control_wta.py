@@ -70,7 +70,7 @@ class RateControlWTABRain(object):
         self.forgetful_kmeans = True
         self.apply_rate_control = True
 
-        self.max_time = 100000000
+        self.max_time = 10000000
 
         # for plotting:
         self.error_mean_time = 50000
@@ -103,6 +103,13 @@ class RateControlWTABRain(object):
 
         # rate control stuff
         self._init_rate_control()
+
+        # rasters
+        self._init_rasters()
+
+    def _init_rasters(self):
+        self.input_raster_history = np.zeros((self.input_state_dim, self.max_time), np.uint8)
+        self.rfs_raster_history = np.zeros((self.num_rfs, self.max_time), np.uint8)
 
     def _init_rate_control(self):
         # target number of time steps between events
@@ -138,6 +145,8 @@ class RateControlWTABRain(object):
         # input_state = self._get_input_state(input_im=input_im)
         input_state = np.concatenate((input_events_p, input_events_n))
 
+        self.input_raster_history[:, self.t] = input_state[:]
+
         if input_state is None:
             return
 
@@ -169,6 +178,8 @@ class RateControlWTABRain(object):
 
         self.error[self.t] = _compute_error(rfs=self.weights[best_rf, :], input_arr=input_state, single_rf=True)
         self.mean_error[self.t] = np.mean(self.error[max(0, self.t - self.error_mean_time):self.t])
+
+        self.rfs_raster_history[best_rf, self.t] = 1
 
         if self.forgetful_kmeans:
             lr = self.lr
@@ -243,6 +254,20 @@ class RateControlWTABRain(object):
         self.ax_bar.cla()
         self.ax_bar.bar(np.arange(self.num_rfs), self.error_multipliers)
         self.fig_bar.savefig(self.plots_folder + '/error_multipliers.png', dpi=100)
+
+        self.ax_bar.cla()
+        num_rf = self.rfs_raster_history.shape[0]
+        raster_plot = np.transpose(np.multiply(self.rfs_raster_history[0:num_rf, max(0, self.t - 200):self.t], np.arange(num_rf)[:, np.newaxis]))
+        t = np.arange(raster_plot.shape[0])
+        self.ax_bar.plot(t, raster_plot, color='b', marker='.', linestyle='')
+        self.fig_bar.savefig(self.plots_folder + "/raster_rfs.png", dpi=100)
+
+        self.ax_bar.cla()
+        num_rf = self.input_raster_history.shape[0]
+        raster_plot = np.transpose(np.multiply(self.input_raster_history[0:num_rf, max(0, self.t - 200):self.t], np.arange(num_rf)[:, np.newaxis]))
+        t = np.arange(raster_plot.shape[0])
+        self.ax_bar.plot(t, raster_plot, color='b', marker='.', linestyle='')
+        self.fig_bar.savefig(self.plots_folder + "/raster_inputs.png", dpi=100)
 
 
     def _get_input_state(self, input_im):
