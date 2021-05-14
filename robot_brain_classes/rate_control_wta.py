@@ -188,7 +188,6 @@ class RateControlWTABRain(object):
         self.mean_error[self.t] = np.mean(self.error[max(0, self.t - self.error_mean_time):self.t])
 
         self.sum_error_per_rf[best_rf] = self.sum_error_per_rf[best_rf] + err_frame[best_rf]
-        self.num_error_per_rf[best_rf] += 1
 
         unnorm_error = np.sum(np.abs(self.weights[best_rf, :] - input_state))
         self.sum_unnorm_error_per_rf[best_rf] = self.sum_unnorm_error_per_rf[best_rf] + unnorm_error
@@ -207,6 +206,7 @@ class RateControlWTABRain(object):
 
         self.rfs_raster_history[best_rf, self.t] = 1
         self.rf_counts[best_rf] += 1
+        self.num_error_per_rf[best_rf] += 1
 
         if self.forgetful_kmeans:
             lr = self.lr
@@ -275,15 +275,14 @@ class RateControlWTABRain(object):
         self.ax_bar.cla()
         self.ax_bar.bar(np.arange(self.num_rfs), self.rf_counts)
         self.fig_bar.savefig(self.plots_folder + '/rf_counts.png', dpi=100)
-        self.rf_counts[:] = 0.0
 
         self.ax_bar.cla()
         self.ax_bar.bar(np.arange(self.num_rfs), np.divide(self.sum_error_per_rf, self.num_error_per_rf))
         self.fig_bar.savefig(self.plots_folder + '/mean_error_per_rf.png', dpi=100)
 
         self.ax_bar.cla()
-        self.ax_bar.bar(np.arange(self.num_rfs), np.divide(self.sum_input_normed_error_per_rf, self.num_error_per_rf))
-        self.fig_bar.savefig(self.plots_folder + '/mean_input_normed_error_per_rf.png', dpi=100)
+        self.ax_bar.bar(np.arange(self.num_rfs), np.divide(self.sum_input_normed_error_per_rf, self.rf_counts))
+        self.fig_bar.savefig(self.plots_folder + '/mean_input_normed_error_per_rf_RESETS.png', dpi=100)
 
         self.ax_bar.cla()
         self.ax_bar.bar(np.arange(self.num_rfs), np.divide(self.sum_unnorm_error_per_rf, self.num_error_per_rf))
@@ -298,8 +297,8 @@ class RateControlWTABRain(object):
         self.fig_bar.savefig(self.plots_folder + '/rf_sums.png', dpi=100)
 
         self.ax_bar.cla()
-        self.ax_bar.bar(np.arange(self.num_rfs), np.divide(self.sum_norm2_error_per_rf, self.num_error_per_rf))
-        self.fig_bar.savefig(self.plots_folder + '/mean_norm2_error_per_rf.png', dpi=100)
+        self.ax_bar.bar(np.arange(self.num_rfs), np.divide(self.sum_norm2_error_per_rf, self.rf_counts))
+        self.fig_bar.savefig(self.plots_folder + '/mean_norm2_error_per_rf_RESETS.png', dpi=100)
 
         if self.apply_rate_control:
             self.ax_bar.cla()
@@ -324,6 +323,9 @@ class RateControlWTABRain(object):
         self.ax_bar.plot(t, raster_plot, color='b', marker='.', linestyle='')
         self.fig_bar.savefig(self.plots_folder + "/raster_inputs.png", dpi=100)
 
+        self.rf_counts[:] = 0.0
+        self.sum_norm2_error_per_rf[:] = 0.0
+        self.sum_input_normed_error_per_rf[:] = 0.0
 
     def _get_input_state(self, input_im):
 
