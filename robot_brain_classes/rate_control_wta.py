@@ -105,6 +105,7 @@ class RateControlWTABRain(object):
         self.sum_unnorm_error_per_rf = np.zeros(self.num_rfs)
         self.sum_input_per_rf = np.zeros(self.num_rfs)
         self.sum_input_normed_error_per_rf = np.zeros(self.num_rfs)
+        self.sum_norm2_error_per_rf = np.zeros(self.num_rfs)
 
     def _init_rasters(self):
         self.input_raster_history = np.zeros((self.input_state_dim, self.max_time), np.uint8)
@@ -198,6 +199,9 @@ class RateControlWTABRain(object):
         input_normed_error = unnorm_error / sum_input
         self.sum_input_normed_error_per_rf[best_rf] = self.sum_input_normed_error_per_rf[best_rf]  + input_normed_error
 
+        norm2_error = np.sqrt(np.sum(np.square(self.weights[best_rf, :] - input_state)))
+        self.sum_norm2_error_per_rf[best_rf] = self.sum_norm2_error_per_rf[best_rf] + norm2_error
+
         # TODO why is above different from error if it should be the same???
         # TODO next, look when using other distance metric (straightforward L2 norm) if this normed error is different
 
@@ -288,6 +292,14 @@ class RateControlWTABRain(object):
         self.ax_bar.cla()
         self.ax_bar.bar(np.arange(self.num_rfs), np.divide(self.sum_input_per_rf, self.num_error_per_rf))
         self.fig_bar.savefig(self.plots_folder + '/mean_input_sum_per_rf.png', dpi=100)
+
+        self.ax_bar.cla()
+        self.ax_bar.bar(np.arange(self.num_rfs), np.sum(np.abs(self.weights), axis=1))
+        self.fig_bar.savefig(self.plots_folder + '/rf_sums.png', dpi=100)
+
+        self.ax_bar.cla()
+        self.ax_bar.bar(np.arange(self.num_rfs), np.divide(self.sum_norm2_error_per_rf, self.num_error_per_rf))
+        self.fig_bar.savefig(self.plots_folder + '/mean_norm2_error_per_rf.png', dpi=100)
 
         if self.apply_rate_control:
             self.ax_bar.cla()
