@@ -102,6 +102,8 @@ class RateControlWTABRain(object):
         self._init_rasters()
 
         self.sum_error_per_rf = np.zeros(self.num_rfs)
+        self.sum_unnorm_error_per_rf = np.zeros(self.num_rfs)
+        self.sum_input_per_rf = np.zeros(self.num_rfs)
 
     def _init_rasters(self):
         self.input_raster_history = np.zeros((self.input_state_dim, self.max_time), np.uint8)
@@ -183,8 +185,12 @@ class RateControlWTABRain(object):
         self.error[self.t] = _compute_error(rfs=self.weights[best_rf, :], input_arr=input_state, single_rf=True)
         self.mean_error[self.t] = np.mean(self.error[max(0, self.t - self.error_mean_time):self.t])
 
+        self.sum_unnorm_error_per_rf[best_rf] = self.sum_unnorm_error_per_rf[best_rf] + np.sum(np.abs(self.weights[best_rf, :] - input_state))
+
         self.sum_error_per_rf[best_rf] = self.sum_error_per_rf[best_rf] + err_frame[best_rf]
         self.num_error_per_rf[best_rf] += 1
+
+        self.sum_input_per_rf[best_rf] = self.sum_input_per_rf[best_rf] + np.sum(input_state)
 
         self.rfs_raster_history[best_rf, self.t] = 1
         self.rf_counts[best_rf] += 1
@@ -236,8 +242,8 @@ class RateControlWTABRain(object):
 
         rfs_im, rf_ims_dict = make_im(self.weights, num_bins_per_pixel=1,
                                                     input_im_dim=self.input_im_dim,
-                                                    im_final_dim=int(self.num_rfs * 3000 / 1600),  # /800 for two-im per rf display
-                                                    mod_for_disp=20,
+                                                    im_final_dim=int(200 * 3000 / 400),  # /800 for two-im per rf display
+                                                    mod_for_disp=int(sqrt(self.num_rfs)),
                                                     normalize_weights=True)
 
         ims_list.append(rfs_im)
@@ -261,6 +267,14 @@ class RateControlWTABRain(object):
         self.ax_bar.cla()
         self.ax_bar.bar(np.arange(self.num_rfs), np.divide(self.sum_error_per_rf, self.num_error_per_rf))
         self.fig_bar.savefig(self.plots_folder + '/mean_error_per_rf.png', dpi=100)
+
+        self.ax_bar.cla()
+        self.ax_bar.bar(np.arange(self.num_rfs), np.divide(self.sum_unnorm_error_per_rf, self.num_error_per_rf))
+        self.fig_bar.savefig(self.plots_folder + '/mean_unnorm_error_per_rf.png', dpi=100)
+
+        self.ax_bar.cla()
+        self.ax_bar.bar(np.arange(self.num_rfs), np.divide(self.sum_input_per_rf, self.num_error_per_rf))
+        self.fig_bar.savefig(self.plots_folder + '/mean_input_sum_per_rf.png', dpi=100)
 
         if self.apply_rate_control:
             self.ax_bar.cla()
