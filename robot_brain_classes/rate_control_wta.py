@@ -44,11 +44,11 @@ def _compute_error(rfs, input_arr, single_rf=False):
     if single_rf:
         # err_frame = np.sum(np.abs(rfs - input_arr)) / np.sum(rfs)  # unstable
         err_frame = np.sum(np.abs(rfs - input_arr)) / np.sum(input_arr) # weird, goes up!
-        # err_frame = np.sqrt(np.sum(np.square(rfs - input_arr)))
+        #err_frame = np.sqrt(np.sum(np.square(rfs - input_arr)))
     else:
         # err_frame = np.divide(np.sum(np.abs(rfs - input_arr), axis=1), np.sum(np.abs(rfs), axis=1))
         err_frame = np.sum(np.abs(rfs - input_arr), axis=1) / np.sum(input_arr)
-        # err_frame = np.sqrt(np.sum(np.square(rfs - input_arr), axis=1))
+        #err_frame = np.sqrt(np.sum(np.square(rfs - input_arr), axis=1))
 
     return err_frame
 
@@ -59,7 +59,7 @@ class RateControlWTABRain(object):
         self.num_rfs = 400
         self.input_concat_timesteps = 1
         self.lr = 1.0 / 100  # 1000
-        self.rate_lr = 1.0 / 1000  # 1000
+        self.rate_lr = 1.0 / 100000  # 1000
         self.forgetful_kmeans = True
         self.apply_rate_control = False
 
@@ -173,7 +173,7 @@ class RateControlWTABRain(object):
 
         best_rf_before = np.argmin(err_frame)
 
-        if self.apply_rate_control:
+        if False:  # self.apply_rate_control:
             # invalidate some based on threshold
             # print(np.amin(err_frame), np.amax(err_frame))
             #print(err_frame)
@@ -227,11 +227,22 @@ class RateControlWTABRain(object):
 
         # rate control
         if self.apply_rate_control:
-            last_isi = self.t - self.last_win_time # [best_rf]
-            #self.mean_isi[best_rf] = self.rate_lr * last_isi + (1.0 - self.rate_lr) * self.mean_isi[best_rf]
-            self.mean_isi = self.rate_lr * last_isi + (1.0 - self.rate_lr) * self.mean_isi
+            last_isi = self.t - self.last_win_time[best_rf]
 
-            self.error_thresholds[best_rf] = self.rate_lr * input_normed_error + (1.0 - self.rate_lr) * self.error_thresholds[best_rf]
+            # +: isi too large: firing rate too low
+            # -: isi too small: firing rate too high
+            lr_apply = self.rate_lr * (last_isi - self.target_isi)
+
+            w_rf = self.weights[best_rf, :]
+
+            w_rf = w_rf * (1.0 - lr_apply)
+            w_rf[w_rf>1] = 1
+            self.weights[best_rf, :] = w_rf[:]
+
+            #self.mean_isi[best_rf] = self.rate_lr * last_isi + (1.0 - self.rate_lr) * self.mean_isi[best_rf]
+            #self.mean_isi = self.rate_lr * last_isi + (1.0 - self.rate_lr) * self.mean_isi
+
+            # self.error_thresholds[best_rf] = self.rate_lr * input_normed_error + (1.0 - self.rate_lr) * self.error_thresholds[best_rf]
 
             # lr_apply = self.rate_lr * (last_isi - self.target_isi)
 
@@ -320,14 +331,14 @@ class RateControlWTABRain(object):
         self.ax_bar.bar(np.arange(self.num_rfs), np.divide(self.sum_norm2_error_per_rf, self.rf_counts))
         self.fig_bar.savefig(self.plots_folder + '/mean_norm2_error_per_rf_RESETS.png', dpi=100)
 
-        if self.apply_rate_control:
-            self.ax_bar.cla()
-            self.ax_bar.bar(np.arange(self.num_rfs), self.error_thresholds)
-            self.fig_bar.savefig(self.plots_folder + '/error_thresholds.png', dpi=100)
-
-            self.ax_bar.cla()
-            self.ax_bar.bar(np.arange(self.num_rfs), self.error_multipliers)
-            self.fig_bar.savefig(self.plots_folder + '/error_multipliers.png', dpi=100)
+        # if self.apply_rate_control:
+        #     self.ax_bar.cla()
+        #     self.ax_bar.bar(np.arange(self.num_rfs), self.error_thresholds)
+        #     self.fig_bar.savefig(self.plots_folder + '/error_thresholds.png', dpi=100)
+        #
+        #     self.ax_bar.cla()
+        #     self.ax_bar.bar(np.arange(self.num_rfs), self.error_multipliers)
+        #     self.fig_bar.savefig(self.plots_folder + '/error_multipliers.png', dpi=100)
 
         self.ax_bar.cla()
         num_rf = self.rfs_raster_history.shape[0]
