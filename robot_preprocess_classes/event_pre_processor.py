@@ -53,7 +53,7 @@ class EventPreProcessor(object):
 
 if __name__ == '__main__':
 
-    RF_IM_DIM = 128  # 8
+    RF_IM_DIM = 8  # 8
     ROOT_DIR = '/srv'
     square_crop = (128 - int(RF_IM_DIM / 2), 128 - int(RF_IM_DIM / 2), RF_IM_DIM)
 
@@ -75,7 +75,7 @@ if __name__ == '__main__':
     vp = VideoPlaybackSensor(params=params_video_playback)
 
     ep = EventPreProcessor(params={
-        'brightness_threshold': 10.0 / 255,
+        'brightness_threshold': 1.0 / 255,
         'im_dim': RF_IM_DIM
     })
 
@@ -95,8 +95,8 @@ if __name__ == '__main__':
 
         cv2.imshow('im', im)
         cv2.imshow('im_events', im_events)
-
-        cv2.waitKey(5)
+        #print(np.sum(events_p) + np.sum(events_n))
+        cv2.waitKey(200)
 
         # print(im.dtype, np.amin(im), np.amax(im))
         # print(255 * np.unique(im))
