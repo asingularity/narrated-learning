@@ -42,13 +42,32 @@ def _compute_match(rfs, input_arr, normalize=True):
 def _compute_error(rfs, input_arr, single_rf=False):
 
     if single_rf:
+        # rf normed, don't use:
         # err_frame = np.sum(np.abs(rfs - input_arr)) / np.sum(rfs)  # unstable
-        err_frame = np.sum(np.abs(rfs - input_arr)) / np.sum(input_arr) # weird, goes up!
-        #err_frame = np.sqrt(np.sum(np.square(rfs - input_arr)))
+
+        # input-normed:
+        err_frame = np.sum(np.abs(rfs - input_arr)) / np.sum(input_arr)
+
+        # L2 norm:
+        # err_frame = np.sqrt(np.sum(np.square(rfs - input_arr)))
+
+        # input-only: (i.e. allow input as subset of RF):
+        #nnz_input = np.nonzero(input_arr)[0]
+        #err_frame = np.sqrt(np.sum(np.square(rfs[nnz_input] - input_arr[nnz_input]))) #/ np.sqrt(np.sum(np.square(input_arr[nnz_input])))
+
     else:
+        # rf normed, don't use:
         # err_frame = np.divide(np.sum(np.abs(rfs - input_arr), axis=1), np.sum(np.abs(rfs), axis=1))
+
+        # input-normed:
         err_frame = np.sum(np.abs(rfs - input_arr), axis=1) / np.sum(input_arr)
+
+        # L2 norm:
         #err_frame = np.sqrt(np.sum(np.square(rfs - input_arr), axis=1))
+
+        # input-only: (i.e. allow input as subset of RF):
+        #nnz_input = np.nonzero(input_arr)[0]
+        #err_frame = np.sqrt(np.sum(np.square(rfs[:, nnz_input] - input_arr[nnz_input]), axis=1))
 
     return err_frame
 
@@ -194,6 +213,8 @@ class RateControlWTABRain(object):
         assert not np.isnan(best_rf), str(err_frame)
 
         #if self.t > self.error_mean_time:
+        #nnz_input = np.nonzero(input_state)
+        #self.error[self.t] = np.sqrt(np.sum(np.square(self.weights[best_rf, nnz_input] - input_state[nnz_input])))
         self.error[self.t] = _compute_error(rfs=self.weights[best_rf, :], input_arr=input_state, single_rf=True)
         self.mean_error[self.t] = np.mean(self.error[max(0, self.t - self.error_mean_time):self.t])
 
