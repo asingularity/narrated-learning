@@ -43,24 +43,34 @@ def _compute_error(rfs, input_arr, single_rf=False):
 
     if single_rf:
         # rf normed, don't use:
-        # err_frame = np.sum(np.abs(rfs - input_arr)) / np.sum(rfs)  # unstable
+        #err_frame = np.sum(np.abs(rfs - input_arr)) / np.sum(rfs)  # unstable
 
         # input-normed:
-        err_frame = np.sum(np.abs(rfs - input_arr)) / np.sum(input_arr)
+        #err_frame = np.sum(np.abs(rfs - input_arr)) / np.sum(input_arr)
 
         # L2 norm:
         # err_frame = np.sqrt(np.sum(np.square(rfs - input_arr)))
 
         # input-only: (i.e. allow input as subset of RF):
-        #nnz_input = np.nonzero(input_arr)[0]
+        # nnz_input = np.nonzero(input_arr)[0]
         #err_frame = np.sqrt(np.sum(np.square(rfs[nnz_input] - input_arr[nnz_input]))) #/ np.sqrt(np.sum(np.square(input_arr[nnz_input])))
 
+        tmp_1 = np.multiply(rfs, input_arr)
+        tmp_2_cpu = np.sum(tmp_1)
+        tmp_3_cpu = np.sum(rfs)
+        eff_frame = tmp_2_cpu / tmp_3_cpu
+
     else:
+        tmp_1 = np.multiply(rfs, input_arr)
+        tmp_2_cpu = np.sum(tmp_1, axis=1)
+        tmp_3_cpu = np.sum(rfs, axis=1)
+        eff_frame = np.divide(tmp_2_cpu, tmp_3_cpu)
+
         # rf normed, don't use:
         # err_frame = np.divide(np.sum(np.abs(rfs - input_arr), axis=1), np.sum(np.abs(rfs), axis=1))
 
         # input-normed:
-        err_frame = np.sum(np.abs(rfs - input_arr), axis=1) / np.sum(input_arr)
+        #err_frame = np.sum(np.abs(rfs - input_arr), axis=1) / np.sum(input_arr)
 
         # L2 norm:
         #err_frame = np.sqrt(np.sum(np.square(rfs - input_arr), axis=1))
@@ -69,7 +79,11 @@ def _compute_error(rfs, input_arr, single_rf=False):
         #nnz_input = np.nonzero(input_arr)[0]
         #err_frame = np.sqrt(np.sum(np.square(rfs[:, nnz_input] - input_arr[nnz_input]), axis=1))
 
-    return err_frame
+
+    select_err_frame = -eff_frame  # normalized
+    track_err_frame = -tmp_2_cpu
+
+    return select_err_frame, track_err_frame
 
 
 class RateControlWTABRain(object):
@@ -77,10 +91,10 @@ class RateControlWTABRain(object):
         self.input_im_dim = params['input_im_dim']
         self.num_rfs = 400
         self.input_concat_timesteps = 1
-        self.lr = 1.0 / 100  # 1000
-        self.rate_lr = 1.0 / 100000  # 1000
+        self.lr = 1.0 / 1000  # 1000
+        self.rate_lr = 1.0 / 1000  # 1000
         self.forgetful_kmeans = True
-        self.apply_rate_control = False
+        self.apply_rate_control = True
 
         self.max_time = 10000000
 
@@ -92,8 +106,8 @@ class RateControlWTABRain(object):
 
         self.input_state_dim = 2 * self.input_im_dim * self.input_im_dim  # why 2? + and - changes
 
-        self.weights = np.zeros((self.num_rfs, self.input_state_dim))  # + 1e-1
-        #self.weights = np.random.random((self.num_rfs, self.input_state_dim)) * 1e-12
+        #self.weights = np.zeros((self.num_rfs, self.input_state_dim)) # + 1e-1
+        self.weights = np.random.random((self.num_rfs, self.input_state_dim)) * 1e-12
 
         self.rf_counts = np.zeros(self.num_rfs)
         self.num_error_per_rf = np.zeros(self.num_rfs)
@@ -188,7 +202,7 @@ class RateControlWTABRain(object):
         #    self.t += 1
         #    return
 
-        err_frame = _compute_error(rfs=self.weights, input_arr=input_state)
+        err_frame, _ = _compute_error(rfs=self.weights, input_arr=input_state)
 
         best_rf_before = np.argmin(err_frame)
 
@@ -215,7 +229,7 @@ class RateControlWTABRain(object):
         #if self.t > self.error_mean_time:
         #nnz_input = np.nonzero(input_state)
         #self.error[self.t] = np.sqrt(np.sum(np.square(self.weights[best_rf, nnz_input] - input_state[nnz_input])))
-        self.error[self.t] = _compute_error(rfs=self.weights[best_rf, :], input_arr=input_state, single_rf=True)
+        _, self.error[self.t] = _compute_error(rfs=self.weights[best_rf, :], input_arr=input_state, single_rf=True)
         self.mean_error[self.t] = np.mean(self.error[max(0, self.t - self.error_mean_time):self.t])
 
         self.sum_error_per_rf[best_rf] = self.sum_error_per_rf[best_rf] + err_frame[best_rf]
@@ -242,6 +256,11 @@ class RateControlWTABRain(object):
         if self.forgetful_kmeans:
             lr = self.lr
             self.weights[best_rf, :] = lr * input_state + (1.0 - lr) * self.weights[best_rf, :]
+
+            #w = self.weights[best_rf, :]
+            #w[w < 0.5] = (1.0 - lr/2) * w[w < 0.5]
+            #w[w > 0.5] = (lr/2) + (1.0 - lr/2) * w[w > 0.5]
+
         else:
             self.weights[best_rf, :] = self.weights[best_rf, :] + (1.0 / self.rf_counts[best_rf]) * (
                     input_state - self.weights[best_rf, :])
@@ -252,14 +271,15 @@ class RateControlWTABRain(object):
 
             # +: isi too large: firing rate too low
             # -: isi too small: firing rate too high
-            lr_apply = self.rate_lr * (last_isi - self.target_isi)
-
+            lr_apply = self.rate_lr * (last_isi - self.target_isi)/self.target_isi
+            #print(last_isi, self.target_isi)
             w_rf = self.weights[best_rf, :]
 
+            #print(1.0 - lr_apply)
             w_rf = w_rf * (1.0 - lr_apply)
             w_rf[w_rf>1] = 1
             self.weights[best_rf, :] = w_rf[:]
-
+            #print(np.amax(self.weights), np.amin(self.weights), np.sum(np.isnan(self.weights)))
             #self.mean_isi[best_rf] = self.rate_lr * last_isi + (1.0 - self.rate_lr) * self.mean_isi[best_rf]
             #self.mean_isi = self.rate_lr * last_isi + (1.0 - self.rate_lr) * self.mean_isi
 
