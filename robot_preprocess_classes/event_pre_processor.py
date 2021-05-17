@@ -82,6 +82,9 @@ if __name__ == '__main__':
     fps = FPSCounter()
 
     t = 0
+
+    event_size_counts = np.zeros(RF_IM_DIM * RF_IM_DIM + 1)
+
     while True:
         im = vp.read_input()
         events_p, events_n = ep.step(input_frame=im)
@@ -96,12 +99,17 @@ if __name__ == '__main__':
         cv2.imshow('im', im)
         cv2.imshow('im_events', im_events)
         #print(np.sum(events_p) + np.sum(events_n))
-        cv2.waitKey(200)
+        cv2.waitKey(1)
+
+        event_size_counts[int(np.sum(events_p) + np.sum(events_n))] += 1
 
         # print(im.dtype, np.amin(im), np.amax(im))
         # print(255 * np.unique(im))
 
         fps.update(display_more='t: ' + str(t))
+
+        if t % 1000 == 0:
+            print(event_size_counts * 100.0/np.sum(event_size_counts))
 
         t += 1
 
