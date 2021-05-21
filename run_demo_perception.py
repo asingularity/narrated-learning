@@ -71,8 +71,19 @@ def get_pre_proc_params():
 
 
 def get_sim_folder_manager_params():
+
+    print()
+    sim_prefix = input('sim prefix? >> ')
+    print()
+
+    if sim_prefix[-1] != '_':
+        sim_prefix += '_'
+
+    if len(sim_prefix) == 0:
+        sim_prefix = 'default_'
+
     params = {
-        'sim_prefix': 'batch_iter_wta_',
+        'sim_prefix': sim_prefix,
         'sim_folders_path': ROOT_DIR + '/projects/NL-sim2/',
         'scripts_folder_path': ROOT_DIR + '/projects/NL/'
     }

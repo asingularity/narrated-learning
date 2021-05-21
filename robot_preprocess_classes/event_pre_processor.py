@@ -67,15 +67,15 @@ if __name__ == '__main__':
         'returned_im_use_color': False,  # only False supported for now
         'video_dir': ROOT_DIR + '/projects/video-downloads',
         #'video_filename': 'sea-turtles-yLuEx-XH3Uc.mp4'
-        #'video_filename': 'seattle-driving-fkps18H3SXY.mp4'
-        'video_filename': 'sea-turtles-11hr-spxtEt6RaS4.mp4'
+        'video_filename': 'seattle-driving-fkps18H3SXY.mp4'
+        #'video_filename': 'sea-turtles-11hr-spxtEt6RaS4.mp4'
     }
 
     # TODO: change color to gray in this class to preserve more dynamic range, and test this
     vp = VideoPlaybackSensor(params=params_video_playback)
 
     ep = EventPreProcessor(params={
-        'brightness_threshold': 1.0 / 255,
+        'brightness_threshold': 10.0 / 255,
         'im_dim': RF_IM_DIM
     })
 
