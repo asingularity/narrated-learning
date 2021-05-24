@@ -96,8 +96,10 @@ class RateControlWTABRain(object):
             self.mean_errors_over_time[error_type] = np.zeros(self.max_time)
 
     def _init_rasters(self):
-        self.input_raster_history = np.zeros((self.input_state_dim, self.max_time), np.uint8)
-        self.rfs_raster_history = np.zeros((self.num_rfs, self.max_time), np.uint8)
+        self.raster_steps = 200
+        self.raster_t = 0  # circular; draw vertical line on plot here
+        self.input_raster_history = np.zeros((self.input_state_dim, self.raster_steps), np.uint8)
+        self.rfs_raster_history = np.zeros((self.num_rfs, self.raster_steps), np.uint8)
 
     def _init_rate_control(self):
         # target number of time steps between events
@@ -166,7 +168,7 @@ class RateControlWTABRain(object):
         # input_state = self._get_input_state(input_im=input_im)
         input_state = np.concatenate((input_events_p, input_events_n))
 
-        self.input_raster_history[:, self.t] = input_state[:]
+        self.input_raster_history[:, self.raster_t] = input_state[:]
 
         if input_state is None:
             return
@@ -198,7 +200,8 @@ class RateControlWTABRain(object):
         self.sum_input_per_rf[best_rf] = self.sum_input_per_rf[best_rf] + sum_input
         self.num_input_per_rf[best_rf] += 1
 
-        self.rfs_raster_history[best_rf, self.t] = 1
+        self.rfs_raster_history[:, self.raster_t] = 0
+        self.rfs_raster_history[best_rf, self.raster_t] = 1
         self.rf_counts[best_rf] += 1
 
         # *** learning ***
@@ -228,6 +231,9 @@ class RateControlWTABRain(object):
 
         self.last_win_time[best_rf] = self.t
         self.t += 1
+        self.raster_t += 1
+        if self.raster_t >= self.raster_steps:
+            self.raster_t = 0
 
     def get_table_ims(self):
 
@@ -291,16 +297,18 @@ class RateControlWTABRain(object):
 
         self.ax_bar.cla()
         num_rf = self.rfs_raster_history.shape[0]
-        raster_plot = np.transpose(np.multiply(self.rfs_raster_history[0:num_rf, max(0, self.t - 200):self.t], np.arange(num_rf)[:, np.newaxis]))
+        raster_plot = np.transpose(np.multiply(self.rfs_raster_history, np.arange(num_rf)[:, np.newaxis]))
         t = np.arange(raster_plot.shape[0])
         self.ax_bar.plot(t, raster_plot, color='b', marker='.', linestyle='')
+        self.ax_bar.axvline(x=self.raster_t, color='g')
         self.fig_bar.savefig(self.plots_folder + "/raster_rfs.png", dpi=100)
 
         self.ax_bar.cla()
         num_rf = self.input_raster_history.shape[0]
-        raster_plot = np.transpose(np.multiply(self.input_raster_history[0:num_rf, max(0, self.t - 200):self.t], np.arange(num_rf)[:, np.newaxis]))
+        raster_plot = np.transpose(np.multiply(self.input_raster_history, np.arange(self.input_state_dim)[:, np.newaxis]))
         t = np.arange(raster_plot.shape[0])
         self.ax_bar.plot(t, raster_plot, color='b', marker='.', linestyle='')
+        self.ax_bar.axvline(x=self.raster_t, color='g')
         self.fig_bar.savefig(self.plots_folder + "/raster_inputs.png", dpi=100)
 
 
