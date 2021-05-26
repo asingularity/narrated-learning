@@ -68,7 +68,7 @@ def get_brain_params():  # override_params
         'num_rfs': 400,
         'lr': 1.0 / 1000,
         'rate_lr': 1.0 / 1000,
-        'max_time': 5000000,
+        #'max_time': 5000000,
         'apply_rate_control': True,
         'do_raster_plots_every_k_im': None  # or None
     }
@@ -103,7 +103,7 @@ def run_one_sim(sim_params):
 
     #  instead of opencv viz, should save rfs image at end!!
     for k in range(len(ims_list)):
-        cv2.imwrite(filename=sim_folder_manager.get_plots_save_folder() + '/' + ims_names_list[k],
+        cv2.imwrite(filename=sim_folder_manager.get_plots_save_folder() + '/' + ims_names_list[k] + ".png",
                     img=ims_list[k])
 
     final_errors_dict = robot_brain.get_final_errors_dict()
@@ -122,24 +122,26 @@ def get_sweep_sims(param_set):
     print('starting an experiment')
     print()
 
+    now = datetime.datetime.now().isoformat()
+    sweep_name = param_name + '_' + now
+
+    sweep_folder = ROOT_DIR + '/projects/NL-sim-sweeps/' + sweep_name
+    os.makedirs(sweep_folder)
+
     for param_value in param_values:
         sim_params = {}
 
-        sim_params['max_time'] = 5000000
+        # TODO move this elsewhere and should be longer!!!
+        sim_params['max_time'] = 500000
 
         sim_params['brain_params'] = get_brain_params()
         sim_params['sensor_params'] = get_sensors_params()
         sim_params['pre_processor_params'] = get_pre_proc_params()
 
-        now = datetime.datetime.now().isoformat()
-        sweep_name = param_name + '_' + now
-
-        os.makedirs(ROOT_DIR + '/projects/NL-sim-sweeps/' + sweep_name)
-
         # then create sim folder manager params
         sim_params['sim_folder_manager_params'] = {
             'sim_prefix': param_name + '_' + str(param_value),
-            'sim_folders_path': ROOT_DIR + '/projects/NL-sim-sweeps/' + sweep_name + '/',
+            'sim_folders_path': sweep_folder + '/',
             'scripts_folder_path': ROOT_DIR + '/projects/NL/'
         }
 
@@ -150,7 +152,7 @@ def get_sweep_sims(param_set):
 
         sim_params_list.append(sim_params)
 
-    return sim_params_list
+    return sim_params_list, sweep_folder
 
 
 def run_several_sweeps():
@@ -169,17 +171,19 @@ def run_several_sweeps():
     all_sim_params_list = []  # params
 
     # later: instead should it be grid search? i.e. combine all variants of params above?
-
+    sweep_folders = []
     for param_set in param_sets:
-        sim_params_list = get_sweep_sims(param_set=param_set)
+        sim_params_list, sweep_folder = get_sweep_sims(param_set=param_set)
         all_sim_params_list.extend(sim_params_list)
+        sweep_folders.append(sweep_folder)
 
     # distribute and run simulations using multiprocess
     print()
     print('starting simulations via multiprocess...')
     print()
 
-    with Pool(processes=12) as pool:
+    # TODO MORE PROCESSES!
+    with Pool(processes=4) as pool:
 
         return_things = pool.map(run_one_sim, all_sim_params_list)
 
@@ -187,8 +191,8 @@ def run_several_sweeps():
         sim_folder_paths = []
 
         for k in range(len(return_things)):
-            final_errors_dicts.append(return_things[0])
-            sim_folder_paths.append(return_things[1])
+            final_errors_dicts.append(return_things[k][0])
+            sim_folder_paths.append(return_things[k][1])
 
         print()
         print('plotting final error values...')
@@ -198,15 +202,22 @@ def run_several_sweeps():
         fig = plt.figure(figsize=(40, 20))
         ax = fig.add_subplot(1, 1, 1)
 
+        r = -1
         for param_set in param_sets:
+            r += 1
+            sweep_folder = sweep_folders[r]
+            # this is one sweep: one set of plots
+
             param_type, param_name, param_values = param_set
 
             plot_x = []
             plot_ys = {}
+            error_types = None
 
             for param_value in param_values:
 
                 final_errors_dict = final_errors_dicts[k]
+                error_types = final_errors_dict.keys()
                 plot_x.append(param_value)
 
                 for error_type in final_errors_dict.keys():
@@ -217,13 +228,13 @@ def run_several_sweeps():
 
                 k += 1
 
-            for error_type in final_errors_dict.keys():
+            for error_type in error_types:
                 ax.cla()
                 ax.get_xaxis().get_major_formatter().set_scientific(False)
                 ax.get_yaxis().get_major_formatter().set_scientific(False)
 
                 ax.plot(np.array(plot_x), np.array(plot_ys[error_type]), color='k', marker='.')
-                fig.savefig(sim_folder_paths[k] + "/" + error_type + ".png", dpi=100)
+                fig.savefig(sweep_folder + "/" + error_type + ".png", dpi=100)
 
 
 if __name__ == '__main__':

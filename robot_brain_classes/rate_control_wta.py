@@ -135,8 +135,12 @@ class RateControlWTABRain(object):
     def get_final_errors_dict(self):
         d = {}
         for error_type in self.sum_errors_per_rf.keys():
-            d[error_type + '__mean-by-rf'] = self.mean_errors[error_type][self.max_time - 1]
-            d[error_type + '__mean-by-t'] = self.mean_errors_over_time[error_type][self.max_time - 1]
+
+            # TODO fix later:
+            # TODO this should be self.max_time - 1, but cant be because we skip zero inputs without self.t += 1 !!!
+
+            d[error_type + '__mean-by-rf'] = self.mean_errors[error_type][self.t - 1]
+            d[error_type + '__mean-by-t'] = self.mean_errors_over_time[error_type][self.t - 1]
         return d
 
     def set_plots_folder(self, folder):
