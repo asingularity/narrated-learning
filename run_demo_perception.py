@@ -93,7 +93,12 @@ def get_sim_folder_manager_params():
 def get_brain_params():
     brain_params = {
         'input_im_dim': RF_IM_DIM,
-        'learning_off_time': np.inf  # PRELOAD_FRAMES
+        'num_rfs': 400,
+        'lr': 1.0 / 1000,
+        'rate_lr': 1.0 / 1000,
+        'max_time': 5000000,
+        'apply_rate_control': True,
+        'do_raster_plots_every_k_im': 4  # or None
     }
 
     return brain_params

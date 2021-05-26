@@ -28,20 +28,23 @@ np.random.seed(0)
 class RateControlWTABRain(object):
     def __init__(self, params):
         self.input_im_dim = params['input_im_dim']
-        self.num_rfs = 400  # 3200
-        self.input_concat_timesteps = 1
-        self.lr = 1.0 / 1000  # 1000
-        self.rate_lr = 1.0 / 1000  # 1000
-        self.forgetful_kmeans = True
-        self.apply_rate_control = True
 
-        self.max_time = 5000000
+        # new params
+        self.num_rfs = params['num_rfs']  # 400
+        self.lr = params['lr']  # 1.0 / 1000
+        self.rate_lr = params['rate_lr']  # 1.0 / 1000
+        self.max_time = params['max_time']  # 5000000
+        self.apply_rate_control = params['apply_rate_control']  # True
+        self.do_raster_plots_every_k_im = params['do_raster_plots_every_k_im']  # 4, or None
+
+        self.forgetful_kmeans = True
 
         # for plotting:
         self.error_mean_time = 50000
 
-        self.do_raster_plots_every_k_im = 4
         self.ims_since_raster = 0
+
+        self.input_concat_timesteps = 1  # unused
 
         self.input_state_dim = 2 * self.input_im_dim * self.input_im_dim  # why 2? + and - changes
 
