@@ -68,7 +68,6 @@ def get_brain_params():  # override_params
         'num_rfs': 400,
         'lr': 1.0 / 1000,
         'rate_lr': 1.0 / 1000,
-        #'max_time': 5000000,
         'apply_rate_control': True,
         'do_raster_plots_every_k_im': None  # or None
     }
@@ -104,7 +103,7 @@ def run_one_sim(sim_params):
     #  instead of opencv viz, should save rfs image at end!!
     for k in range(len(ims_list)):
         cv2.imwrite(filename=sim_folder_manager.get_plots_save_folder() + '/' + ims_names_list[k] + ".png",
-                    img=ims_list[k])
+                    img=(255 * ims_list[k]).astype(np.uint8))
 
     final_errors_dict = robot_brain.get_final_errors_dict()
 
@@ -132,7 +131,7 @@ def get_sweep_sims(param_set):
         sim_params = {}
 
         # TODO move this elsewhere and should be longer!!!
-        sim_params['max_time'] = 500000
+        sim_params['max_time'] = 5000000
 
         sim_params['brain_params'] = get_brain_params()
         sim_params['sensor_params'] = get_sensors_params()
