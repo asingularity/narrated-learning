@@ -132,6 +132,13 @@ class RateControlWTABRain(object):
         self.ax_bar.get_xaxis().get_major_formatter().set_scientific(False)
         self.ax_bar.get_yaxis().get_major_formatter().set_scientific(False)
 
+    def get_final_errors_dict(self):
+        d = {}
+        for error_type in self.sum_errors_per_rf.keys():
+            d[error_type + '__mean-by-rf'] = self.mean_errors[error_type][self.max_time - 1]
+            d[error_type + '__mean-by-t'] = self.mean_errors_over_time[error_type][self.max_time - 1]
+        return d
+
     def set_plots_folder(self, folder):
         self.plots_folder = folder
         print()
