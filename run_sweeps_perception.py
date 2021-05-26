@@ -161,7 +161,7 @@ def run_several_sweeps():
 
     # ('pre_processor_params', 'brightness_threshold', [1.0/255, 10.0/255, 20.0/255]),
 
-    param_sets = [('brain_params', 'num_rfs', [100, 200, 400]),
+    param_sets = [('brain_params', 'num_rfs', [400, 800, 1600]),
                   ('brain_params', 'apply_rate_control', [True, False])]
 
     # each experiment is running a set of simulations for one of the param sets defined above
