@@ -68,7 +68,7 @@ def get_brain_params():  # override_params
         'num_rfs': 400,
         'lr': 1.0 / 1000,
         'rate_lr': 1.0 / 1000,
-        'apply_rate_control': True,
+        'apply_rate_control': False,
         'do_raster_plots_every_k_im': None  # or None
     }
 
@@ -112,7 +112,7 @@ def run_one_sim(sim_params):
     return return_thing
 
 
-def get_sweep_sims(param_set):
+def get_sweep_sims(param_set, sim_prefix):
 
     param_type, param_name, param_values = param_set
     sim_params_list = []
@@ -124,7 +124,7 @@ def get_sweep_sims(param_set):
     now = datetime.datetime.now().isoformat()
     sweep_name = param_name + '_' + now
 
-    sweep_folder = ROOT_DIR + '/projects/NL-sim-sweeps/' + sweep_name
+    sweep_folder = ROOT_DIR + '/projects/NL-sim-sweeps/' + sim_prefix + '/' + sweep_name
     os.makedirs(sweep_folder)
 
     for param_value in param_values:
@@ -155,12 +155,24 @@ def get_sweep_sims(param_set):
 
 
 def run_several_sweeps():
+    print()
+    sim_prefix = input('run prefix? >> ')
+    print()
+
+    if sim_prefix[-1] != '_':
+        sim_prefix += '_'
+
+    if len(sim_prefix) == 0:
+        sim_prefix = 'default_'
+
+    now = datetime.datetime.now().isoformat()
+    sim_prefix += now
 
     # define param sets to vary in successive experiments
 
     # ('pre_processor_params', 'brightness_threshold', [1.0/255, 10.0/255, 20.0/255]),
 
-    param_sets = [('brain_params', 'num_rfs', [400, 800, 1600]),
+    param_sets = [('brain_params', 'num_rfs', [200, 400, 800, 1600, 3200]),
                   ('brain_params', 'apply_rate_control', [True, False])]
 
     # each experiment is running a set of simulations for one of the param sets defined above
@@ -172,7 +184,7 @@ def run_several_sweeps():
     # later: instead should it be grid search? i.e. combine all variants of params above?
     sweep_folders = []
     for param_set in param_sets:
-        sim_params_list, sweep_folder = get_sweep_sims(param_set=param_set)
+        sim_params_list, sweep_folder = get_sweep_sims(param_set=param_set, sim_prefix=sim_prefix)
         all_sim_params_list.extend(sim_params_list)
         sweep_folders.append(sweep_folder)
 
@@ -182,7 +194,7 @@ def run_several_sweeps():
     print()
 
     # TODO MORE PROCESSES!
-    with Pool(processes=4) as pool:
+    with Pool(processes=18) as pool:
 
         return_things = pool.map(run_one_sim, all_sim_params_list)
 

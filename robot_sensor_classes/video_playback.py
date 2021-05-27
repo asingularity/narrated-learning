@@ -207,6 +207,9 @@ class VideoPlaybackSensor(object):
             print()
 
         except:
+            print()
+            print('!!! Could not load pickle! pkl_num:', pkl_num)
+            print()
             seq = None  # no pickle files left
             #raise
 
