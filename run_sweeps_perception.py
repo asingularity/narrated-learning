@@ -65,7 +65,7 @@ def get_pre_proc_params():  # override_params
 def get_brain_params():  # override_params
     brain_params = {
         'input_im_dim': RF_IM_DIM,
-        'num_rfs': 400,
+        'num_rfs': 800,
         'lr': 1.0 / 1000,
         'rate_lr': 1.0 / 1000,
         'apply_rate_control': False,
@@ -172,8 +172,12 @@ def run_several_sweeps():
 
     # ('pre_processor_params', 'brightness_threshold', [1.0/255, 10.0/255, 20.0/255]),
 
+    # param_sets = [('brain_params', 'num_rfs', [200, 400, 800, 1600, 3200]),
+    #               ('brain_params', 'apply_rate_control', [True, False])]
+
     param_sets = [('brain_params', 'num_rfs', [200, 400, 800, 1600, 3200]),
-                  ('brain_params', 'apply_rate_control', [True, False])]
+                  ('brain_params', 'lr', [1.0/10, 1.0/100, 1.0/1000, 1.0/10000, 1.0/100000])]
+                  #('sensor_params', 'video_filename', ['sea-turtles-yLuEx-XH3Uc.mp4', 'seattle-driving-fkps18H3SXY.mp4', 'sea-turtles-11hr-spxtEt6RaS4.mp4'])]
 
     # each experiment is running a set of simulations for one of the param sets defined above
     # call them in order
