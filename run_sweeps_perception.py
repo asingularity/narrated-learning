@@ -16,7 +16,7 @@ import matplotlib.pyplot as plt
 from sim_folder_manager import SimFolderManager
 from robot_sensor_classes.video_playback import VideoPlaybackSensor
 from robot_preprocess_classes.event_pre_processor import EventPreProcessor
-from robot_brain_classes.rate_control_wta import RateControlWTABRain
+from robot_brain_classes.rate_control_wta_heirarchy import RateControlWTABRain
 
 
 
@@ -69,7 +69,9 @@ def get_brain_params():  # override_params
         'lr': 1.0 / 1000,
         'rate_lr': 1.0 / 1000,
         'apply_rate_control': False,
-        'do_raster_plots_every_k_im': None  # or None
+        'do_raster_plots_every_k_im': None,  # or None
+        'num_layers': 4,
+        'layer_learn_time': 500000
     }
 
     # for pname in override_params.keys():
@@ -175,8 +177,12 @@ def run_several_sweeps():
     # param_sets = [('brain_params', 'num_rfs', [200, 400, 800, 1600, 3200]),
     #               ('brain_params', 'apply_rate_control', [True, False])]
 
-    param_sets = [('brain_params', 'num_rfs', [200, 400, 800, 1600, 3200]),
-                  ('brain_params', 'lr', [1.0/10, 1.0/100, 1.0/1000, 1.0/10000, 1.0/100000])]
+    param_sets = [('brain_params', 'num_rfs', [200, 400, 800, 1600]),
+                  ('brain_params', 'num_layers', [1, 2, 4, 8]),
+                  ('brain_params', 'layer_learn_time', [100000, 200000, 400000, 800000]),
+                  ('sensor_params', 'video_filename', ['sea-turtles-yLuEx-XH3Uc.mp4', 'seattle-driving-fkps18H3SXY.mp4', 'sea-turtles-11hr-spxtEt6RaS4.mp4'])]
+
+                  #('brain_params', 'lr', [1.0/10, 1.0/100, 1.0/1000, 1.0/10000, 1.0/100000])]
 
     #param_sets = [('sensor_params', 'video_filename', ['sea-turtles-yLuEx-XH3Uc.mp4', 'seattle-driving-fkps18H3SXY.mp4', 'sea-turtles-11hr-spxtEt6RaS4.mp4'])]
 

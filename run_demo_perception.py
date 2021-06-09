@@ -24,7 +24,11 @@ np.random.seed(6)
 #from robot_brain_classes.multi_layer_seqnn_brain import MultiLayerSeqNNBrain
 #from robot_brain_classes.tiled_multilayer_wta import SeqNNSeqKMeansBrain
 #from robot_brain_classes.batch_iter_wta import BatchIterWTABrain
+
 from robot_brain_classes.rate_control_wta import RateControlWTABRain
+# TODO rename to avoid confusion! class
+#from robot_brain_classes.rate_control_wta_heirarchy import RateControlWTABRain
+
 from robot_brain_classes.rate_control_som_wta import RateControlSomWtaBrain
 from visualizer_classes.segment_visualizer import SegmentVisualizer
 from sim_folder_manager import SimFolderManager
@@ -98,7 +102,9 @@ def get_brain_params():
         'rate_lr': 1.0 / 1000,
         'max_time': 5000000,
         'apply_rate_control': True,
-        'do_raster_plots_every_k_im': 4  # or None
+        'do_raster_plots_every_k_im': 10,  # or None
+        'num_layers': 3,  # only used for rate_control_wta_heirarchy
+        'layer_learn_time': 500000  # only used for rate_control_wta_heirarchy
     }
 
     return brain_params
