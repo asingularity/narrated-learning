@@ -101,7 +101,6 @@ def get_brain_params():
         'lr': 1.0 / 1000,
         'rate_lr': 1.0 / 1000,
         'max_time': 5000000,
-        'apply_rate_control': True,
         'do_raster_plots_every_k_im': 10,  # or None
         'num_layers': 3,  # only used for rate_control_wta_heirarchy
         'layer_learn_time': 500000  # only used for rate_control_wta_heirarchy
