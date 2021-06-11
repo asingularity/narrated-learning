@@ -36,8 +36,6 @@ class RateControlWTABRain(object):
         self.max_time = params['max_time']  # 5000000
         self.do_raster_plots_every_k_im = params['do_raster_plots_every_k_im']  # 4, or None
 
-        self.forgetful_kmeans = True
-
         # for plotting:
         self.error_mean_time = 50000
 
@@ -51,20 +49,10 @@ class RateControlWTABRain(object):
         self.weights = np.random.random((self.num_rfs, self.input_state_dim)) * 1e-12
 
         self.rf_counts = np.zeros(self.num_rfs)
-        self.num_error_per_rf = np.zeros(self.num_rfs)
-
-        self.last_layer_input = None
-
-        self.mean_error = np.zeros(self.max_time)
-        self.error = np.zeros(self.max_time)
-
-        self.mean_num_bad_rfs = np.zeros(self.max_time)
-        self.num_bad_rfs = np.zeros(self.max_time)
 
         self.t = 0
         self.num_zero_inputs = 0
 
-        self.last_input_im = None
         self.plots_folder = "."
         self.input_history = StatesLimitedHistory(params={'max_delay': self.input_concat_timesteps,
                                                           'states_dim_list': [self.input_state_dim],
@@ -104,18 +92,7 @@ class RateControlWTABRain(object):
         self.rfs_raster_history = np.zeros((self.num_rfs, self.raster_steps), np.uint8)
 
     def _init_rate_control(self):
-        # target number of time steps between events
-        self.target_isi = self.num_rfs
-        self.error_thresholds = 1 * np.ones(self.num_rfs)
-        self.error_multipliers = 1 * np.ones(self.num_rfs)
-
         self.last_win_time = np.zeros(self.num_rfs) - 1
-
-        self.mean_isi = self.target_isi * np.ones(self.num_rfs)
-
-        #self.target_fr = 1.0 / self.target_isi
-        #self.last_win_time = -np.inf* np.ones(self.num_rfs)
-        #self.last_isi = np.inf * np.ones(self.num_rfs)
 
     def _init_plotting(self):
 
@@ -178,7 +155,6 @@ class RateControlWTABRain(object):
         if self.t >= self.max_time:
             return
 
-        # input_state = self._get_input_state(input_im=input_im)
         input_state = np.concatenate((input_events_p, input_events_n))
 
         self.input_raster_history[:, self.raster_t] = input_state[:]
@@ -228,7 +204,8 @@ class RateControlWTABRain(object):
         lr_bg = self.rel_lr_bg * self.lr
         # self.weights = lr_bg * input_state + (1.0 - lr_bg) * self.weights
 
-        self.weights = (1.0 - lr_bg) * self.weights
+        if lr_bg > 0.0:
+            self.weights = (1.0 - lr_bg) * self.weights
 
         # *** time step ***
 
@@ -313,54 +290,3 @@ class RateControlWTABRain(object):
         self.ax_bar.plot(t, raster_plot, color='b', marker='.', linestyle='')
         self.ax_bar.axvline(x=self.raster_t, color='g')
         self.fig_bar.savefig(self.plots_folder + "/raster_inputs.png", dpi=100)
-
-
-    def _get_input_state(self, input_im):
-
-        # differential stuff, etc
-
-        input_pixels_1 = input_im
-        input_pixels_flat = input_pixels_1.flatten()
-        input_arr_1 = input_pixels_flat[np.newaxis, :]
-
-        input_exp_1 = input_arr_1
-        self.last_input_im = input_pixels_1.copy()
-
-        layer_input = input_exp_1
-        input_state = layer_input.flatten().astype(np.float32)
-
-        # change to diff image
-        change_to_diff_image = True
-        if change_to_diff_image:
-            if self.last_layer_input is not None:
-                input_state_diff = input_state - self.last_layer_input.flatten().astype(np.float32)
-
-                input_state_p = input_state_diff.copy()
-                input_state_n = -input_state_diff.copy()
-
-                input_state_p[input_state_p < 0] = 0
-                input_state_n[input_state_n < 0] = 0
-
-                # may want to comment this
-                # input_state_p[input_state_p > 0] = 1  # input_state[input_state_p > 0]
-                # input_state_n[input_state_n > 0] = 1  # input_state[input_state_n > 0]
-
-                input_state = np.concatenate((input_state_p, input_state_n))
-            else:
-                self.last_layer_input = layer_input.copy()
-
-                return None
-
-        self.input_history.store_new_states(newest_states_list=[input_state])
-        input_states_seq = self.input_history.get_state_sequence(state_index=0,
-                                                                 delay_short=0,
-                                                                 delay_long=self.input_concat_timesteps - 1,
-                                                                 oldest_first=False)
-
-        sum_input_states = np.sum(input_states_seq, axis=0).astype(np.float32)
-
-        self.last_layer_input = layer_input.copy()
-
-        return sum_input_states
-
-
