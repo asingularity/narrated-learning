@@ -99,7 +99,7 @@ def get_brain_params():
         'input_im_dim': RF_IM_DIM,
         'num_rfs': 400,
         'lr': 1.0 / 1000,
-        'rate_lr': 1.0 / 1000,
+        'rel_lr_bg': 0.0,
         'max_time': 5000000,
         'do_raster_plots_every_k_im': 10,  # or None
         'num_layers': 3,  # only used for rate_control_wta_heirarchy

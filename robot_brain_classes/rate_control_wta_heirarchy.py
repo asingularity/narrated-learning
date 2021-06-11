@@ -32,7 +32,6 @@ class RateControlWTABRain(object):
         # new params
         self.num_rfs = params['num_rfs']  # 400
         self.lr = params['lr']  # 1.0 / 1000
-        self.rate_lr = params['rate_lr']  # 1.0 / 1000
         self.max_time = params['max_time']  # 5000000
         self.apply_rate_control = params['apply_rate_control']  # True
         self.do_raster_plots_every_k_im = params['do_raster_plots_every_k_im']  # 4, or None

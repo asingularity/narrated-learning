@@ -32,7 +32,7 @@ class RateControlWTABRain(object):
         # new params
         self.num_rfs = params['num_rfs']  # 400
         self.lr = params['lr']  # 1.0 / 1000
-        self.rate_lr = params['rate_lr']  # 1.0 / 1000
+        self.rel_lr_bg = params['rel_lr_bg']   # 0.1
         self.max_time = params['max_time']  # 5000000
         self.do_raster_plots_every_k_im = params['do_raster_plots_every_k_im']  # 4, or None
 
@@ -221,6 +221,14 @@ class RateControlWTABRain(object):
 
         lr = self.lr
         self.weights[best_rf, :] = lr * input_state + (1.0 - lr) * self.weights[best_rf, :]
+
+        # background learning
+        # maybe this bg_lr should be per-rf dependent on its activity rate?
+        # result: most converge to a non-useful average of inputs
+        lr_bg = self.rel_lr_bg * self.lr
+        # self.weights = lr_bg * input_state + (1.0 - lr_bg) * self.weights
+
+        self.weights = (1.0 - lr_bg) * self.weights
 
         # *** time step ***
 
