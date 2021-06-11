@@ -17,7 +17,6 @@ from sim_folder_manager import SimFolderManager
 from robot_sensor_classes.video_playback import VideoPlaybackSensor
 from robot_preprocess_classes.event_pre_processor import EventPreProcessor
 #from robot_brain_classes.rate_control_wta_heirarchy import RateControlWTABRain
-from robot_brain_classes.rate_control_wta import RateControlWTABRain
 
 
 RF_IM_DIM = 8  # 8, 16, 32, 64
@@ -67,11 +66,11 @@ def get_brain_params():  # override_params
         'input_im_dim': RF_IM_DIM,
         'num_rfs': 800,
         'lr': 1.0 / 1000,
-        'rel_lr_bg': 0.01,  # or 0.1?
-        'apply_rate_control': False,
+        'rel_lr_bg': 0.0,  # or 0.1?
         'do_raster_plots_every_k_im': None,  # or None
         'num_layers': 4,  # only used for rate_control_wta_heirarchy
-        'layer_learn_time': 500000   # only used for rate_control_wta_heirarchy
+        'layer_learn_time': 500000,   # only used for rate_control_wta_heirarchy
+        'network_type': 'seq-kmeans'
     }
 
     # for pname in override_params.keys():
@@ -81,6 +80,7 @@ def get_brain_params():  # override_params
 
 
 def run_one_sim(sim_params):
+    from robot_brain_classes.rate_control_wta import RateControlWTABRain
 
     sim_params['brain_params']['max_time'] = sim_params['max_time']
 
@@ -99,13 +99,16 @@ def run_one_sim(sim_params):
         events_p, events_n = pre_proc.step(input_frame=im)
         robot_brain.process_input(input_events_p=events_p, input_events_n=events_n)
 
-    robot_brain.do_plots()
-    ims_list, ims_names_list = robot_brain.get_table_ims()
+        if t % 100000 == 0 or t == sim_params['max_time'] - 1:
+            print('doing plots... t:', t)
+            robot_brain.do_plots()
+            ims_list, ims_names_list = robot_brain.get_table_ims()
+            print('done plots. t:', t)
 
-    #  instead of opencv viz, should save rfs image at end!!
-    for k in range(len(ims_list)):
-        cv2.imwrite(filename=sim_folder_manager.get_plots_save_folder() + '/' + ims_names_list[k] + ".png",
-                    img=(255 * ims_list[k]).astype(np.uint8))
+            #  instead of opencv viz, should save rfs image at end!!
+            for k in range(len(ims_list)):
+                cv2.imwrite(filename=sim_folder_manager.get_plots_save_folder() + '/' + ims_names_list[k] + ".png",
+                            img=(255 * ims_list[k]).astype(np.uint8))
 
     final_errors_dict = robot_brain.get_final_errors_dict()
 
@@ -189,7 +192,8 @@ def run_several_sweeps():
 
 
     # rel_lr_bg
-    param_sets = [('brain_params', 'rel_lr_bg', [0.2, 0.1, 0.01, 0.001, 0.0001])]
+    #param_sets = [('brain_params', 'rel_lr_bg', [0.2, 0.1, 0.01, 0.001, 0.0001])]
+    param_sets = [('brain_params', 'network_type', ['seq-kmeans', 'seq-knn'])]  #
 
     # each experiment is running a set of simulations for one of the param sets defined above
     # call them in order

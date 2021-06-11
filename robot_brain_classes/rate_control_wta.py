@@ -11,7 +11,7 @@ from offline_analyses.try_sparsify_3 import get_sparse_features, make_im
 
 from utils.one_time_messages import OneTimeMessages
 
-#from cuda_dist_query import CudaTable
+from cuda_dist_query import CudaTable
 
 import matplotlib
 matplotlib.use('Agg')
@@ -45,8 +45,23 @@ class RateControlWTABRain(object):
 
         self.input_state_dim = 2 * self.input_im_dim * self.input_im_dim  # why 2? + and - changes
 
-        #self.weights = np.zeros((self.num_rfs, self.input_state_dim)) # + 1e-1
-        self.weights = np.random.random((self.num_rfs, self.input_state_dim)) * 1e-12
+        if 'network_type' in params:
+            self.network_type = params['network_type']
+        else:
+            self.network_type = 'seq-kmeans'
+
+        assert self.network_type == 'seq-kmeans' or self.network_type == 'seq-knn'
+
+        if 'seq-kmeans' in self.network_type:
+            #self.weights = np.zeros((self.num_rfs, self.input_state_dim)) # + 1e-1
+            self.weights = np.random.random((self.num_rfs, self.input_state_dim)) * 1e-12
+        elif 'seq-knn' in self.network_type:
+            self.cuda_table = CudaTable(num_entries=self.num_rfs,
+                                        input_dim=self.input_state_dim)
+            self.init_I_row_num = None
+
+            self.num_row_changes_for_disp = 0
+            self.frames_since_row_change_disp = 0
 
         self.rf_counts = np.zeros(self.num_rfs)
 
@@ -127,6 +142,9 @@ class RateControlWTABRain(object):
 
     def _get_error_measures(self, rfs, input_arr):
 
+        if rfs.shape[0] == input_arr.shape[0]:
+            rfs = rfs[np.newaxis, :]
+
         assert rfs.shape[1] == input_arr.shape[0]
 
         L2 = np.sqrt(np.sum(np.square(rfs - input_arr), axis=1))
@@ -137,7 +155,8 @@ class RateControlWTABRain(object):
         RF_norm_L2 = np.divide(L2, np.sum(np.abs(rfs), axis=1))
 
         # why is this one negative? because it is actually a positive value: the larger, the better
-        RF_norm_dot = -np.divide(np.sum(np.multiply(rfs, input_arr), axis=1), np.sum(rfs, axis=1))
+        fix_offset = 1e-16
+        RF_norm_dot = -np.divide(np.sum(np.multiply(rfs, input_arr), axis=1), np.sum(rfs, axis=1)+fix_offset)
 
         errors = {
             'L2': L2,
@@ -167,14 +186,33 @@ class RateControlWTABRain(object):
             return
 
         # *** selection ***
+        best_rf = None
+        best_rf_weights = None
 
-        errors = self._get_error_measures(rfs=self.weights, input_arr=input_state)
-        best_rf = np.argmin(errors['RF-norm-dot'])
+        if 'seq-kmeans' in self.network_type:
+            # OLD:
+            # errors = self._get_error_measures(rfs=self.weights, input_arr=input_state)
+            # best_rf = np.argmin(errors['RF-norm-dot'])
+            # REFACTOR:
+
+            errors_all_rfs = self._get_error_measures(rfs=self.weights, input_arr=input_state)
+            best_rf = np.argmin(errors_all_rfs['RF-norm-dot'])
+            best_rf_weights = self.weights[best_rf, :]
+
+        elif 'seq-knn' in self.network_type:
+            best_rf, best_rf_weights = self._step_seq_nn(input_state=input_state)
+
+            # learning happens at same time for this one
+
+            # return best_rf, best_rf_errors_dict
+
+        assert best_rf is not None
 
         # *** errors for plotting ***
+        best_rf_errors_dict = self._get_error_measures(rfs=best_rf_weights, input_arr=input_state)
 
-        for error_type in errors:
-            error_value = errors[error_type][best_rf]
+        for error_type in best_rf_errors_dict:
+            error_value = best_rf_errors_dict[error_type][0]
             self.sum_errors_per_rf[error_type][best_rf] += error_value
             self.num_errors_per_rf[error_type][best_rf] += 1
 
@@ -195,17 +233,26 @@ class RateControlWTABRain(object):
 
         # *** learning ***
 
-        lr = self.lr
-        self.weights[best_rf, :] = lr * input_state + (1.0 - lr) * self.weights[best_rf, :]
+        learn_happened = False
+        if 'seq-kmeans' in self.network_type:
+            lr = self.lr
+            self.weights[best_rf, :] = lr * input_state + (1.0 - lr) * self.weights[best_rf, :]
 
-        # background learning
-        # maybe this bg_lr should be per-rf dependent on its activity rate?
-        # result: most converge to a non-useful average of inputs
-        lr_bg = self.rel_lr_bg * self.lr
-        # self.weights = lr_bg * input_state + (1.0 - lr_bg) * self.weights
+            # background learning
+            # maybe this bg_lr should be per-rf dependent on its activity rate?
+            # result: most converge to a non-useful average of inputs
+            lr_bg = self.rel_lr_bg * self.lr
+            # self.weights = lr_bg * input_state + (1.0 - lr_bg) * self.weights
 
-        if lr_bg > 0.0:
-            self.weights = (1.0 - lr_bg) * self.weights
+            if lr_bg > 0.0:
+                self.weights = (1.0 - lr_bg) * self.weights
+
+            learn_happened = True
+
+        elif 'seq-knn' in self.network_type:
+            learn_happened = True  # learning happens at same time as selection for this one, above
+
+        assert learn_happened
 
         # *** time step ***
 
@@ -214,6 +261,72 @@ class RateControlWTABRain(object):
         self.raster_t += 1
         if self.raster_t >= self.raster_steps:
             self.raster_t = 0
+
+
+    def _step_seq_nn(self, input_state):
+
+        input_state = input_state.astype(np.float32)
+
+        dists = self.cuda_table.query(query_input=input_state)
+        row_replaced = False
+
+        # assert input_state.shape[0] == self.input_dim
+
+        sorted_dist_indices = np.argsort(dists)
+        new_min_ind = sorted_dist_indices[0]
+        new_min_dist = dists[new_min_ind]
+
+        error = np.sum(np.abs(self.cuda_table.table_i[new_min_ind, :] - input_state))
+
+        if self.init_I_row_num is None:
+            self.init_I_row_num = 0
+
+        if self.init_I_row_num < self.cuda_table.get_num_rows():
+            # necessary so dist matrix helper is not so slow at start
+            dists[self.init_I_row_num] = np.inf
+            try:
+                self.cuda_table.set_matrix_row(row_index=self.init_I_row_num,
+                                               row_input=input_state,
+                                               row_to_table_dists=dists,
+                                               fast_init=True)
+            except AssertionError:
+                print('\nError! Invalid GPU data type. input_state.dtype: ' + str(input_state.dtype) + '\n')
+                raise
+
+            row_replaced = True
+            self.init_I_row_num += 1
+        else:
+            if not self.cuda_table.post_init_done:
+                self.cuda_table.post_init()
+
+            table_min_dist, table_min_dist_r, table_min_dist_c = self.cuda_table.get_min_dist()
+
+            if new_min_dist > table_min_dist:
+                # minimum distance of new row to current rows is greater than current minimum row-row distance
+                # so: replace one row of current minimum, with new row
+
+                # get one of the row indices of current minimum dist pair
+                r_r_ind = table_min_dist_r  # could be table_min_dist_c
+
+                dists[r_r_ind] = np.inf
+
+                # replace the current min dist row, with the new row
+                self.cuda_table.set_matrix_row(row_index=r_r_ind,
+                                               row_input=input_state,
+                                               row_to_table_dists=dists)
+
+                row_replaced = True
+
+        if row_replaced:
+            self.num_row_changes_for_disp += 1
+        self.frames_since_row_change_disp += 1
+
+        #error = new_min_dist
+
+        best_rf = new_min_ind
+        best_rf_weights = self.cuda_table.table_i[best_rf, :]
+
+        return best_rf, best_rf_weights
 
     def get_table_ims(self):
 
@@ -226,7 +339,13 @@ class RateControlWTABRain(object):
         ims_list = []
         ims_names_list = []
 
-        rfs_im, rf_ims_dict = make_im(self.weights, num_bins_per_pixel=1,
+        weights = None
+        if 'seq-kmeans' in self.network_type:
+            weights = self.weights
+        elif 'seq-knn' in self.network_type:
+            weights = self.cuda_table.table_i
+
+        rfs_im, rf_ims_dict = make_im(weights, num_bins_per_pixel=1,
                                                     input_im_dim=self.input_im_dim,
                                                     im_final_dim=int(200 * 3000 / 400),  # /800 for two-im per rf display
                                                     mod_for_disp=int(sqrt(self.num_rfs)),
@@ -271,8 +390,14 @@ class RateControlWTABRain(object):
         self.ax_bar.bar(np.arange(self.num_rfs), np.divide(self.sum_input_per_rf, self.num_input_per_rf))
         self.fig_bar.savefig(self.plots_folder + '/input_sum_per_rf.png', dpi=100)
 
+        weights = None
+        if 'seq-kmeans' in self.network_type:
+            weights = self.weights
+        elif 'seq-knn' in self.network_type:
+            weights = self.cuda_table.table_i
+
         self.ax_bar.cla()
-        self.ax_bar.bar(np.arange(self.num_rfs), np.sum(np.abs(self.weights), axis=1))
+        self.ax_bar.bar(np.arange(self.num_rfs), np.sum(np.abs(weights), axis=1))
         self.fig_bar.savefig(self.plots_folder + '/rf_sums.png', dpi=100)
 
         self.ax_bar.cla()
