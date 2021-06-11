@@ -50,7 +50,9 @@ class RateControlWTABRain(object):
         else:
             self.network_type = 'seq-kmeans'
 
-        assert self.network_type == 'seq-kmeans' or self.network_type == 'seq-knn'
+        assert self.network_type == 'seq-kmeans' or self.network_type == 'seq-knn' or self.network_type == 'nn-inits-kmeans'
+
+        self.nn_inits_kmeans_time = None  # only used for nn-inits-kmeans
 
         if 'seq-kmeans' in self.network_type:
             #self.weights = np.zeros((self.num_rfs, self.input_state_dim)) # + 1e-1
@@ -62,6 +64,20 @@ class RateControlWTABRain(object):
 
             self.num_row_changes_for_disp = 0
             self.frames_since_row_change_disp = 0
+        elif 'nn-inits-kmeans' in self.network_type:
+            # seq-nn init:
+            self.cuda_table = CudaTable(num_entries=self.num_rfs,
+                                        input_dim=self.input_state_dim)
+            self.init_I_row_num = None
+
+            self.num_row_changes_for_disp = 0
+            self.frames_since_row_change_disp = 0
+
+            # seq-kmeans init later:
+            self.weights = np.zeros((self.num_rfs, self.input_state_dim))
+
+            # time to transition them:
+            self.nn_inits_kmeans_time = 100000
 
         self.rf_counts = np.zeros(self.num_rfs)
 
@@ -189,7 +205,7 @@ class RateControlWTABRain(object):
         best_rf = None
         best_rf_weights = None
 
-        if 'seq-kmeans' in self.network_type:
+        if 'seq-kmeans' in self.network_type or ('nn-inits-kmeans' in self.network_type and self.t > self.nn_inits_kmeans_time):
             # OLD:
             # errors = self._get_error_measures(rfs=self.weights, input_arr=input_state)
             # best_rf = np.argmin(errors['RF-norm-dot'])
@@ -199,12 +215,17 @@ class RateControlWTABRain(object):
             best_rf = np.argmin(errors_all_rfs['RF-norm-dot'])
             best_rf_weights = self.weights[best_rf, :]
 
-        elif 'seq-knn' in self.network_type:
+        elif 'seq-knn' in self.network_type or ('nn-inits-kmeans' in self.network_type and self.t <= self.nn_inits_kmeans_time):
             best_rf, best_rf_weights = self._step_seq_nn(input_state=input_state)
 
             # learning happens at same time for this one
 
             # return best_rf, best_rf_errors_dict
+
+        if 'nn-inits-kmeans' in self.network_type and self.t == self.nn_inits_kmeans_time:
+            print('Doing init of kmeans from seq-nn...')
+            self.weights[:, :] = self.cuda_table.table_i[:, :]
+            print('Init done: weights copied.')
 
         assert best_rf is not None
 
@@ -234,7 +255,7 @@ class RateControlWTABRain(object):
         # *** learning ***
 
         learn_happened = False
-        if 'seq-kmeans' in self.network_type:
+        if 'seq-kmeans' in self.network_type or ('nn-inits-kmeans' in self.network_type and self.t > self.nn_inits_kmeans_time):
             lr = self.lr
             self.weights[best_rf, :] = lr * input_state + (1.0 - lr) * self.weights[best_rf, :]
 
@@ -249,7 +270,7 @@ class RateControlWTABRain(object):
 
             learn_happened = True
 
-        elif 'seq-knn' in self.network_type:
+        elif 'seq-knn' in self.network_type or ('nn-inits-kmeans' in self.network_type and self.t <= self.nn_inits_kmeans_time):
             learn_happened = True  # learning happens at same time as selection for this one, above
 
         assert learn_happened
@@ -340,9 +361,9 @@ class RateControlWTABRain(object):
         ims_names_list = []
 
         weights = None
-        if 'seq-kmeans' in self.network_type:
+        if 'seq-kmeans' in self.network_type or ('nn-inits-kmeans' in self.network_type and self.t > self.nn_inits_kmeans_time):
             weights = self.weights
-        elif 'seq-knn' in self.network_type:
+        elif 'seq-knn' in self.network_type  or ('nn-inits-kmeans' in self.network_type and self.t <= self.nn_inits_kmeans_time):
             weights = self.cuda_table.table_i
 
         rfs_im, rf_ims_dict = make_im(weights, num_bins_per_pixel=1,
@@ -391,9 +412,9 @@ class RateControlWTABRain(object):
         self.fig_bar.savefig(self.plots_folder + '/input_sum_per_rf.png', dpi=100)
 
         weights = None
-        if 'seq-kmeans' in self.network_type:
+        if 'seq-kmeans' in self.network_type or ('nn-inits-kmeans' in self.network_type and self.t > self.nn_inits_kmeans_time):
             weights = self.weights
-        elif 'seq-knn' in self.network_type:
+        elif 'seq-knn' in self.network_type or ('nn-inits-kmeans' in self.network_type and self.t <= self.nn_inits_kmeans_time):
             weights = self.cuda_table.table_i
 
         self.ax_bar.cla()

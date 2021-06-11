@@ -104,7 +104,7 @@ def get_brain_params():
         'do_raster_plots_every_k_im': 10,  # or None
         'num_layers': 3,  # only used for rate_control_wta_heirarchy
         'layer_learn_time': 500000,  # only used for rate_control_wta_heirarchy
-        'network_type': 'seq-kmeans'
+        'network_type': 'seq-kmeans'  # seq-kmeans, seq-knn, nn-inits-kmeans
     }
 
     return brain_params

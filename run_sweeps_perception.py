@@ -193,7 +193,7 @@ def run_several_sweeps():
 
     # rel_lr_bg
     #param_sets = [('brain_params', 'rel_lr_bg', [0.2, 0.1, 0.01, 0.001, 0.0001])]
-    param_sets = [('brain_params', 'network_type', ['seq-kmeans', 'seq-knn'])]  #
+    param_sets = [('brain_params', 'network_type', ['seq-kmeans', 'seq-knn', 'nn-inits-kmeans'])]  #
 
     # each experiment is running a set of simulations for one of the param sets defined above
     # call them in order
