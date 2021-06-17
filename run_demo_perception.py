@@ -38,7 +38,7 @@ from robot_preprocess_classes.event_pre_processor import EventPreProcessor
 
 
 DISABLE_BRAIN = False  # for testing input by itself; also starts slow display
-RF_IM_DIM = 128  # 8, 16, 32, 64, 128
+RF_IM_DIM = 256  # 8, 16, 32, 64, 128
 
 ROOT_DIR = '/srv'
 # ROOT_DIR = '/home/csaba'
@@ -98,7 +98,7 @@ def get_sim_folder_manager_params():
 def get_brain_params():
     brain_params = {
         'input_im_dim': RF_IM_DIM,
-        'num_rfs': 400,
+        'num_rfs': 800,
         'lr': 1.0 / 1000,
         'rel_lr_bg': 0.0,
         'max_time': 5000000,
