@@ -234,6 +234,20 @@ class RateControlWTABRain(object):
         # CYTHON write this function:
         #   input_state becomes 2D: (num_tiles X self.tile_input_state_dim)
         # print('cy_tile_the_input')
+        # print('input_events_p.shape', input_events_p.shape,
+        #       '\ninput_events_n.shape', input_events_n.shape,
+        #       '\nevent_coords_c.shape', event_coords_c.shape,
+        #       '\nevent_coords_r.shape', event_coords_r.shape,
+        #       '\nnp.amin(event_coords_r)', np.amin(event_coords_r),
+        #       '\nnp.amax(event_coords_r)', np.amax(event_coords_r),
+        #       '\nnp.amin(event_coords_c)', np.amin(event_coords_c),
+        #       '\nnp.amax(event_coords_c)', np.amax(event_coords_c),
+        #       '\nself.num_tiles_NxN', self.num_tiles_NxN,
+        #       '\nself.tile_input_state_dim', self.tile_input_state_dim,
+        #       '\nself.tile_dim_NxN', self.tile_dim_NxN
+        #       )
+        # print()
+
         cy_tile_the_input(input_events_p, input_events_n,
                           event_coords_r, event_coords_c,
                           self.num_tiles_NxN, self.tile_input_state_dim, self.tile_dim_NxN,
@@ -440,6 +454,29 @@ class RateControlWTABRain(object):
 
         ims_list.append(rfs_im)
         ims_names_list.append('rfs_im')
+
+        # defined above:
+
+        # self.last_reconstruction_im_info = {
+        #     'best_rf_per_tile': best_rf_per_tile,  # for "reconstructed input events" image
+        #     'input_states_tiles': input_states_tiles,  # for "actual input events" image
+        #     'original_input_image': original_input_image  # for "original input" image
+        # }
+
+        # make an image showing just the input tiles this input: input_states_tiles
+
+        input_states_tiles = self.last_reconstruction_im_info['input_states_tiles']
+
+        tile_inputs_im, tile_inputs_im_dict = make_im(input_states_tiles, num_bins_per_pixel=1,
+                                               input_im_dim=self.tile_dim_NxN,
+                                               im_final_dim=int(200 * 3000 / 1600),  # /800 for two-im per rf display
+                                               mod_for_disp=self.num_tiles_NxN,
+                                               normalize_weights=False)
+
+        ims_list.append(tile_inputs_im)
+        ims_names_list.append('tile_inputs_im')
+
+
 
         # TODO add a full reconstruction event im over all tiles, side by side with original event im and original im
         #   need pre processor to also pass back original im for reference

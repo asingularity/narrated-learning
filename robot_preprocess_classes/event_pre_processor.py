@@ -19,7 +19,7 @@ class EventPreProcessor(object):
         self.last_event_brightness = np.zeros(self.state_dim)
         self.t = 0
 
-        r = np.tile(np.arange(self.im_dim)[:, np.newaxis], 5).astype(np.int)
+        r = np.tile(np.arange(self.im_dim)[:, np.newaxis], self.im_dim).astype(np.int)
         c = np.transpose(r).astype(np.int)
         self.event_coords_r = r.flatten()
         self.event_coords_c = c.flatten()

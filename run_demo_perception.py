@@ -25,8 +25,8 @@ np.random.seed(6)
 #from robot_brain_classes.tiled_multilayer_wta import SeqNNSeqKMeansBrain
 #from robot_brain_classes.batch_iter_wta import BatchIterWTABrain
 
-#from robot_brain_classes.tiled_rate_control_wta import RateControlWTABRain
-from robot_brain_classes.rate_control_wta import RateControlWTABRain
+from robot_brain_classes.tiled_rate_control_wta import RateControlWTABRain
+#from robot_brain_classes.rate_control_wta import RateControlWTABRain
 # TODO rename to avoid confusion! class
 #from robot_brain_classes.rate_control_wta_heirarchy import RateControlWTABRain
 
@@ -38,7 +38,7 @@ from robot_preprocess_classes.event_pre_processor import EventPreProcessor
 
 
 DISABLE_BRAIN = False  # for testing input by itself; also starts slow display
-RF_IM_DIM = 8  # 8, 16, 32, 64
+RF_IM_DIM = 64  # 8, 16, 32, 64
 
 ROOT_DIR = '/srv'
 # ROOT_DIR = '/home/csaba'
@@ -106,7 +106,7 @@ def get_brain_params():
         'num_layers': 3,  # only used for rate_control_wta_heirarchy
         'layer_learn_time': 500000,  # only used for rate_control_wta_heirarchy
         'network_type': 'seq-kmeans',  # seq-kmeans, seq-knn, nn-inits-kmeans
-        'tile_im_dim': 4  # only used for tiled rate control wta
+        'tile_im_dim': 8  # only used for tiled rate control wta
     }
 
     return brain_params
