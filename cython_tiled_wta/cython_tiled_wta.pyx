@@ -80,8 +80,8 @@ def cy_compute_error_measures(np.ndarray[np.float32_t, ndim=2] rfs,
     num_rfs = RF_norm_dot.shape[1]
     input_dim = input_states_tiles.shape[1]
 
-    #for rf_index in prange(num_rfs, nogil=True, schedule='dynamic', num_threads=4):
-    for rf_index in range(num_rfs):
+    for rf_index in prange(num_rfs, nogil=True, schedule='dynamic', num_threads=22):
+    #for rf_index in range(num_rfs):
         
         rf_sum = 0.0
         for k in range(input_dim):
