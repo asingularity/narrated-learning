@@ -130,6 +130,11 @@ class RateControlWTABRain(object):
 
         self.last_reconstruction_im_info = None
 
+        # profiling
+        self.loop_time = 0
+        self.timed_events = None
+        self.timed_event_names = None
+
     def _init_rasters(self):
         self.raster_steps = 200
         self.raster_t = 0  # circular; draw vertical line on plot here
@@ -213,6 +218,12 @@ class RateControlWTABRain(object):
 
     def process_input(self, input_events_p, input_events_n, event_coords_r, event_coords_c, original_input_image):
 
+        t_start = time.time()
+
+        event_t_starts = []
+        event_t_ends = []
+        self.timed_event_names = []
+
         if self.t >= self.max_time:
             return
 
@@ -249,11 +260,17 @@ class RateControlWTABRain(object):
         #       )
         # print()
 
+
+        event_t_starts.append(time.time())
+
         cy_tile_the_input(input_events_p, input_events_n,
                           event_coords_r, event_coords_c,
                           self.num_tiles_NxN, self.tile_input_state_dim, self.tile_dim_NxN,
                           input_states_tiles)
-        
+
+        event_t_ends.append(time.time())
+        self.timed_event_names.append('cy_tile_the_input')
+
         assert input_states_tiles.shape[0] == (self.num_tiles_NxN * self.num_tiles_NxN)
         assert input_states_tiles.shape[1] == self.tile_input_state_dim
 
@@ -265,8 +282,10 @@ class RateControlWTABRain(object):
             # errors = self._get_error_measures(rfs=self.weights, input_arr=input_state)
             # best_rf = np.argmin(errors['RF-norm-dot'])
             # REFACTOR:
-
+            event_t_starts.append(time.time())
             errors_all_rfs = self._get_error_measures(rfs=self.weights, input_states_tiles=input_states_tiles)
+            event_t_ends.append(time.time())
+            self.timed_event_names.append('_get_error_measures')
 
             assert errors_all_rfs['RF-norm-dot'].shape[0] == (self.num_tiles_NxN * self.num_tiles_NxN)
             assert errors_all_rfs['RF-norm-dot'].shape[1] == self.num_rfs
@@ -330,8 +349,11 @@ class RateControlWTABRain(object):
 
             # print('cy_kmeans_do_learning')
             #print(best_rf_per_tile.shape, self.weights.shape, input_states_tiles.shape)
+            event_t_starts.append(time.time())
             cy_kmeans_do_learning(best_rf_per_tile, self.weights, input_states_tiles, np.float32(lr))
-
+            event_t_ends.append(time.time())
+            self.timed_event_names.append('cy_kmeans_do_learning')
+            #print(np.array(event_t_ends) - np.array(event_t_starts))
             # OLD:
             # self.weights[best_rf, :] = lr * input_state + (1.0 - lr) * self.weights[best_rf, :]
 
@@ -367,6 +389,13 @@ class RateControlWTABRain(object):
         self.raster_t += 1
         if self.raster_t >= self.raster_steps:
             self.raster_t = 0
+
+        t_end = time.time()
+
+        self.loop_time += (t_end - t_start)
+        if self.timed_events is None:
+            self.timed_events = np.zeros(len(event_t_ends))
+        self.timed_events = self.timed_events + (np.array(event_t_ends) - np.array(event_t_starts))
 
     def _step_seq_nn(self, input_state):
 
@@ -434,6 +463,19 @@ class RateControlWTABRain(object):
         return best_rf, best_rf_weights
 
     def get_table_ims(self):
+
+        if self.timed_events is not None:
+            print('profiling:')
+            profile_dict = {}
+            tmp_thing = self.timed_events / self.loop_time
+            asd = 0
+            for name in self.timed_event_names:
+                profile_dict[name] = tmp_thing[asd]
+                asd += 1
+
+            print(profile_dict)
+            print()
+
 
         if self.do_raster_plots_every_k_im is not None:
             self.ims_since_raster += 1
