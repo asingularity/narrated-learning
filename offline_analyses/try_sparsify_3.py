@@ -94,7 +94,7 @@ def _collapse_binned_columns_to_pixels(arr_exp, num_bins_per_pixel):
     return arr, weights
 
 
-def make_im(input_arrays, num_bins_per_pixel, input_im_dim, im_final_dim=1600, mod_for_disp=5, normalize_weights=False):
+def make_im(input_arrays, num_bins_per_pixel, input_im_dim, im_final_dim=1600, mod_for_disp=5, normalize_weights=False, borders_px=3):
 
     tmp_im_all = None
     tmp_im = None
@@ -131,7 +131,7 @@ def make_im(input_arrays, num_bins_per_pixel, input_im_dim, im_final_dim=1600, m
 
         # im1 = 0.5 * (im1 + 1)
 
-        spacer1 = 0.2 * np.ones((im0.shape[0], 3))
+        spacer1 = 0.2 * np.ones((im0.shape[0], borders_px))
 
         use_both_ims = False  # i.e. if you want to also display only one of the lobes
         if use_both_ims:
@@ -144,14 +144,14 @@ def make_im(input_arrays, num_bins_per_pixel, input_im_dim, im_final_dim=1600, m
         if tmp_im is None:
             tmp_im = tmp2.copy()
         else:
-            tmp3 = 0.2 * np.ones((2, tmp_im.shape[1]))
+            tmp3 = 0.2 * np.ones((borders_px, tmp_im.shape[1]))
             tmp_im = np.vstack((tmp_im, tmp3, tmp2))
 
-        if r_tmp > 0 and (r_tmp + 1) % mod_for_disp == 0:
+        if (weights.shape[0] == 1) or (r_tmp > 0 and (r_tmp + 1) % mod_for_disp == 0):
             if tmp_im_all is None:
                 tmp_im_all = tmp_im.copy()
             else:
-                spacer = 0.8 * np.ones((tmp_im_all.shape[0], 3))
+                spacer = 0.8 * np.ones((tmp_im_all.shape[0], borders_px))
                 tmp_im_all = np.hstack((tmp_im_all, spacer, tmp_im))
 
             tmp_im = None

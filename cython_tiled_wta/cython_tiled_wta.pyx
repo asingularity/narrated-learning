@@ -49,7 +49,7 @@ def cy_tile_the_input(np.ndarray[np.float32_t, ndim=1] input_events_p,
         # find tile index for this event_r, event_c
         tile_index_r = event_r / tile_dim_NxN
         tile_index_c = event_c / tile_dim_NxN
-        tile_index = tile_index_r * num_tiles_NxN + tile_index_c
+        tile_index = tile_index_c * num_tiles_NxN + tile_index_r
 
         # set input states
         # self.tile_input_state_dim = 2 * self.tile_dim_NxN * self.tile_dim_NxN

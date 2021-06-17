@@ -351,6 +351,9 @@ class RateControlWTABRain(object):
 
         # store for making an image
         self.last_reconstruction_im_info = {
+            'input_events_p': input_events_p,
+            'input_events_n': input_events_n,
+            'input_state_all': input_state_all,
             'best_rf_per_tile': best_rf_per_tile,  # for "reconstructed input events" image
             'input_states_tiles': input_states_tiles,  # for "actual input events" image
             'original_input_image': original_input_image  # for "original input" image
@@ -450,7 +453,8 @@ class RateControlWTABRain(object):
                                                input_im_dim=self.tile_dim_NxN,
                                                im_final_dim=int(200 * 3000 / 400),  # /800 for two-im per rf display
                                                mod_for_disp=int(sqrt(self.num_rfs)),
-                                               normalize_weights=True)
+                                               normalize_weights=True,
+                                               borders_px=3)
 
         ims_list.append(rfs_im)
         ims_names_list.append('rfs_im')
@@ -458,12 +462,33 @@ class RateControlWTABRain(object):
         # defined above:
 
         # self.last_reconstruction_im_info = {
+        #     'input_events_p': input_events_p,
+        #     'input_events_n': input_events_n,
+        #     'input_state_all': input_state_all,
         #     'best_rf_per_tile': best_rf_per_tile,  # for "reconstructed input events" image
         #     'input_states_tiles': input_states_tiles,  # for "actual input events" image
         #     'original_input_image': original_input_image  # for "original input" image
         # }
 
+        input_state_all = self.last_reconstruction_im_info['input_state_all'][np.newaxis, :]
+
+        input_all_im, _ = make_im(input_state_all, num_bins_per_pixel=1,
+                                               input_im_dim=self.input_im_dim_NxN,
+                                               im_final_dim=int(200 * 3000 / 1600),  # /800 for two-im per rf display
+                                               mod_for_disp=1,
+                                               normalize_weights=True,
+                                               borders_px=1)
+
+        ims_list.append(input_all_im)
+        ims_names_list.append('input_all_im')
+
+
+
         # make an image showing just the input tiles this input: input_states_tiles
+
+        # TODO whole thing is transposed
+        # TODO within tile is not right: because positive/negative together? already account for in drawing tool...?
+        # TODO compare to the full image for events that we get in --  get this from pre processor
 
         input_states_tiles = self.last_reconstruction_im_info['input_states_tiles']
 
@@ -471,7 +496,8 @@ class RateControlWTABRain(object):
                                                input_im_dim=self.tile_dim_NxN,
                                                im_final_dim=int(200 * 3000 / 1600),  # /800 for two-im per rf display
                                                mod_for_disp=self.num_tiles_NxN,
-                                               normalize_weights=False)
+                                               normalize_weights=True,
+                                               borders_px=1)  # 1
 
         ims_list.append(tile_inputs_im)
         ims_names_list.append('tile_inputs_im')
