@@ -25,8 +25,8 @@ np.random.seed(6)
 #from robot_brain_classes.tiled_multilayer_wta import SeqNNSeqKMeansBrain
 #from robot_brain_classes.batch_iter_wta import BatchIterWTABrain
 
-#from robot_brain_classes.tiled_rate_control_wta import RateControlWTABRain
-from robot_brain_classes.rate_control_wta import RateControlWTABRain
+from robot_brain_classes.tiled_rate_control_wta import RateControlWTABRain
+#from robot_brain_classes.rate_control_wta import RateControlWTABRain
 # TODO rename to avoid confusion! class
 #from robot_brain_classes.rate_control_wta_heirarchy import RateControlWTABRain
 
@@ -38,7 +38,7 @@ from robot_preprocess_classes.event_pre_processor import EventPreProcessor
 
 
 DISABLE_BRAIN = False  # for testing input by itself; also starts slow display
-RF_IM_DIM = 8  # 8, 16, 32, 64
+RF_IM_DIM = 128  # 8, 16, 32, 64, 128
 
 ROOT_DIR = '/srv'
 # ROOT_DIR = '/home/csaba'
@@ -102,7 +102,7 @@ def get_brain_params():
         'lr': 1.0 / 1000,
         'rel_lr_bg': 0.0,
         'max_time': 5000000,
-        'do_raster_plots_every_k_im': 10,  # or None
+        'do_raster_plots_every_k_im': None,  # or None
         'num_layers': 3,  # only used for rate_control_wta_heirarchy
         'layer_learn_time': 500000,  # only used for rate_control_wta_heirarchy
         'network_type': 'seq-kmeans',  # seq-kmeans, seq-knn, nn-inits-kmeans
@@ -122,7 +122,7 @@ def get_visualizer_params():
         'waitKey_time_slow': 1,  # 1, 100, 5000
         'scale_camera_factor': 1,
         'auto_switch_to_slow_disp_time': None,
-        'init_fast': not DISABLE_BRAIN  # start with "fast" display if brain is enabled
+        'init_fast': True, #not DISABLE_BRAIN  # start with "fast" display if brain is enabled
     }
     return params
 

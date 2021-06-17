@@ -329,7 +329,8 @@ class RateControlWTABRain(object):
             # add background learning if needed later
 
             # print('cy_kmeans_do_learning')
-            cy_kmeans_do_learning(best_rf_per_tile, self.weights, input_states_tiles)
+            #print(best_rf_per_tile.shape, self.weights.shape, input_states_tiles.shape)
+            cy_kmeans_do_learning(best_rf_per_tile, self.weights, input_states_tiles, np.float32(lr))
 
             # OLD:
             # self.weights[best_rf, :] = lr * input_state + (1.0 - lr) * self.weights[best_rf, :]
