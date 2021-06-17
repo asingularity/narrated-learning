@@ -6,8 +6,8 @@ import random
 import pickle
 from math import sqrt
 from brain_components_classes.states_history import StatesLimitedHistory
-#from cython_eff import compute_eff
-from offline_analyses.try_sparsify_3 import get_sparse_features, make_im
+from cython_tiled_wta import cy_compute_error_measures, cy_kmeans_do_learning, cy_tile_the_input
+from offline_analyses.try_sparsify_3 import make_im
 
 from utils.one_time_messages import OneTimeMessages
 
@@ -27,7 +27,20 @@ np.random.seed(0)
 
 class RateControlWTABRain(object):
     def __init__(self, params):
-        self.input_im_dim = params['input_im_dim']
+
+        # TODO MAKE PARAM
+        # TODO re-enable for tiling
+        self.enable_errors_plots = False
+
+        # tiling params
+        self.input_im_dim_NxN = params['input_im_dim']  # full input image dim: N, where NxN
+        self.tile_dim_NxN = params['tile_im_dim']  # tile input dim: M, where MxM
+
+        assert (self.input_im_dim_NxN / self.tile_dim_NxN) == np.round(self.input_im_dim_NxN / self.tile_dim_NxN)
+        self.num_tiles_NxN = int(self.input_im_dim_NxN / self.tile_dim_NxN)
+
+        # this is now: input state dim per tile
+        self.tile_input_state_dim = 2 * self.tile_dim_NxN * self.tile_dim_NxN  # why 2? + and - changes
 
         # new params
         self.num_rfs = params['num_rfs']  # 400
@@ -43,8 +56,6 @@ class RateControlWTABRain(object):
 
         self.input_concat_timesteps = 1  # unused
 
-        self.input_state_dim = 2 * self.input_im_dim * self.input_im_dim  # why 2? + and - changes
-
         if 'network_type' in params:
             self.network_type = params['network_type']
         else:
@@ -56,10 +67,13 @@ class RateControlWTABRain(object):
 
         if 'seq-kmeans' in self.network_type:
             #self.weights = np.zeros((self.num_rfs, self.input_state_dim)) # + 1e-1
-            self.weights = np.random.random((self.num_rfs, self.input_state_dim)) * 1e-12
+            # tiles are shared, so we only need one set of "tile state dim x tile state dim" weights
+            self.weights = np.random.random((self.num_rfs, self.tile_input_state_dim)) * 1e-12
+            self.weights = self.weights.astype(np.float32)
+
         elif 'seq-knn' in self.network_type:
             self.cuda_table = CudaTable(num_entries=self.num_rfs,
-                                        input_dim=self.input_state_dim)
+                                        input_dim=self.tile_input_state_dim)
             self.init_I_row_num = None
 
             self.num_row_changes_for_disp = 0
@@ -67,34 +81,29 @@ class RateControlWTABRain(object):
         elif 'nn-inits-kmeans' in self.network_type:
             # seq-nn init:
             self.cuda_table = CudaTable(num_entries=self.num_rfs,
-                                        input_dim=self.input_state_dim)
+                                        input_dim=self.tile_input_state_dim)
             self.init_I_row_num = None
 
             self.num_row_changes_for_disp = 0
             self.frames_since_row_change_disp = 0
 
             # seq-kmeans init later:
-            self.weights = np.zeros((self.num_rfs, self.input_state_dim))
+            self.weights = np.zeros((self.num_rfs, self.tile_input_state_dim))
 
             # time to transition them:
             self.nn_inits_kmeans_time = 100000
 
-        self.rf_counts = np.zeros(self.num_rfs)
+        self.rf_counts = np.zeros(self.num_rfs, np.float32)
 
         self.t = 0
         self.num_zero_inputs = 0
 
         self.plots_folder = "."
-        self.input_history = StatesLimitedHistory(params={'max_delay': self.input_concat_timesteps,
-                                                          'states_dim_list': [self.input_state_dim],
-                                                          'store_extra_data': False})
 
         self._init_plotting()
 
-        # rate control stuff
-        self._init_rate_control()
-
         # rasters
+        # TODO raster combines all tiles
         self._init_rasters()
 
         self.sum_input_per_rf = np.zeros(self.num_rfs)
@@ -104,10 +113,12 @@ class RateControlWTABRain(object):
         self.num_errors_per_rf = {}
         self.mean_errors = {}
 
+        # TILING: errors should now be average over all tiles, for now
         self.errors_over_time = {}
         self.mean_errors_over_time = {}
-        # not well bounded: 'RF-norm-L2', 'RF-norm-L1'
-        for error_type in ['L2', 'L1', 'input-norm-L1', 'input-norm-L2', 'RF-norm-dot']:
+
+        # TODO re-enable other errors later: 'L2', 'L1', 'input-norm-L1', 'input-norm-L2',
+        for error_type in ['RF-norm-dot']:
             self.sum_errors_per_rf[error_type] = np.zeros(self.num_rfs)
             self.num_errors_per_rf[error_type] = np.zeros(self.num_rfs)
 
@@ -116,14 +127,17 @@ class RateControlWTABRain(object):
             self.errors_over_time[error_type] = np.zeros(self.max_time)
             self.mean_errors_over_time[error_type] = np.zeros(self.max_time)
 
+        self.last_reconstruction_im_info = None
+
     def _init_rasters(self):
         self.raster_steps = 200
         self.raster_t = 0  # circular; draw vertical line on plot here
-        self.input_raster_history = np.zeros((self.input_state_dim, self.raster_steps), np.uint8)
-        self.rfs_raster_history = np.zeros((self.num_rfs, self.raster_steps), np.uint8)
 
-    def _init_rate_control(self):
-        self.last_win_time = np.zeros(self.num_rfs) - 1
+        input_state_dim = int(2 * self.input_im_dim_NxN * self.input_im_dim_NxN)
+        self.input_raster_history = np.zeros((input_state_dim, self.raster_steps), np.uint8)
+
+        # TODO this needs to be set properly for multiple tiles!
+        self.rfs_raster_history = np.zeros((self.num_rfs, self.raster_steps), np.uint8)
 
     def _init_plotting(self):
 
@@ -143,9 +157,6 @@ class RateControlWTABRain(object):
         d = {}
         for error_type in self.sum_errors_per_rf.keys():
 
-            # TODO fix later:
-            # TODO this should be self.max_time - 1, but cant be because we skip zero inputs without self.t += 1 !!!
-
             d[error_type + '__mean-by-rf'] = self.mean_errors[error_type][self.t - 1]
             d[error_type + '__mean-by-t'] = self.mean_errors_over_time[error_type][self.t - 1]
         return d
@@ -156,54 +167,83 @@ class RateControlWTABRain(object):
         print('setting plots folder: ', self.plots_folder)
         print()
 
-    def _get_error_measures(self, rfs, input_arr):
+    def _get_error_measures(self, rfs, input_states_tiles):
 
-        if rfs.shape[0] == input_arr.shape[0]:
+        assert input_states_tiles.shape[0] == (self.num_tiles_NxN * self.num_tiles_NxN)
+        assert input_states_tiles.shape[1] == self.tile_input_state_dim
+
+        if rfs.shape[0] == self.tile_input_state_dim:
             rfs = rfs[np.newaxis, :]
 
-        assert rfs.shape[1] == input_arr.shape[0]
+        assert rfs.shape[1] == input_states_tiles.shape[1]
 
-        L2 = np.sqrt(np.sum(np.square(rfs - input_arr), axis=1))
-        L1 = np.sum(np.abs(rfs - input_arr), axis=1)
-        input_norm_L1 = np.sum(np.abs(rfs - input_arr), axis=1) / np.sum(input_arr)
-        input_norm_L2 = np.sqrt(np.sum(np.square(rfs - input_arr), axis=1)) / np.sum(np.square(input_arr))
-        RF_norm_L1 = np.divide(np.sum(np.abs(rfs - input_arr), axis=1), np.sum(np.abs(rfs), axis=1))
-        RF_norm_L2 = np.divide(L2, np.sum(np.abs(rfs), axis=1))
+        # re-enable other errors later, have to modify for multiple tiles:
+        #L2 = np.sqrt(np.sum(np.square(rfs - input_arr), axis=1))
+        #L1 = np.sum(np.abs(rfs - input_arr), axis=1)
+        #input_norm_L1 = np.sum(np.abs(rfs - input_arr), axis=1) / np.sum(input_arr)
+        #input_norm_L2 = np.sqrt(np.sum(np.square(rfs - input_arr), axis=1)) / np.sum(np.square(input_arr))
 
         # why is this one negative? because it is actually a positive value: the larger, the better
         fix_offset = 1e-16
-        RF_norm_dot = -np.divide(np.sum(np.multiply(rfs, input_arr), axis=1), np.sum(rfs, axis=1)+fix_offset)
 
+        # OLD:
+        # RF_norm_dot = -np.divide(np.sum(np.multiply(rfs, input_arr), axis=1), np.sum(rfs, axis=1)+fix_offset)
+
+        # TODO CYTHON modify for multiple tiles
+        #   need to: tile / repeat the rfs and input arrs; then reshape the result correctly
+        #   instead, do a cy loop so we don't run out of memory; otherwise not saving: may as well reuse tiles
+
+        # float32?
+        RF_norm_dot = np.zeros((int(self.num_tiles_NxN * self.num_tiles_NxN), self.num_rfs), np.float32)
+
+        # print('cy_compute_error_measures')
+        cy_compute_error_measures(rfs, input_states_tiles, fix_offset, RF_norm_dot)
+
+        # re-enable other errors later: 'L2', 'L1', 'input-norm-L1', 'input-norm-L2',
         errors = {
-            'L2': L2,
-            'L1': L1,
-            'input-norm-L1': input_norm_L1,
-            'input-norm-L2': input_norm_L2,
+            #'L2': L2,
+            #'L1': L1,
+            #'input-norm-L1': input_norm_L1,
+            #'input-norm-L2': input_norm_L2,
             'RF-norm-dot': RF_norm_dot
-            # 'RF-norm-L1': RF_norm_L1,  # not well bounded
-            #'RF-norm-L2': RF_norm_L2  # not well bounded
         }
 
         return errors
 
     def process_input(self, input_events_p, input_events_n, event_coords_r, event_coords_c, original_input_image):
+
         if self.t >= self.max_time:
             return
 
-        input_state = np.concatenate((input_events_p, input_events_n))
+        input_state_all = np.concatenate((input_events_p, input_events_n))
+        assert input_state_all.dtype == np.float32, str(input_state_all.dtype)
 
-        self.input_raster_history[:, self.raster_t] = input_state[:]
-
-        if input_state is None:
+        if input_state_all is None:  # this doesn't appear to ever be able to happen
             return
 
-        if np.count_nonzero(input_state) == 0:
+        if np.count_nonzero(input_state_all) == 0:
             self.num_zero_inputs += 1
             return
 
+        self.input_raster_history[:, self.raster_t] = input_state_all[:]
+
+        # input_state_all not used again this function
+
+        input_states_tiles = np.zeros((int(self.num_tiles_NxN * self.num_tiles_NxN), self.tile_input_state_dim), np.float32)
+
+        # CYTHON write this function:
+        #   input_state becomes 2D: (num_tiles X self.tile_input_state_dim)
+        # print('cy_tile_the_input')
+        cy_tile_the_input(input_events_p, input_events_n,
+                          event_coords_r, event_coords_c,
+                          self.num_tiles_NxN, self.tile_input_state_dim, self.tile_dim_NxN,
+                          input_states_tiles)
+        
+        assert input_states_tiles.shape[0] == (self.num_tiles_NxN * self.num_tiles_NxN)
+        assert input_states_tiles.shape[1] == self.tile_input_state_dim
+
         # *** selection ***
-        best_rf = None
-        best_rf_weights = None
+        best_rf_per_tile = None
 
         if 'seq-kmeans' in self.network_type or ('nn-inits-kmeans' in self.network_type and self.t > self.nn_inits_kmeans_time):
             # OLD:
@@ -211,11 +251,15 @@ class RateControlWTABRain(object):
             # best_rf = np.argmin(errors['RF-norm-dot'])
             # REFACTOR:
 
-            errors_all_rfs = self._get_error_measures(rfs=self.weights, input_arr=input_state)
-            best_rf = np.argmin(errors_all_rfs['RF-norm-dot'])
-            best_rf_weights = self.weights[best_rf, :]
+            errors_all_rfs = self._get_error_measures(rfs=self.weights, input_states_tiles=input_states_tiles)
+
+            assert errors_all_rfs['RF-norm-dot'].shape[0] == (self.num_tiles_NxN * self.num_tiles_NxN)
+            assert errors_all_rfs['RF-norm-dot'].shape[1] == self.num_rfs
+
+            best_rf_per_tile = np.argmin(errors_all_rfs['RF-norm-dot'], axis=1)
 
         elif 'seq-knn' in self.network_type or ('nn-inits-kmeans' in self.network_type and self.t <= self.nn_inits_kmeans_time):
+            assert False, 'not yet supported for tiling'
             best_rf, best_rf_weights = self._step_seq_nn(input_state=input_state)
 
             # learning happens at same time for this one
@@ -223,66 +267,87 @@ class RateControlWTABRain(object):
             # return best_rf, best_rf_errors_dict
 
         if 'nn-inits-kmeans' in self.network_type and self.t == self.nn_inits_kmeans_time:
+            assert False, 'not yet supported for tiling'
             print('Doing init of kmeans from seq-nn...')
             self.weights[:, :] = self.cuda_table.table_i[:, :]
             print('Init done: weights copied.')
 
-        assert best_rf is not None
+        assert best_rf_per_tile is not None
 
         # *** errors for plotting ***
-        best_rf_errors_dict = self._get_error_measures(rfs=best_rf_weights, input_arr=input_state)
+        if self.enable_errors_plots:
 
-        for error_type in best_rf_errors_dict:
-            error_value = best_rf_errors_dict[error_type][0]
-            self.sum_errors_per_rf[error_type][best_rf] += error_value
-            self.num_errors_per_rf[error_type][best_rf] += 1
+            # TODO modify for multiple tiles: for now average per RF over all tiles, since RF is reused?
 
-            tmp = np.divide(self.sum_errors_per_rf[error_type], self.num_errors_per_rf[error_type])
-            tmp = tmp[np.nonzero(np.logical_not(np.isnan(tmp)))]
-            self.mean_errors[error_type][self.t] = np.mean(tmp)
+            best_rf_weights = self.weights[best_rf, :]
 
-            self.errors_over_time[error_type][self.t] = error_value
-            self.mean_errors_over_time[error_type][self.t] = np.mean(self.errors_over_time[error_type][max(0, self.t - self.error_mean_time):self.t])
+            best_rf_errors_dict = self._get_error_measures(rfs=best_rf_weights, input_arr=input_state)
 
-        sum_input = np.sum(input_state)
-        self.sum_input_per_rf[best_rf] = self.sum_input_per_rf[best_rf] + sum_input
-        self.num_input_per_rf[best_rf] += 1
+            for error_type in best_rf_errors_dict:
+                error_value = best_rf_errors_dict[error_type][0]
+                self.sum_errors_per_rf[error_type][best_rf] += error_value
+                self.num_errors_per_rf[error_type][best_rf] += 1
 
-        self.rfs_raster_history[:, self.raster_t] = 0
-        self.rfs_raster_history[best_rf, self.raster_t] = 1
-        self.rf_counts[best_rf] += 1
+                tmp = np.divide(self.sum_errors_per_rf[error_type], self.num_errors_per_rf[error_type])
+                tmp = tmp[np.nonzero(np.logical_not(np.isnan(tmp)))]
+                self.mean_errors[error_type][self.t] = np.mean(tmp)
+
+                self.errors_over_time[error_type][self.t] = error_value
+                self.mean_errors_over_time[error_type][self.t] = np.mean(self.errors_over_time[error_type][max(0, self.t - self.error_mean_time):self.t])
+
+            sum_input = np.sum(input_state)
+            self.sum_input_per_rf[best_rf] = self.sum_input_per_rf[best_rf] + sum_input
+            self.num_input_per_rf[best_rf] += 1
+
+            self.rfs_raster_history[:, self.raster_t] = 0
+            self.rfs_raster_history[best_rf, self.raster_t] = 1
+            self.rf_counts[best_rf] += 1
 
         # *** learning ***
 
         learn_happened = False
         if 'seq-kmeans' in self.network_type or ('nn-inits-kmeans' in self.network_type and self.t > self.nn_inits_kmeans_time):
             lr = self.lr
-            self.weights[best_rf, :] = lr * input_state + (1.0 - lr) * self.weights[best_rf, :]
+
+            # CYTHON for every tile in tile_input_arrs, learn best_rf_per_tile. some might be same RF! needs loop: cy
+            #   python will apply only one of the changes, if multiple changes to same RF
+            # add background learning if needed later
+
+            # print('cy_kmeans_do_learning')
+            cy_kmeans_do_learning(best_rf_per_tile, self.weights, input_states_tiles)
+
+            # OLD:
+            # self.weights[best_rf, :] = lr * input_state + (1.0 - lr) * self.weights[best_rf, :]
 
             # background learning
             # maybe this bg_lr should be per-rf dependent on its activity rate?
             # result: most converge to a non-useful average of inputs
-            lr_bg = self.rel_lr_bg * self.lr
-            # self.weights = lr_bg * input_state + (1.0 - lr_bg) * self.weights
 
-            if lr_bg > 0.0:
-                self.weights = (1.0 - lr_bg) * self.weights
+            # lr_bg = self.rel_lr_bg * self.lr
+            #if lr_bg > 0.0:
+            #    self.weights = (1.0 - lr_bg) * self.weights
 
             learn_happened = True
 
         elif 'seq-knn' in self.network_type or ('nn-inits-kmeans' in self.network_type and self.t <= self.nn_inits_kmeans_time):
+            assert False, 'not yet supported for tiling'
             learn_happened = True  # learning happens at same time as selection for this one, above
 
         assert learn_happened
 
+        # store for making an image
+        self.last_reconstruction_im_info = {
+            'best_rf_per_tile': best_rf_per_tile,  # for "reconstructed input events" image
+            'input_states_tiles': input_states_tiles,  # for "actual input events" image
+            'original_input_image': original_input_image  # for "original input" image
+        }
+
         # *** time step ***
 
-        self.last_win_time[best_rf] = self.t
         self.t += 1
         self.raster_t += 1
         if self.raster_t >= self.raster_steps:
             self.raster_t = 0
-
 
     def _step_seq_nn(self, input_state):
 
@@ -354,8 +419,9 @@ class RateControlWTABRain(object):
         if self.do_raster_plots_every_k_im is not None:
             self.ims_since_raster += 1
             if self.ims_since_raster > self.do_raster_plots_every_k_im:
-                self.do_plots()
-                self.ims_since_raster = 0
+                if self.enable_errors_plots:
+                    self.do_plots()
+                    self.ims_since_raster = 0
 
         ims_list = []
         ims_names_list = []
@@ -367,13 +433,17 @@ class RateControlWTABRain(object):
             weights = self.cuda_table.table_i
 
         rfs_im, rf_ims_dict = make_im(weights, num_bins_per_pixel=1,
-                                                    input_im_dim=self.input_im_dim,
-                                                    im_final_dim=int(200 * 3000 / 400),  # /800 for two-im per rf display
-                                                    mod_for_disp=int(sqrt(self.num_rfs)),
-                                                    normalize_weights=True)
+                                               input_im_dim=self.tile_dim_NxN,
+                                               im_final_dim=int(200 * 3000 / 400),  # /800 for two-im per rf display
+                                               mod_for_disp=int(sqrt(self.num_rfs)),
+                                               normalize_weights=True)
 
         ims_list.append(rfs_im)
         ims_names_list.append('rfs_im')
+
+        # TODO add a full reconstruction event im over all tiles, side by side with original event im and original im
+        #   need pre processor to also pass back original im for reference
+
 
         return ims_list, ims_names_list
 

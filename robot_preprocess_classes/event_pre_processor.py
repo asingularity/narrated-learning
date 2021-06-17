@@ -19,6 +19,11 @@ class EventPreProcessor(object):
         self.last_event_brightness = np.zeros(self.state_dim)
         self.t = 0
 
+        r = np.tile(np.arange(self.im_dim)[:, np.newaxis], 5).astype(np.int)
+        c = np.transpose(r).astype(np.int)
+        self.event_coords_r = r.flatten()
+        self.event_coords_c = c.flatten()
+
     def step(self, input_frame):
         '''
 
@@ -40,15 +45,16 @@ class EventPreProcessor(object):
         self.last_event_brightness[nnz_events_p] = input_state[nnz_events_p]
         self.last_event_brightness[nnz_events_n] = input_state[nnz_events_n]
 
-        events_arr_p = np.zeros(input_state.shape[0])
-        events_arr_n = np.zeros(input_state.shape[0])
+        events_arr_p = np.zeros(input_state.shape[0], np.float32)
+        events_arr_n = np.zeros(input_state.shape[0], np.float32)
 
         events_arr_p[nnz_events_p] = 1
         events_arr_n[nnz_events_n] = 1
 
         self.t += 1
 
-        return events_arr_p, events_arr_n
+        original_input_image = input_frame.copy()
+        return events_arr_p, events_arr_n, self.event_coords_r.copy(), self.event_coords_c.copy(), original_input_image
 
 
 if __name__ == '__main__':

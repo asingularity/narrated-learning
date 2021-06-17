@@ -169,7 +169,7 @@ class RateControlWTABRain(object):
 
         return errors
 
-    def process_input(self, input_events_p, input_events_n):
+    def process_input(self, input_events_p, input_events_n, event_coords_r, event_coords_c):
         if self.t >= self.max_time:
             return
 

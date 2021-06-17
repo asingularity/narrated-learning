@@ -96,8 +96,10 @@ def run_one_sim(sim_params):
 
     for t in range(sim_params['max_time']):
         im = robot_sensors.read_input()
-        events_p, events_n = pre_proc.step(input_frame=im)
-        robot_brain.process_input(input_events_p=events_p, input_events_n=events_n)
+        events_p, events_n, event_coords_r, event_coords_c, original_input_image = pre_proc.step(input_frame=im)
+        robot_brain.process_input(input_events_p=events_p, input_events_n=events_n,
+                                  event_coords_r=event_coords_r, event_coords_c=event_coords_c,
+                                  original_input_image=original_input_image)
 
         if t % 100000 == 0 or t == sim_params['max_time'] - 1:
             print('doing plots... t:', t)

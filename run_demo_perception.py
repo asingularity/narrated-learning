@@ -25,6 +25,7 @@ np.random.seed(6)
 #from robot_brain_classes.tiled_multilayer_wta import SeqNNSeqKMeansBrain
 #from robot_brain_classes.batch_iter_wta import BatchIterWTABrain
 
+#from robot_brain_classes.tiled_rate_control_wta import RateControlWTABRain
 from robot_brain_classes.rate_control_wta import RateControlWTABRain
 # TODO rename to avoid confusion! class
 #from robot_brain_classes.rate_control_wta_heirarchy import RateControlWTABRain
@@ -104,7 +105,8 @@ def get_brain_params():
         'do_raster_plots_every_k_im': 10,  # or None
         'num_layers': 3,  # only used for rate_control_wta_heirarchy
         'layer_learn_time': 500000,  # only used for rate_control_wta_heirarchy
-        'network_type': 'seq-kmeans'  # seq-kmeans, seq-knn, nn-inits-kmeans
+        'network_type': 'seq-kmeans',  # seq-kmeans, seq-knn, nn-inits-kmeans
+        'tile_im_dim': 4  # only used for tiled rate control wta
     }
 
     return brain_params
@@ -158,10 +160,12 @@ def run_demo(demo_components):
 
         im = robot_sensors.read_input()
 
-        events_p, events_n = pre_proc.step(input_frame=im)
+        events_p, events_n, event_coords_r, event_coords_c, original_input_image = pre_proc.step(input_frame=im)
 
         if not DISABLE_BRAIN:
-            robot_brain.process_input(input_events_p=events_p, input_events_n=events_n)
+            robot_brain.process_input(input_events_p=events_p, input_events_n=events_n,
+                                      event_coords_r=event_coords_r, event_coords_c=event_coords_c,
+                                      original_input_image=original_input_image)
 
         visualizer.visualize(input_im=im,
                              segment_brain=robot_brain,
