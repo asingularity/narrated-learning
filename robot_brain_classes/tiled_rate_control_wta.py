@@ -28,10 +28,6 @@ np.random.seed(0)
 class RateControlWTABRain(object):
     def __init__(self, params):
 
-        # TODO MAKE PARAM
-        # TODO re-enable for tiling
-        self.enable_errors_plots = False
-
         # tiling params
         self.input_im_dim_NxN = params['input_im_dim']  # full input image dim: N, where NxN
         self.tile_dim_NxN = params['tile_im_dim']  # tile input dim: M, where MxM
@@ -48,6 +44,11 @@ class RateControlWTABRain(object):
         self.rel_lr_bg = params['rel_lr_bg']   # 0.1
         self.max_time = params['max_time']  # 5000000
         self.do_raster_plots_every_k_im = params['do_raster_plots_every_k_im']  # 4, or None
+
+        if self.do_raster_plots_every_k_im is None:
+            self.enable_errors_plots = False
+        else:
+            self.enable_errors_plots = True
 
         # for plotting:
         self.error_mean_time = 50000
@@ -438,6 +439,7 @@ class RateControlWTABRain(object):
             if self.ims_since_raster > self.do_raster_plots_every_k_im:
                 if self.enable_errors_plots:
                     self.do_plots()
+                    print('do-ing plots')
                     self.ims_since_raster = 0
 
         ims_list = []
@@ -469,6 +471,9 @@ class RateControlWTABRain(object):
         #     'input_states_tiles': input_states_tiles,  # for "actual input events" image
         #     'original_input_image': original_input_image  # for "original input" image
         # }
+
+        if self.last_reconstruction_im_info is None:
+            return ims_list, ims_names_list
 
         input_state_all = self.last_reconstruction_im_info['input_state_all'][np.newaxis, :]
 
