@@ -492,10 +492,6 @@ class RateControlWTABRain(object):
 
         # make an image showing just the input tiles this input: input_states_tiles
 
-        # TODO whole thing is transposed
-        # TODO within tile is not right: because positive/negative together? already account for in drawing tool...?
-        # TODO compare to the full image for events that we get in --  get this from pre processor
-
         input_states_tiles = self.last_reconstruction_im_info['input_states_tiles']
 
         tile_inputs_im, tile_inputs_im_dict = make_im(input_states_tiles, num_bins_per_pixel=1,
@@ -508,11 +504,25 @@ class RateControlWTABRain(object):
         ims_list.append(tile_inputs_im)
         ims_names_list.append('tile_inputs_im')
 
-
-
-        # TODO add a full reconstruction event im over all tiles, side by side with original event im and original im
+        # add a full reconstruction event im over all tiles, side by side with original event im and original im
         #   need pre processor to also pass back original im for reference
 
+        best_rf_per_tile = self.last_reconstruction_im_info['best_rf_per_tile']
+        #print(best_rf_per_tile.shape)  # (256,)
+        #print(input_states_tiles.shape)  # (256, 128)
+
+        rec = self.weights[best_rf_per_tile, :]
+        #print(rec.shape)  # (256, 128)
+
+        rec_im, _ = make_im(rec, num_bins_per_pixel=1,
+                                 input_im_dim=self.tile_dim_NxN,
+                                 im_final_dim=int(200 * 3000 / 1600),  # /800 for two-im per rf display
+                                 mod_for_disp=self.num_tiles_NxN,
+                                 normalize_weights=True,
+                                 borders_px=1)  # 1
+
+        ims_list.append(rec_im)
+        ims_names_list.append('rec_im')
 
         return ims_list, ims_names_list
 
