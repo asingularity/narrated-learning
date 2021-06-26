@@ -6,7 +6,7 @@ import random
 import pickle
 from math import sqrt
 from brain_components_classes.states_history import StatesLimitedHistory
-from cython_tiled_wta import cy_compute_error_measures, cy_kmeans_do_learning, cy_tile_the_input
+from cython_tiled_wta import cy_compute_error_measures, cy_kmeans_do_learning, cy_tile_the_input, cy_tile_the_input_layer_N
 from offline_analyses.try_sparsify_3 import make_im
 
 from utils.one_time_messages import OneTimeMessages
@@ -25,7 +25,192 @@ random.seed(0)
 np.random.seed(0)
 
 
-class RateControlWTABRain(object):
+class RateControlWTABRainLayerN(object):
+    def __init__(self, params):
+        pass
+
+        # easiest: everything specified relative to previous layer?
+        self.input_num_tiles_NxN = params['input_num_tiles_NxN']
+        self.input_num_rfs_per_tile = params['input_num_rfs_per_tile']  # dim for one input tile (num_rfs per tile in previous layer)
+        self.tile_dim_NxN = params['tile_dim_NxN']
+
+        self.num_tiles_NxN = int(self.input_num_tiles_NxN / self.tile_dim_NxN)
+        self.tile_input_state_dim = self.input_num_rfs_per_tile * self.tile_dim_NxN * self.tile_dim_NxN
+
+        # new params
+        self.num_rfs = params['num_rfs']  # 400: per tile
+        self.lr = params['lr']  # 1.0 / 1000
+
+        self.input_concat_timesteps = params['input_concat_timesteps']
+        self.normalize_concat = False
+
+        self.rel_lr_bg = params['rel_lr_bg']  # 0.1
+        self.max_time = params['max_time']  # 5000000
+        self.do_raster_plots_every_k_im = params['do_raster_plots_every_k_im']  # 4, or None
+
+        if self.do_raster_plots_every_k_im is None:
+            self.enable_errors_plots = False
+        else:
+            self.enable_errors_plots = True
+
+
+        # input concat stuff
+
+        total_input_state_dim = int(self.input_num_tiles_NxN * self.input_num_tiles_NxN * self.input_num_rfs_per_tile)
+
+        self.input_history = StatesLimitedHistory(params={'max_delay': self.input_concat_timesteps,
+                                                          'states_dim_list': [total_input_state_dim],
+                                                          'store_extra_data': False})
+
+        self.weights = np.random.random((self.num_rfs, self.tile_input_state_dim)) * 1e-12
+        self.weights = self.weights.astype(np.float32)
+
+        self.plots_folder = "."
+
+        self.t = 0
+
+    def get_input_num_tiles_NxN(self):
+        return self.input_num_tiles_NxN
+
+    def get_input_num_rfs_per_tile(self):
+        return self.input_num_rfs_per_tile
+
+    def get_tile_dim_NxN(self):
+        return self.tile_dim_NxN
+
+    def get_num_tiles_NxN(self):
+        return self.num_tiles_NxN
+
+    def get_num_rfs_per_tile(self):
+        return self.num_rfs
+
+    def set_plots_folder(self, folder):
+        self.plots_folder = folder
+        print()
+        print('setting plots folder: ', self.plots_folder)
+        print()
+
+    def process_input(self, input_events):
+
+        # problem: to get concat we need flat input_events but for tile we want tiled input events
+
+        assert input_events.shape[0] == self.input_num_tiles_NxN
+        assert input_events.shape[1] == self.input_num_tiles_NxN
+        assert input_events.shape[2] == self.input_num_rfs_per_tile
+
+        # flatten
+        concat_input_events = self._get_input_with_concat(input_events=input_events.flatten(), normalize=self.normalize_concat)
+
+        # reshape
+        input_events_by_tile_r_c = concat_input_events.reshape(input_events.shape)
+
+        tiles_inputs = np.zeros((int(self.num_tiles_NxN * self.num_tiles_NxN), self.tile_input_state_dim), np.float32)
+
+        cy_tile_the_input_layer_N(input_events_by_tile_r_c,
+                                  self.input_num_tiles_NxN,
+                                  self.input_num_rfs_per_tile,
+                                  tiles_inputs,
+                                  self.tile_dim_NxN,
+                                  self.num_tiles_NxN)
+
+        # tile_index = tile_r * num_tiles_NxN + tile_c
+        input_states_tiles = tiles_inputs
+
+        # *** selection ***
+        best_rf_per_tile = None
+
+        errors_all_rfs = self._get_error_measures(rfs=self.weights, input_states_tiles=input_states_tiles)
+
+        assert errors_all_rfs['RF-norm-dot'].shape[0] == (self.num_tiles_NxN * self.num_tiles_NxN)
+        assert errors_all_rfs['RF-norm-dot'].shape[1] == self.num_rfs
+
+        best_rf_per_tile = np.argmin(errors_all_rfs['RF-norm-dot'], axis=1)
+
+        # to do later: error plots
+
+        # *** learning ***
+
+        lr = self.lr
+        cy_kmeans_do_learning(best_rf_per_tile, self.weights, input_states_tiles, np.float32(lr))
+
+        # *** time step ***
+        self.t += 1
+
+        # output_events: [self.num_tiles_NxN, self.num_tiles_NxN, self.num_rfs_per_tile]
+        #   !! also need to do for layer 0 class !!
+        #   use best_rf_per_tile- reshape must be correct! since that one is flat over all tiles
+        #       tile_index = tile_r * num_tiles_NxN + tile_c
+        #       so
+        #       tile_r = int(tile_index / num_tiles_NxN)
+        #       tile_c = int(tile_index % num_tiles_NxN)
+
+        tile_r = (np.arange(self.num_tiles_NxN * self.num_tiles_NxN, dtype=np.int) / self.num_tiles_NxN).astype(np.int)
+        tile_c = (np.arange(self.num_tiles_NxN * self.num_tiles_NxN, dtype=np.int) % self.num_tiles_NxN).astype(np.int)
+
+        output_events = np.zeros((self.num_tiles_NxN, self.num_tiles_NxN, self.num_rfs), np.float32)
+        output_events[tile_r, tile_c, best_rf_per_tile] = 1
+
+        return output_events
+
+    def _get_input_with_concat(self, input_events, normalize=False):
+        '''
+
+        :param input_events:
+        :param normalize: if > 1 -> set to 1
+        :return:
+        '''
+
+        self.input_history.store_new_states(newest_states_list=[input_events])
+        input_states_seq = self.input_history.get_state_sequence(state_index=0,
+                                                                 delay_short=0,
+                                                                 delay_long=self.input_concat_timesteps - 1,
+                                                                 oldest_first=False)
+
+        sum_input_states = np.sum(input_states_seq, axis=0).astype(np.float32)
+
+        if normalize:
+            sum_input_states[sum_input_states > 1] = 1
+
+        return sum_input_states
+
+    def _get_error_measures(self, rfs, input_states_tiles):
+
+        assert input_states_tiles.shape[0] == (self.num_tiles_NxN * self.num_tiles_NxN)
+        assert input_states_tiles.shape[1] == self.tile_input_state_dim
+
+        # this got a false positive:
+        # if rfs.shape[0] == self.tile_input_state_dim:
+        #     rfs = rfs[np.newaxis, :]
+
+        assert rfs.shape[1] == input_states_tiles.shape[1]
+
+        # re-enable other errors later, have to modify for multiple tiles:
+        #L2 = np.sqrt(np.sum(np.square(rfs - input_arr), axis=1))
+        #L1 = np.sum(np.abs(rfs - input_arr), axis=1)
+        #input_norm_L1 = np.sum(np.abs(rfs - input_arr), axis=1) / np.sum(input_arr)
+        #input_norm_L2 = np.sqrt(np.sum(np.square(rfs - input_arr), axis=1)) / np.sum(np.square(input_arr))
+
+        # why is this one negative? because it is actually a positive value: the larger, the better
+        fix_offset = 1e-16
+
+        RF_norm_dot = np.zeros((int(self.num_tiles_NxN * self.num_tiles_NxN), self.num_rfs), np.float32)
+        cy_compute_error_measures(rfs, input_states_tiles, fix_offset, RF_norm_dot)
+
+        # re-enable other errors later: 'L2', 'L1', 'input-norm-L1', 'input-norm-L2',
+        errors = {
+            #'L2': L2,
+            #'L1': L1,
+            #'input-norm-L1': input_norm_L1,
+            #'input-norm-L2': input_norm_L2,
+            'RF-norm-dot': RF_norm_dot
+        }
+
+        return errors
+
+
+
+
+class RateControlWTABRainLayer0(object):
     def __init__(self, params):
 
         # tiling params
@@ -55,7 +240,11 @@ class RateControlWTABRain(object):
 
         self.ims_since_raster = 0
 
-        self.input_concat_timesteps = 1  # unused
+        if 'input_concat_timesteps' in params:
+            self.input_concat_timesteps = params['input_concat_timesteps']
+            assert self.input_concat_timesteps == 1, "Layer 0 does not implement multiple time steps"
+        else:
+            self.input_concat_timesteps = 1  # TODO use
 
         if 'network_type' in params:
             self.network_type = params['network_type']
@@ -135,6 +324,21 @@ class RateControlWTABRain(object):
         self.timed_events = None
         self.timed_event_names = None
 
+    def get_input_num_tiles_NxN(self):
+        return self.input_im_dim_NxN  # number of pixels
+
+    def get_input_num_rfs_per_tile(self):
+        return 1  # per pixel it is one binary event feature, one-dimensional
+
+    def get_tile_dim_NxN(self):
+        return self.tile_dim_NxN
+
+    def get_num_tiles_NxN(self):
+        return self.num_tiles_NxN
+
+    def get_num_rfs_per_tile(self):
+        return self.num_rfs
+
     def _init_rasters(self):
         self.raster_steps = 200
         self.raster_t = 0  # circular; draw vertical line on plot here
@@ -195,7 +399,7 @@ class RateControlWTABRain(object):
         # OLD:
         # RF_norm_dot = -np.divide(np.sum(np.multiply(rfs, input_arr), axis=1), np.sum(rfs, axis=1)+fix_offset)
 
-        # TODO CYTHON modify for multiple tiles
+        # CYTHON modify for multiple tiles
         #   need to: tile / repeat the rfs and input arrs; then reshape the result correctly
         #   instead, do a cy loop so we don't run out of memory; otherwise not saving: may as well reuse tiles
 
@@ -218,6 +422,8 @@ class RateControlWTABRain(object):
 
     def process_input(self, input_events_p, input_events_n, event_coords_r, event_coords_c, original_input_image):
 
+        output_events = np.zeros((self.num_tiles_NxN, self.num_tiles_NxN, self.num_rfs), np.float32)
+
         t_start = time.time()
 
         event_t_starts = []
@@ -225,17 +431,18 @@ class RateControlWTABRain(object):
         self.timed_event_names = []
 
         if self.t >= self.max_time:
-            return
+            return output_events
 
         input_state_all = np.concatenate((input_events_p, input_events_n))
         assert input_state_all.dtype == np.float32, str(input_state_all.dtype)
 
         if input_state_all is None:  # this doesn't appear to ever be able to happen
-            return
+            return output_events
 
         if np.count_nonzero(input_state_all) == 0:
             self.num_zero_inputs += 1
-            return
+
+            return output_events
 
         self.input_raster_history[:, self.raster_t] = input_state_all[:]
 
@@ -315,7 +522,7 @@ class RateControlWTABRain(object):
 
             best_rf_weights = self.weights[best_rf, :]
 
-            best_rf_errors_dict = self._get_error_measures(rfs=best_rf_weights, input_arr=input_state)
+            best_rf_errors_dict = self._get_error_measures(rfs=best_rf_weights, input_states_tiles=input_state)
 
             for error_type in best_rf_errors_dict:
                 error_value = best_rf_errors_dict[error_type][0]
@@ -396,6 +603,16 @@ class RateControlWTABRain(object):
         if self.timed_events is None:
             self.timed_events = np.zeros(len(event_t_ends))
         self.timed_events = self.timed_events + (np.array(event_t_ends) - np.array(event_t_starts))
+
+        # output_events = np.zeros((self.num_tiles_NxN, self.num_tiles_NxN, self.num_rfs), np.float32)
+
+        tile_r = (np.arange(self.num_tiles_NxN * self.num_tiles_NxN, dtype=np.int) / self.num_tiles_NxN).astype(np.int)
+        tile_c = (np.arange(self.num_tiles_NxN * self.num_tiles_NxN, dtype=np.int) % self.num_tiles_NxN).astype(np.int)
+
+        output_events = np.zeros((self.num_tiles_NxN, self.num_tiles_NxN, self.num_rfs), np.float32)
+        output_events[tile_r, tile_c, best_rf_per_tile] = 1
+
+        return output_events
 
     def _step_seq_nn(self, input_state):
 

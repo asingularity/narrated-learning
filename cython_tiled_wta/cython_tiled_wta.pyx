@@ -17,9 +17,56 @@ from libc.math cimport fabs
 
 
 
+# This one is for layer N > 0:
+
+@cython.boundscheck(False) # turn off bounds-checking for entire function
+@cython.wraparound(False)  # turn off negative index wrapping for entire function
+def cy_tile_the_input_layer_N(np.ndarray[np.float32_t, ndim=3] input_events_by_tile_r_c,
+                              np.int64_t  input_num_tiles_NxN,
+                              np.int64_t  input_num_rfs_per_tile,
+                              np.ndarray[np.float32_t, ndim=2] tiles_inputs,  # the one to fill here; inputs per tile of this layer
+                              np.int64_t  tile_dim_NxN,  # relative to input (prev layer) tiles
+                              np.int64_t  num_tiles_NxN):
+
+    assert input_events_by_tile_r_c.shape[0] == input_num_tiles_NxN
+    assert input_events_by_tile_r_c.shape[1] == input_num_tiles_NxN
+    assert input_events_by_tile_r_c.shape[2] == input_num_rfs_per_tile
+    
+    assert tiles_inputs.shape[0] == num_tiles_NxN * num_tiles_NxN
+    assert tiles_inputs.shape[1] == input_num_rfs_per_tile * tile_dim_NxN * tile_dim_NxN
+
+    # !!! TODO cdefs !!!
+    cdef np.int32_t tile_r, tile_c, input_tile_r, input_tile_c, tile_index, in_index, input_tile_r_start, input_tile_c_start, input_rf
+
+    for tile_r in range(num_tiles_NxN):
+        for tile_c in range(num_tiles_NxN):
+
+            in_index = 0
+            
+            tile_index = tile_r * num_tiles_NxN + tile_c
+
+            input_tile_r_start = tile_r * tile_dim_NxN
+            input_tile_c_start = tile_c * tile_dim_NxN
+
+            for input_tile_r in range(input_tile_r_start, input_tile_r_start + tile_dim_NxN):
+                for input_tile_c in range(input_tile_c_start, input_tile_c_start + tile_dim_NxN):
+                    for input_rf in range(input_num_rfs_per_tile):
+
+                        tiles_inputs[tile_index, in_index] = input_events_by_tile_r_c[input_tile_r, input_tile_c, input_rf]
+                        
+                        in_index += 1
+            
+
+        # find [current layer tile index] for this event given its: input tile r, input tile c, input index within input tile
+
+        # find [index in current layer tile] for this event given its: input tile r, input tile c, input index within input tile
+
+    pass
 
 
 
+
+# This one is for layer 0:
 
 @cython.boundscheck(False) # turn off bounds-checking for entire function
 @cython.wraparound(False)  # turn off negative index wrapping for entire function
