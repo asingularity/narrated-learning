@@ -194,6 +194,7 @@ class RateControlWTABRainLayerN(object):
         fix_offset = 1e-16
 
         RF_norm_dot = np.zeros((int(self.num_tiles_NxN * self.num_tiles_NxN), self.num_rfs), np.float32)
+        # print('Layer N: rfs:', rfs.shape, ', input_states_tiles:', input_states_tiles.shape)
         cy_compute_error_measures(rfs, input_states_tiles, fix_offset, RF_norm_dot)
 
         # re-enable other errors later: 'L2', 'L1', 'input-norm-L1', 'input-norm-L2',
@@ -407,6 +408,7 @@ class RateControlWTABRainLayer0(object):
         RF_norm_dot = np.zeros((int(self.num_tiles_NxN * self.num_tiles_NxN), self.num_rfs), np.float32)
 
         # print('cy_compute_error_measures')
+        # print('Layer 0: rfs:', rfs.shape, ', input_states_tiles:', input_states_tiles.shape)
         cy_compute_error_measures(rfs, input_states_tiles, fix_offset, RF_norm_dot)
 
         # re-enable other errors later: 'L2', 'L1', 'input-norm-L1', 'input-norm-L2',

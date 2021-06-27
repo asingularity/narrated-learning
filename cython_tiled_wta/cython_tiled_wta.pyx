@@ -39,6 +39,7 @@ def cy_tile_the_input_layer_N(np.ndarray[np.float32_t, ndim=3] input_events_by_t
     cdef np.int32_t tile_r, tile_c, input_tile_r, input_tile_c, tile_index, in_index, input_tile_r_start, input_tile_c_start, input_rf
 
     for tile_r in range(num_tiles_NxN):
+    #for tile_r in prange(num_tiles_NxN, nogil=True, schedule='dynamic', num_threads=22):
         for tile_c in range(num_tiles_NxN):
 
             in_index = 0
@@ -54,7 +55,7 @@ def cy_tile_the_input_layer_N(np.ndarray[np.float32_t, ndim=3] input_events_by_t
 
                         tiles_inputs[tile_index, in_index] = input_events_by_tile_r_c[input_tile_r, input_tile_c, input_rf]
                         
-                        in_index += 1
+                        in_index = in_index + 1
             
 
         # find [current layer tile index] for this event given its: input tile r, input tile c, input index within input tile
