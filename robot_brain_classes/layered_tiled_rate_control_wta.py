@@ -98,7 +98,7 @@ class LayeredTiledRateControlWTA(object):
                 'input_concat_timesteps': 2
             })
 
-        self.num_layers = 2
+        self.num_layers = len(layer_params_list)
 
         self.layers = []
 
