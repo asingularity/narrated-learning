@@ -222,9 +222,15 @@ class LayeredTiledRateControlWTA(object):
             input_events = output_events.copy()
 
     def get_table_ims(self):
-        pass
+
+        ims_list = []
+        ims_names_list = []
 
         # get ims for layer 0
+
+        ims_list_0, ims_names_list_0 = self.layers[0].get_table_ims()
+        ims_list.extend(ims_list_0)
+        ims_names_list.extend(ims_names_list_0)
 
         # for upper layers: project back (write in this class)
         #   p/n display stuff does not work for upper layers
@@ -233,6 +239,8 @@ class LayeredTiledRateControlWTA(object):
         # make an image for each layer:
         #   in "slow visualization" mode: for each upper layer tile, show a real-time mask of the original video input. i.e. pixels over time weighted by weights of RF given there was an RF event.
         #   it must necessarily be delayed by total integration time number of time steps
+
+        return ims_list, ims_names_list
 
     def do_plots(self):
         pass
