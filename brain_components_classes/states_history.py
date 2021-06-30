@@ -56,7 +56,7 @@ class StatesLimitedHistory(object):
         if self.states_dim_list[0] > 0:
             self.active = True
             for k in range(len(self.states_dim_list)):
-                self.state_arrays_list.append(np.zeros((self.max_delay, self.states_dim_list[k])).astype(np.float64))
+                self.state_arrays_list.append(np.zeros((self.max_delay, self.states_dim_list[k])).astype(np.float32))  # TODO MAKE DTYPE A PARAM, DEFAULT TO np.float64 !!!!!!!
                 if self.store_extra_data:
                     self.extra_data_list.append([None] * self.max_delay)
         self.t_mod = 0
@@ -82,7 +82,7 @@ class StatesLimitedHistory(object):
                     self.extra_data_list[state_index][self.t_mod] = extra_data_list[state_index]
                 state_index += 1
 
-    def get_state(self, state_index, delay):
+    def get_state(self, delay, state_index=0):
         if self.active:
             assert delay <= self.max_delay
             assert self.t_mod < self.max_delay
@@ -105,7 +105,7 @@ class StatesLimitedHistory(object):
             else:
                 return None
 
-    def get_state_sequence(self, state_index, delay_long, delay_short, oldest_first=True):
+    def get_state_sequence(self, delay_long, delay_short, state_index=0, oldest_first=True):
         # TODO this could be more efficient: just two lookups instead!
 
         if self.active:

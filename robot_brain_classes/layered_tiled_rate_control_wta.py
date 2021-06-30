@@ -1,5 +1,7 @@
-
+import numpy as np
+from brain_components_classes.states_history import StatesLimitedHistory
 from robot_brain_classes.tiled_rate_control_wta import RateControlWTABRainLayer0, RateControlWTABRainLayerN
+from cython_layers_viz import cy_weigh_in_with_out, cy_weigh_in_with_out_L0
 
 
 # TODO how does tiling work for next layer, given sparse output of layer 0?
@@ -56,6 +58,7 @@ class LayeredTiledRateControlWTA(object):
         :return:
         '''
 
+        self.input_im_dim = params['input_im_dim']
         layer_params_list = []
 
         # 0
@@ -71,7 +74,7 @@ class LayeredTiledRateControlWTA(object):
         layer_params_list.append({
             'input_num_tiles_NxN': 32,  # previous layer (num_tiles X num_tiles)
             'input_num_rfs_per_tile': layer_params_list[-1]['num_rfs'],  # previous layer num rfs
-            'tile_dim_NxN': 1,  # relative to previous layer, how many tiles (NxN) to combine to make a tile in this layer
+            'tile_dim_NxN': 2,  # 2, 16? relative to previous layer, how many tiles (NxN) to combine to make a tile in this layer
             'num_rfs': 800,  # per tile
             'lr': 1.0 / 1000,
             'input_concat_timesteps': 4
@@ -102,6 +105,15 @@ class LayeredTiledRateControlWTA(object):
 
         self.layers = []
 
+        print()
+        print('input_im_flat_history:: states_dim: ', self.input_im_dim * self.input_im_dim)
+        print()
+        self.input_im_flat_history = StatesLimitedHistory(params={'max_delay': 1,
+                                                                  'states_dim_list': [self.input_im_dim * self.input_im_dim],
+                                                                  'store_extra_data': False})
+
+        self.output_event_histories = []
+
         layer_num = 0
         for layer_params in layer_params_list:
             # common params
@@ -114,6 +126,12 @@ class LayeredTiledRateControlWTA(object):
                 self.layers.append(RateControlWTABRainLayer0(params=layer_params))
             else:
                 self.layers.append(RateControlWTABRainLayerN(params=layer_params))
+
+            state_dim_tmp = self.layers[layer_num].get_num_tiles_NxN() * self.layers[layer_num].get_num_tiles_NxN() * self.layers[layer_num].get_num_rfs_per_tile()
+
+            self.output_event_histories.append(StatesLimitedHistory(params={'max_delay': 2,
+                                                                            'states_dim_list': [state_dim_tmp],
+                                                                            'store_extra_data': False}))
 
             layer_num += 1
 
@@ -143,7 +161,262 @@ class LayeredTiledRateControlWTA(object):
 
         print()
 
-    def _init_layers_with_loop(self, params):
+    def get_final_errors_dict(self):
+        d = {}
+        return d
+
+    def set_plots_folder(self, folder):
+        self.plots_folder = folder
+
+        print()
+        print('setting plots folder: ', self.plots_folder)
+        print()
+
+        for layer_n in range(self.num_layers):
+            self.layers[layer_n].set_plots_folder(folder=folder)
+
+    def process_input(self, input_events_p, input_events_n, event_coords_r, event_coords_c, original_input_image):
+
+        input_events = None
+        output_events = None
+
+        self.last_input_events = (input_events_p.copy(), input_events_n.copy(), event_coords_r.copy(), event_coords_c.copy(), original_input_image.copy())
+        self.last_output_events = []
+
+        self.input_im_flat_history.process_new_states([original_input_image.flatten()])
+
+        for layer_n in range(self.num_layers):
+
+            if layer_n == 0:
+                output_events = self.layers[layer_n].process_input(input_events_p=input_events_p,
+                                                                   input_events_n=input_events_n,
+                                                                   event_coords_r=event_coords_r,
+                                                                   event_coords_c=event_coords_c,
+                                                                   original_input_image=original_input_image)
+            else:
+                output_events = self.layers[layer_n].process_input(input_events)
+
+            # print(layer_n, output_events.shape)
+
+            input_events = output_events.copy()
+            self.last_output_events.append(output_events.copy())
+
+            self.output_event_histories[layer_n].process_new_states([output_events.flatten()])
+
+    def do_plots(self):
+        pass
+
+    def get_table_ims(self):
+        ims_list = []
+        ims_names_list = []
+
+        # get ims for layer 0
+
+        ims_list_0, ims_names_list_0 = self.layers[0].get_table_ims()
+        ims_list.extend(ims_list_0)
+        ims_names_list.extend(ims_names_list_0)
+
+        # populate input events for these time steps from history: as input image, black/white
+        # get weighted input? already computed as dot. or just get weights given winners of that layer?
+        # latter: need to weigh multiple steps as they occurred, whereas at next layer already concatenated
+
+
+        num_tiles_NxN_L0 = self.layers[0].get_num_tiles_NxN()
+        num_rfs_per_tile_L0 = self.layers[0].get_num_rfs_per_tile()
+        tile_dim_NxN_L0 = self.layers[0].get_tile_dim_NxN()
+
+        num_tiles_NxN_L1 = self.layers[1].get_num_tiles_NxN()
+        num_rfs_per_tile_L1 = self.layers[1].get_num_rfs_per_tile()
+        tile_dim_NxN_L1 = self.layers[1].get_tile_dim_NxN()
+
+        weights_1 = self.layers[1].weights
+        output_events_1 = self.output_event_histories[1].get_state(delay=0).copy().reshape((num_tiles_NxN_L1, num_tiles_NxN_L1, num_rfs_per_tile_L1))
+
+        # print('weights_1.shape', weights_1.shape)
+        # print('weights_0.shape', weights_0.shape)
+        # weights_1.shape(800, 3200)
+        # weights_0.shape(800, 128)
+
+        weights_0 = self.layers[0].weights
+        output_events_0_d0 = self.output_event_histories[0].get_state(delay=0).copy().reshape((num_tiles_NxN_L0, num_tiles_NxN_L0, num_rfs_per_tile_L0))
+        output_events_0_d1 = self.output_event_histories[0].get_state(delay=1).copy().reshape((num_tiles_NxN_L0, num_tiles_NxN_L0, num_rfs_per_tile_L0))
+
+        # modifies output_events_0_d0
+        cy_weigh_in_with_out(output_events_0_d0,  # input events to weigh (multiply with above layer's winning RF weights)
+                             num_tiles_NxN_L0,
+                             num_rfs_per_tile_L0,
+                             output_events_1,  # get winning RF index of output layer, per tile: this is in the space of input layer events
+                             weights_1,  # winning (and all other) RF weights
+                             num_tiles_NxN_L1,
+                             num_rfs_per_tile_L1,
+                             tile_dim_NxN_L1)
+
+        # modifies output_events_0_d1
+        cy_weigh_in_with_out(output_events_0_d1,
+                             num_tiles_NxN_L0,
+                             num_rfs_per_tile_L0,
+                             output_events_1,  # get winning RF index of output layer, per tile: this is in the space of input layer events
+                             weights_1,  # winning (and all other) RF weights
+                             num_tiles_NxN_L1,
+                             num_rfs_per_tile_L1,
+                             tile_dim_NxN_L1)
+
+        input_im_d0 = self.input_im_flat_history.get_state(delay=0).copy().reshape((self.input_im_dim, self.input_im_dim))[:, :, np.newaxis]
+        input_im_d1 = self.input_im_flat_history.get_state(delay=1).copy().reshape((self.input_im_dim, self.input_im_dim))[:, :, np.newaxis]
+
+        # modifies input_im_d0
+        # could this be same cython function as above?
+        # yes but need to add newaxis to input_im_d0, input_im_d1, then take it away before append and show (num_rfs_per_tile == 1)
+
+        # print()
+        # print(input_im_d0.shape)
+        # print(self.input_im_dim)
+        # print(1)
+        # print(output_events_0_d0.shape)
+        # print(weights_0.shape)
+        # print(num_tiles_NxN_L0)
+        # print(num_rfs_per_tile_L0)
+        # print(tile_dim_NxN_L0)
+        # print()
+
+        # TODO NEED TO FIX!!!!!!!!!!!!! THIS IS NOT ACCOUNTING N WEIGHTS JUST P WEIGHTS !!!!!!!!!!!!!!!!!!
+        # TODO NEED TO FIX!!!!!!!!!!!!! THIS IS NOT ACCOUNTING N WEIGHTS JUST P WEIGHTS !!!!!!!!!!!!!!!!!!# TODO NEED TO FIX!!!!!!!!!!!!! THIS IS NOT ACCOUNTING N WEIGHTS JUST P WEIGHTS !!!!!!!!!!!!!!!!!!# TODO NEED TO FIX!!!!!!!!!!!!! THIS IS NOT ACCOUNTING N WEIGHTS JUST P WEIGHTS !!!!!!!!!!!!!!!!!!# TODO NEED TO FIX!!!!!!!!!!!!! THIS IS NOT ACCOUNTING N WEIGHTS JUST P WEIGHTS !!!!!!!!!!!!!!!!!!# TODO NEED TO FIX!!!!!!!!!!!!! THIS IS NOT ACCOUNTING N WEIGHTS JUST P WEIGHTS !!!!!!!!!!!!!!!!!!# TODO NEED TO FIX!!!!!!!!!!!!! THIS IS NOT ACCOUNTING N WEIGHTS JUST P WEIGHTS !!!!!!!!!!!!!!!!!!# TODO NEED TO FIX!!!!!!!!!!!!! THIS IS NOT ACCOUNTING N WEIGHTS JUST P WEIGHTS !!!!!!!!!!!!!!!!!!# TODO NEED TO FIX!!!!!!!!!!!!! THIS IS NOT ACCOUNTING N WEIGHTS JUST P WEIGHTS !!!!!!!!!!!!!!!!!!# TODO NEED TO FIX!!!!!!!!!!!!! THIS IS NOT ACCOUNTING N WEIGHTS JUST P WEIGHTS !!!!!!!!!!!!!!!!!!# TODO NEED TO FIX!!!!!!!!!!!!! THIS IS NOT ACCOUNTING N WEIGHTS JUST P WEIGHTS !!!!!!!!!!!!!!!!!!# TODO NEED TO FIX!!!!!!!!!!!!! THIS IS NOT ACCOUNTING N WEIGHTS JUST P WEIGHTS !!!!!!!!!!!!!!!!!!# TODO NEED TO FIX!!!!!!!!!!!!! THIS IS NOT ACCOUNTING N WEIGHTS JUST P WEIGHTS !!!!!!!!!!!!!!!!!!
+        # TODO NEED TO FIX!!!!!!!!!!!!! THIS IS NOT ACCOUNTING N WEIGHTS JUST P WEIGHTS !!!!!!!!!!!!!!!!!!# TODO NEED TO FIX!!!!!!!!!!!!! THIS IS NOT ACCOUNTING N WEIGHTS JUST P WEIGHTS !!!!!!!!!!!!!!!!!!# TODO NEED TO FIX!!!!!!!!!!!!! THIS IS NOT ACCOUNTING N WEIGHTS JUST P WEIGHTS !!!!!!!!!!!!!!!!!!# TODO NEED TO FIX!!!!!!!!!!!!! THIS IS NOT ACCOUNTING N WEIGHTS JUST P WEIGHTS !!!!!!!!!!!!!!!!!!# TODO NEED TO FIX!!!!!!!!!!!!! THIS IS NOT ACCOUNTING N WEIGHTS JUST P WEIGHTS !!!!!!!!!!!!!!!!!!# TODO NEED TO FIX!!!!!!!!!!!!! THIS IS NOT ACCOUNTING N WEIGHTS JUST P WEIGHTS !!!!!!!!!!!!!!!!!!# TODO NEED TO FIX!!!!!!!!!!!!! THIS IS NOT ACCOUNTING N WEIGHTS JUST P WEIGHTS !!!!!!!!!!!!!!!!!!
+        # TODO NEED TO FIX!!!!!!!!!!!!! THIS IS NOT ACCOUNTING N WEIGHTS JUST P WEIGHTS !!!!!!!!!!!!!!!!!!# TODO NEED TO FIX!!!!!!!!!!!!! THIS IS NOT ACCOUNTING N WEIGHTS JUST P WEIGHTS !!!!!!!!!!!!!!!!!!# TODO NEED TO FIX!!!!!!!!!!!!! THIS IS NOT ACCOUNTING N WEIGHTS JUST P WEIGHTS !!!!!!!!!!!!!!!!!!# TODO NEED TO FIX!!!!!!!!!!!!! THIS IS NOT ACCOUNTING N WEIGHTS JUST P WEIGHTS !!!!!!!!!!!!!!!!!!# TODO NEED TO FIX!!!!!!!!!!!!! THIS IS NOT ACCOUNTING N WEIGHTS JUST P WEIGHTS !!!!!!!!!!!!!!!!!!# TODO NEED TO FIX!!!!!!!!!!!!! THIS IS NOT ACCOUNTING N WEIGHTS JUST P WEIGHTS !!!!!!!!!!!!!!!!!!# TODO NEED TO FIX!!!!!!!!!!!!! THIS IS NOT ACCOUNTING N WEIGHTS JUST P WEIGHTS !!!!!!!!!!!!!!!!!!# TODO NEED TO FIX!!!!!!!!!!!!! THIS IS NOT ACCOUNTING N WEIGHTS JUST P WEIGHTS !!!!!!!!!!!!!!!!!!
+
+        cy_weigh_in_with_out_L0(input_im_d0,
+                                self.input_im_dim,
+                                1,
+                                output_events_0_d0,
+                                weights_0,
+                                num_tiles_NxN_L0,
+                                num_rfs_per_tile_L0,
+                                tile_dim_NxN_L0)
+
+        # modifies input_im_d1
+        cy_weigh_in_with_out_L0(input_im_d1,
+                                self.input_im_dim,
+                                1,
+                                output_events_0_d1,
+                                weights_0,
+                                num_tiles_NxN_L0,
+                                num_rfs_per_tile_L0,
+                                tile_dim_NxN_L0)
+
+        # reshape and append input im (delayed, one after another)
+
+        input_im_d0 = input_im_d0[:, :, 0].reshape((self.input_im_dim, self.input_im_dim))
+        input_im_d1 = input_im_d1[:, :, 0].reshape((self.input_im_dim, self.input_im_dim))
+        input_im_d0_d1 = np.hstack((input_im_d0, 0.5 + np.zeros((self.input_im_dim, 2)), input_im_d1))
+        ims_list.append(input_im_d0_d1)
+        ims_names_list.append('weighed_input')
+
+
+
+
+        return ims_list, ims_names_list
+
+
+    def ASOFUASF_get_table_ims(self):
+
+        ims_list = []
+        ims_names_list = []
+
+        # get ims for layer 0
+
+        ims_list_0, ims_names_list_0 = self.layers[0].get_table_ims()
+        ims_list.extend(ims_list_0)
+        ims_names_list.extend(ims_names_list_0)
+
+        # for upper layers: project back (write in this class)
+        #   p/n display stuff does not work for upper layers
+
+        # project how?
+        # make an image for each layer:
+        #   in "slow visualization" mode: for each upper layer tile, show a real-time mask of the original video input. i.e. pixels over time weighted by weights of RF given there was an RF event.
+        #   it must necessarily be delayed by total integration time number of time steps
+
+        # or simplify, for asynchronous viewing:
+        # show last N frames for N concat for a given layer, per RF. last activation sequence in terms of input. so, not per input tile but per RF
+
+        # show highest layer, in terms of pixels
+
+        # this is not enough of this layer, because of concat events:
+        (input_events_p, input_events_n, event_coords_r, event_coords_c, original_input_image) = self.last_input_events
+        # this is not enough of this layer, because of concat events:
+        output_events_0 = self.last_output_events[0]
+
+        output_events_1 = self.last_output_events[1]
+
+        print()
+        print('input_events_p.shape', input_events_p.shape, 'event_coords_r.shape', event_coords_r.shape, 'original_input_image.shape', original_input_image.shape)
+        print('output_events_0.shape', output_events_0.shape)
+        print('output_events_1.shape', output_events_1.shape)
+        print()
+
+        '''
+        output_events[tile_r, tile_c, best_rf_per_tile] = 1
+        256 * 256 = 65536
+        
+        input_events_p.shape (65536,) event_coords_r.shape (65536,) original_input_image.shape (256, 256)
+        output_events_0.shape (32, 32, 800)
+        output_events_1.shape (16, 16, 800)
+        
+        '''
+
+        # thing we are getting out:
+        # for every unit active in highest layer (1 per tile), color the input (i.e. show weight as a color intensity vs. gray or another color)
+        # meaning: for the input sequence that came before current activations of highest layer, color the input. must show enough frames for all layer's concat
+
+        weighted_inputs_L1 = self.layers[1].get_last_weighted_inputs()  # last concated input to each tile, weighted by W for winning RF in that tile (i.e. dot(weight, last concat input))
+
+        assert weighted_inputs_L1.shape[0] == self.layers[1].get_num_tiles_NxN()
+        assert weighted_inputs_L1.shape[1] == self.layers[1].get_num_tiles_NxN()
+        assert weighted_inputs_L1.shape[2] == self.layers[1].get_input_num_rfs_per_tile() * self.layers[1].get_tile_dim_NxN() * self.layers[1].get_tile_dim_NxN()
+
+        weighted_inputs_L0 = self.layers[0].get_last_weighted_inputs()
+
+        # these are about pixel events, for L0; i.e. get_input_num_rfs_per_tile() is 1
+        assert weighted_inputs_L0.shape[0] == self.layers[0].get_num_tiles_NxN()
+        assert weighted_inputs_L0.shape[1] == self.layers[0].get_num_tiles_NxN()
+        assert weighted_inputs_L0.shape[2] == self.layers[0].get_input_num_rfs_per_tile() * self.layers[0].get_tile_dim_NxN() * self.layers[0].get_tile_dim_NxN()  # == number of input pixels per tile
+
+        # do weighing of weighted_inputs_L0 by weighted_inputs_L1
+        # i.e. for every L0 tile, we already have a weight on every pixel
+        # now we just need to multiply that by the appropriate weight from the layer above it (using information about tiling)
+        # AND we need info about what RFs weere active in L0
+        # TODO what about accouting for concat steps? time / multiple steps? apply same weights over over multiple
+
+        # so combine using:
+        weighted_inputs_L1
+        weighted_inputs_L0
+        output_events_0
+
+        # easiest is to write this as loops in cython (complicated)
+        # first write as loop here
+
+
+
+        '''
+        
+        alternative was to try to display all the last activations for every RF in every tile
+                
+        this is too much info to visualize:
+        
+        last_i_per_rf = self.layers[1].get_last_input_per_rf_activation()
+
+        assert last_i_per_rf.shape[0] == self.layers[1].get_num_tiles_NxN()
+        assert last_i_per_rf.shape[1] == self.layers[1].get_num_tiles_NxN()
+        assert last_i_per_rf.shape[2] == self.layers[1].get_num_rfs_per_tile()
+        assert last_i_per_rf.shape[3] == self.layers[1].input dim per tile ????
+         
+        '''
+
+
+        return ims_list, ims_names_list
+
+
+    def _ANARBAGH_init_layers_with_loop(self, params):
         '''
         to implement later
         :return:
@@ -188,61 +461,4 @@ class LayeredTiledRateControlWTA(object):
             tile_im_dim = tile_im_dim * 2
 
             self.layers.append(layer_wta)
-
-    def get_final_errors_dict(self):
-        d = {}
-        return d
-
-    def set_plots_folder(self, folder):
-        self.plots_folder = folder
-
-        print()
-        print('setting plots folder: ', self.plots_folder)
-        print()
-
-        for layer_n in range(self.num_layers):
-            self.layers[layer_n].set_plots_folder(folder=folder)
-
-    def process_input(self, input_events_p, input_events_n, event_coords_r, event_coords_c, original_input_image):
-
-        input_events = None
-        output_events = None
-
-        for layer_n in range(self.num_layers):
-
-            if layer_n == 0:
-                output_events = self.layers[layer_n].process_input(input_events_p=input_events_p,
-                                                                   input_events_n=input_events_n,
-                                                                   event_coords_r=event_coords_r,
-                                                                   event_coords_c=event_coords_c,
-                                                                   original_input_image=original_input_image)
-            else:
-                output_events = self.layers[layer_n].process_input(input_events)
-
-            input_events = output_events.copy()
-
-    def get_table_ims(self):
-
-        ims_list = []
-        ims_names_list = []
-
-        # get ims for layer 0
-
-        ims_list_0, ims_names_list_0 = self.layers[0].get_table_ims()
-        ims_list.extend(ims_list_0)
-        ims_names_list.extend(ims_names_list_0)
-
-        # for upper layers: project back (write in this class)
-        #   p/n display stuff does not work for upper layers
-
-        # project how?
-        # make an image for each layer:
-        #   in "slow visualization" mode: for each upper layer tile, show a real-time mask of the original video input. i.e. pixels over time weighted by weights of RF given there was an RF event.
-        #   it must necessarily be delayed by total integration time number of time steps
-
-        return ims_list, ims_names_list
-
-    def do_plots(self):
-        pass
-
 

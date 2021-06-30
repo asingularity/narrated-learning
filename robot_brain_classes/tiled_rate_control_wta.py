@@ -67,6 +67,7 @@ class RateControlWTABRainLayerN(object):
 
         self.plots_folder = "."
 
+        # self.last_weighted_inputs = None
         self.t = 0
 
     def get_input_num_tiles_NxN(self):
@@ -89,6 +90,9 @@ class RateControlWTABRainLayerN(object):
         print()
         print('setting plots folder: ', self.plots_folder)
         print()
+
+    # def get_last_weighted_inputs(self):
+    #     return self.last_weighted_inputs
 
     def process_input(self, input_events):
 
@@ -149,6 +153,9 @@ class RateControlWTABRainLayerN(object):
 
         output_events = np.zeros((self.num_tiles_NxN, self.num_tiles_NxN, self.num_rfs), np.float32)
         output_events[tile_r, tile_c, best_rf_per_tile] = 1
+
+        # how to set this: cython?
+        # self.last_weighted_inputs = np.zeros((self.num_tiles_NxN, self.num_tiles_NxN, self.tile_input_state_dim))
 
         return output_events
 
@@ -289,6 +296,8 @@ class RateControlWTABRainLayer0(object):
         self.t = 0
         self.num_zero_inputs = 0
 
+        # self.last_weighted_inputs = None
+
         self.plots_folder = "."
 
         self._init_plotting()
@@ -421,6 +430,9 @@ class RateControlWTABRainLayer0(object):
         }
 
         return errors
+
+    # def get_last_weighted_inputs(self):
+    #     return self.last_weighted_inputs
 
     def process_input(self, input_events_p, input_events_n, event_coords_r, event_coords_c, original_input_image):
 
