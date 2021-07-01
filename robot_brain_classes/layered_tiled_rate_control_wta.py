@@ -71,10 +71,11 @@ class LayeredTiledRateControlWTA(object):
         })
 
         # 1
+        # TODO we need to manually update input params here based on what we set above !!! specifically "input_num_tiles_NxN"
         layer_params_list.append({
             'input_num_tiles_NxN': 32,  # previous layer (num_tiles X num_tiles)
             'input_num_rfs_per_tile': layer_params_list[-1]['num_rfs'],  # previous layer num rfs
-            'tile_dim_NxN': 2,  # 2, 16? relative to previous layer, how many tiles (NxN) to combine to make a tile in this layer
+            'tile_dim_NxN': 16,  # 2, 16? relative to previous layer, how many tiles (NxN) to combine to make a tile in this layer
             'num_rfs': 800,  # per tile
             'lr': 1.0 / 1000,
             'input_concat_timesteps': 4
@@ -261,8 +262,8 @@ class LayeredTiledRateControlWTA(object):
                              num_rfs_per_tile_L1,
                              tile_dim_NxN_L1)
 
-        input_im_d0 = self.input_im_flat_history.get_state(delay=0).copy().reshape((self.input_im_dim, self.input_im_dim))[:, :, np.newaxis]
-        input_im_d1 = self.input_im_flat_history.get_state(delay=1).copy().reshape((self.input_im_dim, self.input_im_dim))[:, :, np.newaxis]
+        input_im_d0 = self.input_im_flat_history.get_state(delay=0).copy().reshape((self.input_im_dim, self.input_im_dim))
+        input_im_d1 = self.input_im_flat_history.get_state(delay=1).copy().reshape((self.input_im_dim, self.input_im_dim))
 
         # modifies input_im_d0
         # could this be same cython function as above?
@@ -305,8 +306,8 @@ class LayeredTiledRateControlWTA(object):
 
         # reshape and append input im (delayed, one after another)
 
-        input_im_d0 = input_im_d0[:, :, 0].reshape((self.input_im_dim, self.input_im_dim))
-        input_im_d1 = input_im_d1[:, :, 0].reshape((self.input_im_dim, self.input_im_dim))
+        input_im_d0 = input_im_d0.reshape((self.input_im_dim, self.input_im_dim))
+        input_im_d1 = input_im_d1.reshape((self.input_im_dim, self.input_im_dim))
         input_im_d0_d1 = np.hstack((input_im_d0, 0.5 + np.zeros((self.input_im_dim, 2)), input_im_d1))
         ims_list.append(input_im_d0_d1)
         ims_names_list.append('weighed_input')

@@ -100,7 +100,13 @@ def cy_weigh_in_with_out(np.ndarray[np.float32_t, ndim=3] input_events,
 # TODO NEED TO FIX!!!!!!!!!!!!! THIS IS NOT ACCOUNTING N WEIGHTS JUST P WEIGHTS !!!!!!!!!!!!!!!!!!# TODO NEED TO FIX!!!!!!!!!!!!! THIS IS NOT ACCOUNTING N WEIGHTS JUST P WEIGHTS !!!!!!!!!!!!!!!!!!# TODO NEED TO FIX!!!!!!!!!!!!! THIS IS NOT ACCOUNTING N WEIGHTS JUST P WEIGHTS !!!!!!!!!!!!!!!!!!# TODO NEED TO FIX!!!!!!!!!!!!! THIS IS NOT ACCOUNTING N WEIGHTS JUST P WEIGHTS !!!!!!!!!!!!!!!!!!# TODO NEED TO FIX!!!!!!!!!!!!! THIS IS NOT ACCOUNTING N WEIGHTS JUST P WEIGHTS !!!!!!!!!!!!!!!!!!# TODO NEED TO FIX!!!!!!!!!!!!! THIS IS NOT ACCOUNTING N WEIGHTS JUST P WEIGHTS !!!!!!!!!!!!!!!!!!# TODO NEED TO FIX!!!!!!!!!!!!! THIS IS NOT ACCOUNTING N WEIGHTS JUST P WEIGHTS !!!!!!!!!!!!!!!!!!
 # TODO NEED TO FIX!!!!!!!!!!!!! THIS IS NOT ACCOUNTING N WEIGHTS JUST P WEIGHTS !!!!!!!!!!!!!!!!!!# TODO NEED TO FIX!!!!!!!!!!!!! THIS IS NOT ACCOUNTING N WEIGHTS JUST P WEIGHTS !!!!!!!!!!!!!!!!!!# TODO NEED TO FIX!!!!!!!!!!!!! THIS IS NOT ACCOUNTING N WEIGHTS JUST P WEIGHTS !!!!!!!!!!!!!!!!!!# TODO NEED TO FIX!!!!!!!!!!!!! THIS IS NOT ACCOUNTING N WEIGHTS JUST P WEIGHTS !!!!!!!!!!!!!!!!!!# TODO NEED TO FIX!!!!!!!!!!!!! THIS IS NOT ACCOUNTING N WEIGHTS JUST P WEIGHTS !!!!!!!!!!!!!!!!!!# TODO NEED TO FIX!!!!!!!!!!!!! THIS IS NOT ACCOUNTING N WEIGHTS JUST P WEIGHTS !!!!!!!!!!!!!!!!!!# TODO NEED TO FIX!!!!!!!!!!!!! THIS IS NOT ACCOUNTING N WEIGHTS JUST P WEIGHTS !!!!!!!!!!!!!!!!!!# TODO NEED TO FIX!!!!!!!!!!!!! THIS IS NOT ACCOUNTING N WEIGHTS JUST P WEIGHTS !!!!!!!!!!!!!!!!!!
 
-def cy_weigh_in_with_out_L0(np.ndarray[np.float32_t, ndim=3] input_events,
+
+# TODO ALSO
+# SOMETHING IS ROTATED!!!!!!!!!!!!!!!!! IN THE WEIGHTS !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+# FOR THE VIZ!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+
+def cy_weigh_in_with_out_L0(np.ndarray[np.float32_t, ndim=2] input_events,
                             np.int64_t  input_num_tiles_NxN,
                             np.int64_t  input_num_rfs_per_tile,
                             np.ndarray[np.float32_t, ndim=3] output_events,
@@ -117,7 +123,6 @@ def cy_weigh_in_with_out_L0(np.ndarray[np.float32_t, ndim=3] input_events,
 
     assert input_events.shape[0] == input_num_tiles_NxN
     assert input_events.shape[1] == input_num_tiles_NxN
-    assert input_events.shape[2] == input_num_rfs_per_tile
 
     assert output_events.shape[0] == output_num_tiles_NxN
     assert output_events.shape[1] == output_num_tiles_NxN
@@ -131,26 +136,23 @@ def cy_weigh_in_with_out_L0(np.ndarray[np.float32_t, ndim=3] input_events,
 
     output_flat_in_dim = output_tile_dim_NxN * output_tile_dim_NxN * input_num_rfs_per_tile
 
-    for out_tile_r in range(output_num_tiles_NxN):
+    for out_tile_c in range(output_num_tiles_NxN):
     #for out_tile_r in prange(output_num_tiles_NxN, nogil=True, schedule='dynamic', num_threads=22):
-        for out_tile_c in range(output_num_tiles_NxN):
+        for out_tile_r in range(output_num_tiles_NxN):
             in_tile_r_start = out_tile_r * output_tile_dim_NxN
             in_tile_c_start = out_tile_c * output_tile_dim_NxN
 
             for out_rf in range(output_num_rfs_per_tile):
-                if output_events[out_tile_r, out_tile_c, out_rf] > 0:
+                # TODO why are these flopped to work???
+                if output_events[out_tile_c, out_tile_r, out_rf] > 0:
                     in_index = 0
 
-                    # TODO found the winning output RF for this output tile
-
-                    # TODO for every input tile:
                     for in_tile_r in range(in_tile_r_start, in_tile_r_start + output_tile_dim_NxN):
+
                         for in_tile_c in range(in_tile_c_start, in_tile_c_start + output_tile_dim_NxN):
-                            # TODO find winner
-                            for in_rf in range(input_num_rfs_per_tile):
 
-                                #if input_events[in_tile_r, in_tile_c, in_rf] == 1:
-                                #    # TODO found winner
-                                input_events[in_tile_r, in_tile_c, in_rf] = input_events[in_tile_r, in_tile_c, in_rf] * output_weights[out_rf, in_index]
+                            input_events[in_tile_r, in_tile_c] = input_events[in_tile_r, in_tile_c] * output_weights[out_rf, in_index]
+                            #input_events[in_tile_r, in_tile_c] = output_weights[out_rf, in_index]
 
-                                in_index = in_index + 1
+
+                            in_index = in_index + 1
