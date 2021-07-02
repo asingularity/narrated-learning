@@ -70,6 +70,15 @@ class RateControlWTABRainLayerN(object):
         # self.last_weighted_inputs = None
         self.t = 0
 
+        self.raster_steps = 200
+        self.raster_t = 0  # circular; draw vertical line on plot here
+        self.rfs_raster_history = np.zeros((self.num_rfs * self.num_tiles_NxN * self.num_tiles_NxN, self.raster_steps), np.uint8)
+        self.fig_bar = plt.figure(figsize=(40, 20))
+        self.ax_bar = self.fig_bar.add_subplot(1, 1, 1)
+        self.ax_bar.cla()
+        self.ax_bar.get_xaxis().get_major_formatter().set_scientific(False)
+        self.ax_bar.get_yaxis().get_major_formatter().set_scientific(False)
+
     def get_input_num_tiles_NxN(self):
         return self.input_num_tiles_NxN
 
@@ -93,6 +102,30 @@ class RateControlWTABRainLayerN(object):
 
     # def get_last_weighted_inputs(self):
     #     return self.last_weighted_inputs
+
+    def do_plots(self, extra_info=''):
+
+        max_tiles_to_plot = 8  # so we don't plot a million things
+
+        #print('STARTING PLOTS')
+        self.ax_bar.cla()
+        num_rf = self.rfs_raster_history.shape[0]
+        raster_plot = np.transpose(np.multiply(self.rfs_raster_history, np.arange(num_rf)[:, np.newaxis]))
+
+        t = np.arange(raster_plot.shape[0])
+
+        self.ax_bar.plot(t, raster_plot[:, 0:min(max_tiles_to_plot * self.num_rfs, num_rf)], color='b', marker='.', linestyle='')
+        self.ax_bar.axvline(x=self.raster_t, color='g')
+
+        plot_y = 0
+        for k in range(min(max_tiles_to_plot, self.num_tiles_NxN * self.num_tiles_NxN)):
+            self.ax_bar.axhline(y=plot_y, color='r')
+            plot_y += self.num_rfs
+
+        if len(extra_info) > 0:
+            self.fig_bar.savefig(self.plots_folder + "/raster_rfs_" + extra_info + ".png", dpi=100)
+        else:
+            self.fig_bar.savefig(self.plots_folder + "/raster_rfs.png", dpi=100)
 
     def process_input(self, input_events):
 
@@ -156,6 +189,15 @@ class RateControlWTABRainLayerN(object):
 
         # how to set this: cython?
         # self.last_weighted_inputs = np.zeros((self.num_tiles_NxN, self.num_tiles_NxN, self.tile_input_state_dim))
+
+        rf_offset = np.arange(self.num_tiles_NxN * self.num_tiles_NxN) * self.num_rfs
+        self.rfs_raster_history[:, self.raster_t] = 0
+
+        self.rfs_raster_history[rf_offset + best_rf_per_tile, self.raster_t] = 1
+
+        self.raster_t += 1
+        if self.raster_t >= self.raster_steps:
+            self.raster_t = 0
 
         return output_events
 

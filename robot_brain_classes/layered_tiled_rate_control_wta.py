@@ -46,6 +46,9 @@ class LayeredTiledRateControlWTA(object):
 
         self._init_layers_hardcode(params=params)
 
+        self.do_raster_plots_every_k_im = 40
+        self.ims_since_raster = 0
+
     def _init_layers_hardcode(self, params):
         '''
 
@@ -75,32 +78,51 @@ class LayeredTiledRateControlWTA(object):
         layer_params_list.append({
             'input_num_tiles_NxN': 32,  # previous layer (num_tiles X num_tiles)
             'input_num_rfs_per_tile': layer_params_list[-1]['num_rfs'],  # previous layer num rfs
-            'tile_dim_NxN': 16,  # 2, 16? relative to previous layer, how many tiles (NxN) to combine to make a tile in this layer
+            'tile_dim_NxN': 1,  # relative to previous layer, how many tiles (NxN) to combine to make a tile in this layer
             'num_rfs': 800,  # per tile
             'lr': 1.0 / 1000,
             'input_concat_timesteps': 4
         })
 
-        if False:  # later add more
-            # 2
-            layer_params_list.append({
-                'input_num_tiles_NxN': 8,  # previous layer (num_tiles X num_tiles)
-                'input_flat_dim_per_tile': layer_params_list[-1]['num_rfs'],  # previous layer num rfs
-                'tile_dim_NxN': 4,  # relative to previous layer, how many tiles (NxN) to combine to make a tile in this layer
-                'num_rfs': 800,  # per tile
-                'lr': 1.0 / 1000,
-                'input_concat_timesteps': 1
-            })
+        # 2
+        layer_params_list.append({
+            'input_num_tiles_NxN': 32,  # previous layer (num_tiles X num_tiles)
+            'input_num_rfs_per_tile': layer_params_list[-1]['num_rfs'],  # previous layer num rfs
+            'tile_dim_NxN': 4,
+            'num_rfs': 800,  # per tile
+            'lr': 1.0 / 1000,
+            'input_concat_timesteps': 1
+        })
 
-            # 3
-            layer_params_list.append({
-                'input_num_tiles_NxN': 2,  # previous layer (num_tiles X num_tiles)
-                'input_flat_dim_per_tile': layer_params_list[-1]['num_rfs'],  # previous layer num rfs
-                'tile_dim_NxN': 2,  # relative to previous layer, how many tiles (NxN) to combine to make a tile in this layer
-                'num_rfs': 800,  # per tile
-                'lr': 1.0 / 1000,
-                'input_concat_timesteps': 2
-            })
+        # 3
+        layer_params_list.append({
+            'input_num_tiles_NxN': 8,  # previous layer (num_tiles X num_tiles)
+            'input_num_rfs_per_tile': layer_params_list[-1]['num_rfs'],  # previous layer num rfs
+            'tile_dim_NxN': 1,
+            'num_rfs': 800,  # per tile
+            'lr': 1.0 / 1000,
+            'input_concat_timesteps': 4
+        })
+
+        # 4
+        layer_params_list.append({
+            'input_num_tiles_NxN': 8,  # previous layer (num_tiles X num_tiles)
+            'input_num_rfs_per_tile': layer_params_list[-1]['num_rfs'],  # previous layer num rfs
+            'tile_dim_NxN': 8,
+            'num_rfs': 800,  # per tile
+            'lr': 1.0 / 1000,
+            'input_concat_timesteps': 1
+        })
+
+        # 5
+        layer_params_list.append({
+            'input_num_tiles_NxN': 1,  # previous layer (num_tiles X num_tiles)
+            'input_num_rfs_per_tile': layer_params_list[-1]['num_rfs'],  # previous layer num rfs
+            'tile_dim_NxN': 1,
+            'num_rfs': 800,  # per tile
+            'lr': 1.0 / 1000,
+            'input_concat_timesteps': 4
+        })
 
         self.num_layers = len(layer_params_list)
 
@@ -205,9 +227,155 @@ class LayeredTiledRateControlWTA(object):
             self.output_event_histories[layer_n].process_new_states([output_events.flatten()])
 
     def do_plots(self):
-        pass
+        # TODO skip layer 0 plots for now
+        for layer_num in range(1, self.num_layers):
+            self.layers[layer_num].do_plots(extra_info=str(layer_num))
 
     def get_table_ims(self):
+
+        # FIVE LAYER
+
+        # NOT SHOWING FULL TEMPORAL RF JUST 1-2 STEPS INTO PAST!!!
+
+        # only last step for now: not weighing/displaying anything further back
+
+        if self.do_raster_plots_every_k_im is not None:
+            self.ims_since_raster += 1
+            if self.ims_since_raster > self.do_raster_plots_every_k_im:
+                self.do_plots()
+                self.ims_since_raster = 0
+
+
+        ims_list = []
+        ims_names_list = []
+
+        # get ims for layer 0
+
+        ims_list_0, ims_names_list_0 = self.layers[0].get_table_ims()
+        ims_list.extend(ims_list_0)
+        ims_names_list.extend(ims_names_list_0)
+
+        # layer 0
+
+        num_tiles_NxN_L0 = self.layers[0].get_num_tiles_NxN()
+        num_rfs_per_tile_L0 = self.layers[0].get_num_rfs_per_tile()
+        tile_dim_NxN_L0 = self.layers[0].get_tile_dim_NxN()
+        output_events_L0 = self.output_event_histories[0].get_state(delay=0).copy().reshape((num_tiles_NxN_L0, num_tiles_NxN_L0, num_rfs_per_tile_L0))
+        weights_L0 = self.layers[0].weights
+
+        num_tiles_NxN_L1 = self.layers[1].get_num_tiles_NxN()
+        num_rfs_per_tile_L1 = self.layers[1].get_num_rfs_per_tile()
+        tile_dim_NxN_L1 = self.layers[1].get_tile_dim_NxN()
+        output_events_L1 = self.output_event_histories[1].get_state(delay=0).copy().reshape((num_tiles_NxN_L1, num_tiles_NxN_L1, num_rfs_per_tile_L1))
+        weights_L1 = self.layers[1].weights
+
+        num_tiles_NxN_L2 = self.layers[2].get_num_tiles_NxN()
+        num_rfs_per_tile_L2 = self.layers[2].get_num_rfs_per_tile()
+        tile_dim_NxN_L2 = self.layers[2].get_tile_dim_NxN()
+        output_events_L2 = self.output_event_histories[2].get_state(delay=0).copy().reshape((num_tiles_NxN_L2, num_tiles_NxN_L2, num_rfs_per_tile_L2))
+        weights_L2 = self.layers[2].weights
+
+        num_tiles_NxN_L3 = self.layers[3].get_num_tiles_NxN()
+        num_rfs_per_tile_L3 = self.layers[3].get_num_rfs_per_tile()
+        tile_dim_NxN_L3 = self.layers[3].get_tile_dim_NxN()
+        output_events_L3 = self.output_event_histories[3].get_state(delay=0).copy().reshape((num_tiles_NxN_L3, num_tiles_NxN_L3, num_rfs_per_tile_L3))
+        weights_L3 = self.layers[3].weights
+
+        num_tiles_NxN_L4 = self.layers[4].get_num_tiles_NxN()
+        num_rfs_per_tile_L4 = self.layers[4].get_num_rfs_per_tile()
+        tile_dim_NxN_L4 = self.layers[4].get_tile_dim_NxN()
+        output_events_L4 = self.output_event_histories[4].get_state(delay=0).copy().reshape((num_tiles_NxN_L4, num_tiles_NxN_L4, num_rfs_per_tile_L4))
+        weights_L4 = self.layers[4].weights
+
+        num_tiles_NxN_L5 = self.layers[5].get_num_tiles_NxN()
+        num_rfs_per_tile_L5 = self.layers[5].get_num_rfs_per_tile()
+        tile_dim_NxN_L5 = self.layers[5].get_tile_dim_NxN()
+        output_events_L5 = self.output_event_histories[5].get_state(delay=0).copy().reshape((num_tiles_NxN_L5, num_tiles_NxN_L5, num_rfs_per_tile_L5))
+        weights_L5 = self.layers[5].weights
+
+        # 5 -> 4
+
+        cy_weigh_in_with_out(output_events_L4,  # input events to weigh (multiply with above layer's winning RF weights)
+                             num_tiles_NxN_L4,
+                             num_rfs_per_tile_L4,
+                             output_events_L5,  # get winning RF index of output layer, per tile: this is in the space of input layer events
+                             weights_L5,  # winning (and all other) RF weights
+                             num_tiles_NxN_L5,
+                             num_rfs_per_tile_L5,
+                             tile_dim_NxN_L5)
+
+        cy_weigh_in_with_out(output_events_L3,  # input events to weigh (multiply with above layer's winning RF weights)
+                             num_tiles_NxN_L3,
+                             num_rfs_per_tile_L3,
+                             output_events_L4,  # get winning RF index of output layer, per tile: this is in the space of input layer events
+                             weights_L4,  # winning (and all other) RF weights
+                             num_tiles_NxN_L4,
+                             num_rfs_per_tile_L4,
+                             tile_dim_NxN_L4)
+
+        cy_weigh_in_with_out(output_events_L2,  # input events to weigh (multiply with above layer's winning RF weights)
+                             num_tiles_NxN_L2,
+                             num_rfs_per_tile_L2,
+                             output_events_L3,  # get winning RF index of output layer, per tile: this is in the space of input layer events
+                             weights_L3,  # winning (and all other) RF weights
+                             num_tiles_NxN_L3,
+                             num_rfs_per_tile_L3,
+                             tile_dim_NxN_L3)
+
+        cy_weigh_in_with_out(output_events_L1,  # input events to weigh (multiply with above layer's winning RF weights)
+                             num_tiles_NxN_L1,
+                             num_rfs_per_tile_L1,
+                             output_events_L2,  # get winning RF index of output layer, per tile: this is in the space of input layer events
+                             weights_L2,  # winning (and all other) RF weights
+                             num_tiles_NxN_L2,
+                             num_rfs_per_tile_L2,
+                             tile_dim_NxN_L2)
+
+        cy_weigh_in_with_out(output_events_L0,  # input events to weigh (multiply with above layer's winning RF weights)
+                             num_tiles_NxN_L0,
+                             num_rfs_per_tile_L0,
+                             output_events_L1,  # get winning RF index of output layer, per tile: this is in the space of input layer events
+                             weights_L1,  # winning (and all other) RF weights
+                             num_tiles_NxN_L1,
+                             num_rfs_per_tile_L1,
+                             tile_dim_NxN_L1)
+
+        # TODO NEED TO FIX!!!!!!!!!!!!! THIS IS NOT ACCOUNTING N WEIGHTS JUST P WEIGHTS !!!!!!!!!!!!!!!!!!# TODO NEED TO FIX!!!!!!!!!!!!! THIS IS NOT ACCOUNTING N WEIGHTS JUST P WEIGHTS !!!!!!!!!!!!!!!!!!# TODO NEED TO FIX!!!!!!!!!!!!! THIS IS NOT ACCOUNTING N WEIGHTS JUST P WEIGHTS !!!!!!!!!!!!!!!!!!# TODO NEED TO FIX!!!!!!!!!!!!! THIS IS NOT ACCOUNTING N WEIGHTS JUST P WEIGHTS !!!!!!!!!!!!!!!!!!# TODO NEED TO FIX!!!!!!!!!!!!! THIS IS NOT ACCOUNTING N WEIGHTS JUST P WEIGHTS !!!!!!!!!!!!!!!!!!# TODO NEED TO FIX!!!!!!!!!!!!! THIS IS NOT ACCOUNTING N WEIGHTS JUST P WEIGHTS !!!!!!!!!!!!!!!!!!# TODO NEED TO FIX!!!!!!!!!!!!! THIS IS NOT ACCOUNTING N WEIGHTS JUST P WEIGHTS !!!!!!!!!!!!!!!!!!# TODO NEED TO FIX!!!!!!!!!!!!! THIS IS NOT ACCOUNTING N WEIGHTS JUST P WEIGHTS !!!!!!!!!!!!!!!!!!
+
+        input_im = self.input_im_flat_history.get_state(delay=0).copy().reshape((self.input_im_dim, self.input_im_dim))
+
+        # modifies input_im_d1
+        cy_weigh_in_with_out_L0(input_im,
+                                self.input_im_dim,
+                                1,
+                                output_events_L0,
+                                weights_L0,
+                                num_tiles_NxN_L0,
+                                num_rfs_per_tile_L0,
+                                tile_dim_NxN_L0)
+
+        # reshape and append input im (delayed, one after another)
+
+        input_im_d0 = input_im.reshape((self.input_im_dim, self.input_im_dim))
+        #input_im_d1 = input_im_d1.reshape((self.input_im_dim, self.input_im_dim))
+        #input_im_d0_d1 = np.hstack((input_im_d0, 0.5 + np.zeros((self.input_im_dim, 2)), input_im_d1))
+        #ims_list.append(input_im_d0_d1)
+        ims_list.append(input_im_d0)
+        ims_names_list.append('weighed_input')
+
+
+
+        return ims_list, ims_names_list
+
+    def get_table_ims_TWO_LAYER(self):
+
+        if self.do_raster_plots_every_k_im is not None:
+            self.ims_since_raster += 1
+            if self.ims_since_raster > self.do_raster_plots_every_k_im:
+                self.do_plots()
+                self.ims_since_raster = 0
+
+
         ims_list = []
         ims_names_list = []
 
@@ -268,17 +436,6 @@ class LayeredTiledRateControlWTA(object):
         # modifies input_im_d0
         # could this be same cython function as above?
         # yes but need to add newaxis to input_im_d0, input_im_d1, then take it away before append and show (num_rfs_per_tile == 1)
-
-        # print()
-        # print(input_im_d0.shape)
-        # print(self.input_im_dim)
-        # print(1)
-        # print(output_events_0_d0.shape)
-        # print(weights_0.shape)
-        # print(num_tiles_NxN_L0)
-        # print(num_rfs_per_tile_L0)
-        # print(tile_dim_NxN_L0)
-        # print()
 
         # TODO NEED TO FIX!!!!!!!!!!!!! THIS IS NOT ACCOUNTING N WEIGHTS JUST P WEIGHTS !!!!!!!!!!!!!!!!!!
         # TODO NEED TO FIX!!!!!!!!!!!!! THIS IS NOT ACCOUNTING N WEIGHTS JUST P WEIGHTS !!!!!!!!!!!!!!!!!!# TODO NEED TO FIX!!!!!!!!!!!!! THIS IS NOT ACCOUNTING N WEIGHTS JUST P WEIGHTS !!!!!!!!!!!!!!!!!!# TODO NEED TO FIX!!!!!!!!!!!!! THIS IS NOT ACCOUNTING N WEIGHTS JUST P WEIGHTS !!!!!!!!!!!!!!!!!!# TODO NEED TO FIX!!!!!!!!!!!!! THIS IS NOT ACCOUNTING N WEIGHTS JUST P WEIGHTS !!!!!!!!!!!!!!!!!!# TODO NEED TO FIX!!!!!!!!!!!!! THIS IS NOT ACCOUNTING N WEIGHTS JUST P WEIGHTS !!!!!!!!!!!!!!!!!!# TODO NEED TO FIX!!!!!!!!!!!!! THIS IS NOT ACCOUNTING N WEIGHTS JUST P WEIGHTS !!!!!!!!!!!!!!!!!!# TODO NEED TO FIX!!!!!!!!!!!!! THIS IS NOT ACCOUNTING N WEIGHTS JUST P WEIGHTS !!!!!!!!!!!!!!!!!!# TODO NEED TO FIX!!!!!!!!!!!!! THIS IS NOT ACCOUNTING N WEIGHTS JUST P WEIGHTS !!!!!!!!!!!!!!!!!!# TODO NEED TO FIX!!!!!!!!!!!!! THIS IS NOT ACCOUNTING N WEIGHTS JUST P WEIGHTS !!!!!!!!!!!!!!!!!!# TODO NEED TO FIX!!!!!!!!!!!!! THIS IS NOT ACCOUNTING N WEIGHTS JUST P WEIGHTS !!!!!!!!!!!!!!!!!!# TODO NEED TO FIX!!!!!!!!!!!!! THIS IS NOT ACCOUNTING N WEIGHTS JUST P WEIGHTS !!!!!!!!!!!!!!!!!!# TODO NEED TO FIX!!!!!!!!!!!!! THIS IS NOT ACCOUNTING N WEIGHTS JUST P WEIGHTS !!!!!!!!!!!!!!!!!!
