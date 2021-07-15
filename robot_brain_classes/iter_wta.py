@@ -126,6 +126,7 @@ class IterWTABrain(object):
 
         # print('*******************')
         # print(self.t)
+        self.rfs_raster_history[:, self.raster_t] = 0
 
         k = 0
         while keep_going:
@@ -140,7 +141,6 @@ class IterWTABrain(object):
 
                 # print('    ', best_rf, RF_norm_dot[best_rf])
 
-                self.rfs_raster_history[:, self.raster_t] = 0
                 self.rfs_raster_history[best_rf, self.raster_t] = 1
 
                 lr = self.lr

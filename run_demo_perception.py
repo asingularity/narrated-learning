@@ -145,7 +145,7 @@ def init_demo():
         #'robot_brain': SeqNNSeqKMeansBrain(get_brain_params()),
         #'robot_brain': BatchIterWTABrain(get_brain_params()),
         #'robot_brain': RateControlWTABRainLayer0(get_brain_params()),  # ****
-        'robot_brain': NoWTABrain(get_brain_params()),
+        'robot_brain': IterWTABrain(get_brain_params()),
         #'robot_brain': RateControlSomWtaBrain(get_brain_params()),
         'robot_sensors': VideoPlaybackSensor(get_sensors_params()),
         'visualizer': SegmentVisualizer(get_visualizer_params()),
