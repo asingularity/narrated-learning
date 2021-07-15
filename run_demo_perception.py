@@ -26,6 +26,7 @@ np.random.seed(6)
 #from robot_brain_classes.batch_iter_wta import BatchIterWTABrain
 
 from robot_brain_classes.tiled_rate_control_wta import RateControlWTABRainLayer0
+from robot_brain_classes.iter_wta import IterWTABrain
 #from robot_brain_classes.rate_control_wta import RateControlWTABRain
 # TODO rename to avoid confusion! class
 #from robot_brain_classes.rate_control_wta_heirarchy import RateControlWTABRain
@@ -38,7 +39,7 @@ from robot_preprocess_classes.event_pre_processor import EventPreProcessor
 
 
 DISABLE_BRAIN = False  # for testing input by itself; also starts slow display
-RF_IM_DIM = 256  # 8, 16, 32, 64, 128
+RF_IM_DIM = 8  # 8, 16, 32, 64, 128
 
 ROOT_DIR = '/srv'
 # ROOT_DIR = '/home/csaba'
@@ -96,17 +97,28 @@ def get_sim_folder_manager_params():
 
 
 def get_brain_params():
+
+    # layer 0 WTA
+    # brain_params = {
+    #     'input_im_dim': RF_IM_DIM,
+    #     'num_rfs': 800,
+    #     'lr': 1.0 / 1000,
+    #     'rel_lr_bg': 0.0,
+    #     'max_time': 5000000,
+    #     'do_raster_plots_every_k_im': None,  # or None
+    #     'num_layers': 3,  # only used for rate_control_wta_heirarchy
+    #     'layer_learn_time': 500000,  # only used for rate_control_wta_heirarchy
+    #     'network_type': 'seq-kmeans',  # seq-kmeans, seq-knn, nn-inits-kmeans
+    #     'tile_im_dim': 8  # only used for tiled rate control wta
+    # }
+
+    # NoWTA
     brain_params = {
         'input_im_dim': RF_IM_DIM,
         'num_rfs': 800,
-        'lr': 1.0 / 1000,
-        'rel_lr_bg': 0.0,
+        'lr': 1.0 / 100,  # 1000
         'max_time': 5000000,
-        'do_raster_plots_every_k_im': None,  # or None
-        'num_layers': 3,  # only used for rate_control_wta_heirarchy
-        'layer_learn_time': 500000,  # only used for rate_control_wta_heirarchy
-        'network_type': 'seq-kmeans',  # seq-kmeans, seq-knn, nn-inits-kmeans
-        'tile_im_dim': 8  # only used for tiled rate control wta
+        'do_raster_plots_every_k_im': 2,  # or None
     }
 
     return brain_params
@@ -132,7 +144,8 @@ def init_demo():
         #'robot_brain': MultiLayerSeqNNBrain(get_brain_params()),
         #'robot_brain': SeqNNSeqKMeansBrain(get_brain_params()),
         #'robot_brain': BatchIterWTABrain(get_brain_params()),
-        'robot_brain': RateControlWTABRainLayer0(get_brain_params()),
+        #'robot_brain': RateControlWTABRainLayer0(get_brain_params()),  # ****
+        'robot_brain': NoWTABrain(get_brain_params()),
         #'robot_brain': RateControlSomWtaBrain(get_brain_params()),
         'robot_sensors': VideoPlaybackSensor(get_sensors_params()),
         'visualizer': SegmentVisualizer(get_visualizer_params()),
