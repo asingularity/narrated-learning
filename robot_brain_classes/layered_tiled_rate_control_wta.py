@@ -85,7 +85,10 @@ class LayeredTiledRateControlWTA(object):
             'tile_dim_NxN': 1,  # relative to previous layer, how many tiles (NxN) to combine to make a tile in this layer
             'num_rfs': 80,  # per tile
             'lr': 1.0 / 1000,
-            'input_concat_timesteps': 4
+            'input_concat_timesteps': 4,
+            'num_iters_per_frame': params['num_iters_per_frame'],  # 6
+            'do_conditional_lr': params['do_conditional_lr'],  # False
+            'subtract_remainder': params['subtract_remainder'],  # True
         })
 
         # 2
@@ -95,7 +98,10 @@ class LayeredTiledRateControlWTA(object):
             'tile_dim_NxN': 2,
             'num_rfs': 400,  # per tile
             'lr': 1.0 / 1000,
-            'input_concat_timesteps': 1
+            'input_concat_timesteps': 1,
+            'num_iters_per_frame': params['num_iters_per_frame'],  # 6
+            'do_conditional_lr': params['do_conditional_lr'],  # False
+            'subtract_remainder': params['subtract_remainder'],  # True
         })
 
         # 3
@@ -105,7 +111,10 @@ class LayeredTiledRateControlWTA(object):
             'tile_dim_NxN': 1,
             'num_rfs': 80,  # per tile
             'lr': 1.0 / 1000,
-            'input_concat_timesteps': 4
+            'input_concat_timesteps': 4,
+            'num_iters_per_frame': params['num_iters_per_frame'],  # 6
+            'do_conditional_lr': params['do_conditional_lr'],  # False
+            'subtract_remainder': params['subtract_remainder'],  # True
         })
         #
         # # 4

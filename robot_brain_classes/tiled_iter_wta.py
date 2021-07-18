@@ -53,6 +53,11 @@ class IterWTABRainLayerN(object):
         else:
             self.enable_errors_plots = True
 
+        # new params:
+        self.num_iters_per_frame = params['num_iters_per_frame']  # 6
+        self.do_conditional_lr = params['do_conditional_lr']  # False
+        self.subtract_remainder = params['subtract_remainder']  # True
+        self.force_all_frames_wta = True  # force every frame for now to coherently see error
 
         # input concat stuff
 
@@ -158,12 +163,10 @@ class IterWTABRainLayerN(object):
 
         output_events = np.zeros((self.num_tiles_NxN, self.num_tiles_NxN, self.num_rfs), np.float32)
 
-        max_rfs_active = 6
-
         rf_offset = np.arange(self.num_tiles_NxN * self.num_tiles_NxN) * self.num_rfs
         self.rfs_raster_history[:, self.raster_t] = 0
 
-        for k in range(max_rfs_active):
+        for k in range(self.num_iters_per_frame):
 
             assert self.weights.shape[0] == self.num_rfs
             assert self.weights.shape[1] == self.tile_input_state_dim
@@ -184,17 +187,16 @@ class IterWTABRainLayerN(object):
             #print(best_rf_per_tile, np.amax(rf_norm_dot))
 
             # learn best RF per tile
-            # TODO REAL
-            #per_tile_lr = np.square(self.lr * np.amax(rf_norm_dot, axis=1))
-
-            # TODO control
-            per_tile_lr = np.ones(self.num_tiles_NxN * self.num_tiles_NxN, np.float32) * self.lr
+            if self.do_conditional_lr:
+                per_tile_lr = np.square(self.lr * np.amax(rf_norm_dot, axis=1))
+            else:
+                per_tile_lr = np.ones(self.num_tiles_NxN * self.num_tiles_NxN, np.float32) * self.lr
 
             cy_kmeans_do_learning_per_tile_lr(best_rf_per_tile, self.weights, input_states_tiles, per_tile_lr)
 
             # if second: ONLY for tiles with rf norm dot over 0.5, set output event and subtract RF from input_state for that tile (<0 -> 0)
 
-            if 1:
+            if self.force_all_frames_wta:
                 # hack: with this and max_rfs_active == 1, it's what we had before (hard 1-wta)
                 good_indices = np.arange(self.num_tiles_NxN * self.num_tiles_NxN)
             else:
@@ -206,10 +208,7 @@ class IterWTABRainLayerN(object):
             output_events[tile_r[good_indices], tile_c[good_indices], best_rf_per_tile[good_indices]] = 1
             self.rfs_raster_history[(rf_offset + best_rf_per_tile)[good_indices], self.raster_t] = 1
 
-            # subtract RF
-            subtract_RF_do = True
-
-            if subtract_RF_do:
+            if self.subtract_remainder:
                 tmp = input_states_tiles[good_indices, :]
                 tmp = tmp - self.weights[best_rf_per_tile[good_indices], :]
                 tmp[np.nonzero(tmp < 0)] = 0
