@@ -1,6 +1,10 @@
 import numpy as np
 from brain_components_classes.states_history import StatesLimitedHistory
-from robot_brain_classes.tiled_rate_control_wta import RateControlWTABRainLayer0, RateControlWTABRainLayerN
+
+
+#from robot_brain_classes.tiled_rate_control_wta import RateControlWTABRainLayer0, RateControlWTABRainLayerN
+from robot_brain_classes.tiled_iter_wta import IterWTABRainLayerN, IterWTABRainLayer0
+
 from cython_layers_viz import cy_weigh_in_with_out, cy_weigh_in_with_out_L0
 
 
@@ -46,7 +50,7 @@ class LayeredTiledRateControlWTA(object):
 
         self._init_layers_hardcode(params=params)
 
-        self.do_raster_plots_every_k_im = 40
+        self.do_raster_plots_every_k_im = 4
         self.ims_since_raster = 0
 
     def _init_layers_hardcode(self, params):
@@ -68,7 +72,7 @@ class LayeredTiledRateControlWTA(object):
         layer_params_list.append({
             'input_im_dim': params['input_im_dim'],
             'tile_im_dim': 8,
-            'num_rfs': 800,  # per tile
+            'num_rfs': 400,  # per tile
             'lr': 1.0 / 1000,
             'input_concat_timesteps': 1
         })
@@ -76,53 +80,53 @@ class LayeredTiledRateControlWTA(object):
         # 1
         # TODO we need to manually update input params here based on what we set above !!! specifically "input_num_tiles_NxN"
         layer_params_list.append({
-            'input_num_tiles_NxN': 32,  # previous layer (num_tiles X num_tiles)
+            'input_num_tiles_NxN': 2,  # previous layer (num_tiles X num_tiles)
             'input_num_rfs_per_tile': layer_params_list[-1]['num_rfs'],  # previous layer num rfs
             'tile_dim_NxN': 1,  # relative to previous layer, how many tiles (NxN) to combine to make a tile in this layer
-            'num_rfs': 800,  # per tile
+            'num_rfs': 80,  # per tile
             'lr': 1.0 / 1000,
             'input_concat_timesteps': 4
         })
 
         # 2
         layer_params_list.append({
-            'input_num_tiles_NxN': 32,  # previous layer (num_tiles X num_tiles)
+            'input_num_tiles_NxN': 2,  # previous layer (num_tiles X num_tiles)
             'input_num_rfs_per_tile': layer_params_list[-1]['num_rfs'],  # previous layer num rfs
-            'tile_dim_NxN': 4,
-            'num_rfs': 800,  # per tile
+            'tile_dim_NxN': 2,
+            'num_rfs': 400,  # per tile
             'lr': 1.0 / 1000,
             'input_concat_timesteps': 1
         })
 
         # 3
         layer_params_list.append({
-            'input_num_tiles_NxN': 8,  # previous layer (num_tiles X num_tiles)
-            'input_num_rfs_per_tile': layer_params_list[-1]['num_rfs'],  # previous layer num rfs
-            'tile_dim_NxN': 1,
-            'num_rfs': 800,  # per tile
-            'lr': 1.0 / 1000,
-            'input_concat_timesteps': 4
-        })
-
-        # 4
-        layer_params_list.append({
-            'input_num_tiles_NxN': 8,  # previous layer (num_tiles X num_tiles)
-            'input_num_rfs_per_tile': layer_params_list[-1]['num_rfs'],  # previous layer num rfs
-            'tile_dim_NxN': 8,
-            'num_rfs': 800,  # per tile
-            'lr': 1.0 / 1000,
-            'input_concat_timesteps': 1
-        })
-
-        # 5
-        layer_params_list.append({
             'input_num_tiles_NxN': 1,  # previous layer (num_tiles X num_tiles)
             'input_num_rfs_per_tile': layer_params_list[-1]['num_rfs'],  # previous layer num rfs
             'tile_dim_NxN': 1,
-            'num_rfs': 800,  # per tile
+            'num_rfs': 80,  # per tile
             'lr': 1.0 / 1000,
             'input_concat_timesteps': 4
         })
+        #
+        # # 4
+        # layer_params_list.append({
+        #     'input_num_tiles_NxN': 8,  # previous layer (num_tiles X num_tiles)
+        #     'input_num_rfs_per_tile': layer_params_list[-1]['num_rfs'],  # previous layer num rfs
+        #     'tile_dim_NxN': 8,
+        #     'num_rfs': 800,  # per tile
+        #     'lr': 1.0 / 1000,
+        #     'input_concat_timesteps': 1
+        # })
+        #
+        # # 5
+        # layer_params_list.append({
+        #     'input_num_tiles_NxN': 1,  # previous layer (num_tiles X num_tiles)
+        #     'input_num_rfs_per_tile': layer_params_list[-1]['num_rfs'],  # previous layer num rfs
+        #     'tile_dim_NxN': 1,
+        #     'num_rfs': 800,  # per tile
+        #     'lr': 1.0 / 1000,
+        #     'input_concat_timesteps': 4
+        # })
 
         self.num_layers = len(layer_params_list)
 
@@ -146,9 +150,9 @@ class LayeredTiledRateControlWTA(object):
             layer_params['network_type'] = 'seq-kmeans'
 
             if layer_num == 0:
-                self.layers.append(RateControlWTABRainLayer0(params=layer_params))
+                self.layers.append(IterWTABRainLayer0(params=layer_params))
             else:
-                self.layers.append(RateControlWTABRainLayerN(params=layer_params))
+                self.layers.append(IterWTABRainLayerN(params=layer_params))
 
             state_dim_tmp = self.layers[layer_num].get_num_tiles_NxN() * self.layers[layer_num].get_num_tiles_NxN() * self.layers[layer_num].get_num_rfs_per_tile()
 
@@ -269,67 +273,69 @@ class LayeredTiledRateControlWTA(object):
         output_events_L1 = self.output_event_histories[1].get_state(delay=0).copy().reshape((num_tiles_NxN_L1, num_tiles_NxN_L1, num_rfs_per_tile_L1))
         weights_L1 = self.layers[1].weights
 
-        num_tiles_NxN_L2 = self.layers[2].get_num_tiles_NxN()
-        num_rfs_per_tile_L2 = self.layers[2].get_num_rfs_per_tile()
-        tile_dim_NxN_L2 = self.layers[2].get_tile_dim_NxN()
-        output_events_L2 = self.output_event_histories[2].get_state(delay=0).copy().reshape((num_tiles_NxN_L2, num_tiles_NxN_L2, num_rfs_per_tile_L2))
-        weights_L2 = self.layers[2].weights
+        # num_tiles_NxN_L2 = self.layers[2].get_num_tiles_NxN()
+        # num_rfs_per_tile_L2 = self.layers[2].get_num_rfs_per_tile()
+        # tile_dim_NxN_L2 = self.layers[2].get_tile_dim_NxN()
+        # output_events_L2 = self.output_event_histories[2].get_state(delay=0).copy().reshape((num_tiles_NxN_L2, num_tiles_NxN_L2, num_rfs_per_tile_L2))
+        # weights_L2 = self.layers[2].weights
 
-        num_tiles_NxN_L3 = self.layers[3].get_num_tiles_NxN()
-        num_rfs_per_tile_L3 = self.layers[3].get_num_rfs_per_tile()
-        tile_dim_NxN_L3 = self.layers[3].get_tile_dim_NxN()
-        output_events_L3 = self.output_event_histories[3].get_state(delay=0).copy().reshape((num_tiles_NxN_L3, num_tiles_NxN_L3, num_rfs_per_tile_L3))
-        weights_L3 = self.layers[3].weights
-
-        num_tiles_NxN_L4 = self.layers[4].get_num_tiles_NxN()
-        num_rfs_per_tile_L4 = self.layers[4].get_num_rfs_per_tile()
-        tile_dim_NxN_L4 = self.layers[4].get_tile_dim_NxN()
-        output_events_L4 = self.output_event_histories[4].get_state(delay=0).copy().reshape((num_tiles_NxN_L4, num_tiles_NxN_L4, num_rfs_per_tile_L4))
-        weights_L4 = self.layers[4].weights
-
-        num_tiles_NxN_L5 = self.layers[5].get_num_tiles_NxN()
-        num_rfs_per_tile_L5 = self.layers[5].get_num_rfs_per_tile()
-        tile_dim_NxN_L5 = self.layers[5].get_tile_dim_NxN()
-        output_events_L5 = self.output_event_histories[5].get_state(delay=0).copy().reshape((num_tiles_NxN_L5, num_tiles_NxN_L5, num_rfs_per_tile_L5))
-        weights_L5 = self.layers[5].weights
+        # num_tiles_NxN_L3 = self.layers[3].get_num_tiles_NxN()
+        # num_rfs_per_tile_L3 = self.layers[3].get_num_rfs_per_tile()
+        # tile_dim_NxN_L3 = self.layers[3].get_tile_dim_NxN()
+        # output_events_L3 = self.output_event_histories[3].get_state(delay=0).copy().reshape((num_tiles_NxN_L3, num_tiles_NxN_L3, num_rfs_per_tile_L3))
+        # weights_L3 = self.layers[3].weights
+        #
+        # num_tiles_NxN_L4 = self.layers[4].get_num_tiles_NxN()
+        # num_rfs_per_tile_L4 = self.layers[4].get_num_rfs_per_tile()
+        # tile_dim_NxN_L4 = self.layers[4].get_tile_dim_NxN()
+        # output_events_L4 = self.output_event_histories[4].get_state(delay=0).copy().reshape((num_tiles_NxN_L4, num_tiles_NxN_L4, num_rfs_per_tile_L4))
+        # weights_L4 = self.layers[4].weights
+        #
+        # num_tiles_NxN_L5 = self.layers[5].get_num_tiles_NxN()
+        # num_rfs_per_tile_L5 = self.layers[5].get_num_rfs_per_tile()
+        # tile_dim_NxN_L5 = self.layers[5].get_tile_dim_NxN()
+        # output_events_L5 = self.output_event_histories[5].get_state(delay=0).copy().reshape((num_tiles_NxN_L5, num_tiles_NxN_L5, num_rfs_per_tile_L5))
+        # weights_L5 = self.layers[5].weights
 
         # 5 -> 4
 
-        cy_weigh_in_with_out(output_events_L4,  # input events to weigh (multiply with above layer's winning RF weights)
-                             num_tiles_NxN_L4,
-                             num_rfs_per_tile_L4,
-                             output_events_L5,  # get winning RF index of output layer, per tile: this is in the space of input layer events
-                             weights_L5,  # winning (and all other) RF weights
-                             num_tiles_NxN_L5,
-                             num_rfs_per_tile_L5,
-                             tile_dim_NxN_L5)
+        # cy_weigh_in_with_out(output_events_L4,  # input events to weigh (multiply with above layer's winning RF weights)
+        #                      num_tiles_NxN_L4,
+        #                      num_rfs_per_tile_L4,
+        #                      output_events_L5,  # get winning RF index of output layer, per tile: this is in the space of input layer events
+        #                      weights_L5,  # winning (and all other) RF weights
+        #                      num_tiles_NxN_L5,
+        #                      num_rfs_per_tile_L5,
+        #                      tile_dim_NxN_L5)
+        #
+        # cy_weigh_in_with_out(output_events_L3,  # input events to weigh (multiply with above layer's winning RF weights)
+        #                      num_tiles_NxN_L3,
+        #                      num_rfs_per_tile_L3,
+        #                      output_events_L4,  # get winning RF index of output layer, per tile: this is in the space of input layer events
+        #                      weights_L4,  # winning (and all other) RF weights
+        #                      num_tiles_NxN_L4,
+        #                      num_rfs_per_tile_L4,
+        #                      tile_dim_NxN_L4)
 
-        cy_weigh_in_with_out(output_events_L3,  # input events to weigh (multiply with above layer's winning RF weights)
-                             num_tiles_NxN_L3,
-                             num_rfs_per_tile_L3,
-                             output_events_L4,  # get winning RF index of output layer, per tile: this is in the space of input layer events
-                             weights_L4,  # winning (and all other) RF weights
-                             num_tiles_NxN_L4,
-                             num_rfs_per_tile_L4,
-                             tile_dim_NxN_L4)
+        # cy_weigh_in_with_out(output_events_L2,  # input events to weigh (multiply with above layer's winning RF weights)
+        #                      num_tiles_NxN_L2,
+        #                      num_rfs_per_tile_L2,
+        #                      output_events_L3,  # get winning RF index of output layer, per tile: this is in the space of input layer events
+        #                      weights_L3,  # winning (and all other) RF weights
+        #                      num_tiles_NxN_L3,
+        #                      num_rfs_per_tile_L3,
+        #                      tile_dim_NxN_L3)
 
-        cy_weigh_in_with_out(output_events_L2,  # input events to weigh (multiply with above layer's winning RF weights)
-                             num_tiles_NxN_L2,
-                             num_rfs_per_tile_L2,
-                             output_events_L3,  # get winning RF index of output layer, per tile: this is in the space of input layer events
-                             weights_L3,  # winning (and all other) RF weights
-                             num_tiles_NxN_L3,
-                             num_rfs_per_tile_L3,
-                             tile_dim_NxN_L3)
-
-        cy_weigh_in_with_out(output_events_L1,  # input events to weigh (multiply with above layer's winning RF weights)
-                             num_tiles_NxN_L1,
-                             num_rfs_per_tile_L1,
-                             output_events_L2,  # get winning RF index of output layer, per tile: this is in the space of input layer events
-                             weights_L2,  # winning (and all other) RF weights
-                             num_tiles_NxN_L2,
-                             num_rfs_per_tile_L2,
-                             tile_dim_NxN_L2)
+        # print(np.sum(output_events_L2), np.nonzero(output_events_L2)[0])
+        #
+        # cy_weigh_in_with_out(output_events_L1,  # input events to weigh (multiply with above layer's winning RF weights)
+        #                      num_tiles_NxN_L1,
+        #                      num_rfs_per_tile_L1,
+        #                      output_events_L2,  # get winning RF index of output layer, per tile: this is in the space of input layer events
+        #                      weights_L2,  # winning (and all other) RF weights
+        #                      num_tiles_NxN_L2,
+        #                      num_rfs_per_tile_L2,
+        #                      tile_dim_NxN_L2)
 
         cy_weigh_in_with_out(output_events_L0,  # input events to weigh (multiply with above layer's winning RF weights)
                              num_tiles_NxN_L0,

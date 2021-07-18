@@ -178,3 +178,37 @@ def cy_kmeans_do_learning(np.ndarray[np.int64_t, ndim=1] best_rf_per_tile,
 
     
     # self.weights[best_rf, :] = lr * input_state + (1.0 - lr) * self.weights[best_rf, :]
+
+@cython.boundscheck(False) # turn off bounds-checking for entire function
+@cython.wraparound(False)  # turn off negative index wrapping for entire function
+def cy_kmeans_do_learning_per_tile_lr(np.ndarray[np.int64_t, ndim=1] best_rf_per_tile,
+                                 np.ndarray[np.float32_t, ndim=2] weights,
+                                 np.ndarray[np.float32_t, ndim=2] input_states_tiles,
+                                 np.ndarray[np.float32_t, ndim=1] per_tile_lr):
+
+
+    # best_rf_per_tile: (256,)
+    # weights: (400, 128)
+    # input_states_tiles: (256, 128)
+
+    cdef np.int32_t num_rfs, num_tiles, input_dim
+
+    cdef np.int32_t tile_index, best_rf, k
+
+    cdef np.float32_t lr
+
+    num_tiles = best_rf_per_tile.shape[0]
+    num_rfs = weights.shape[0]
+    input_dim = weights.shape[1]
+
+    for tile_index in range(num_tiles):
+    #for tile_index in prange(num_tiles, nogil=True, schedule='dynamic', num_threads=4):
+        best_rf = best_rf_per_tile[tile_index]
+        lr = per_tile_lr[tile_index]
+
+        for k in range(input_dim):
+            weights[best_rf, k] = lr * input_states_tiles[tile_index, k] + (1.0 - lr) * weights[best_rf, k]
+
+
+
+    # self.weights[best_rf, :] = lr * input_state + (1.0 - lr) * self.weights[best_rf, :]

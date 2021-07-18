@@ -29,7 +29,7 @@ from robot_preprocess_classes.event_pre_processor import EventPreProcessor
 
 
 DISABLE_BRAIN = False  # for testing input by itself; also starts slow display
-RF_IM_DIM = 256  # 8, 16, 32, 64, 128
+RF_IM_DIM = 16  # 8, 16, 32, 64, 128
 
 ROOT_DIR = '/srv'
 # ROOT_DIR = '/home/csaba'

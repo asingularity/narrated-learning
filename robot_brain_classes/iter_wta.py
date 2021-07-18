@@ -155,6 +155,9 @@ class IterWTABrain(object):
 
                 best_rf = np.argmax(RF_norm_dot)
 
+                # experiment to force better RF-norm-dot
+                #lr = self.lr * pow(np.amax(RF_norm_dot), 3)
+
                 lr = self.lr
                 self.weights[best_rf, :] = lr * input_state + (1.0 - lr) * self.weights[best_rf, :]
 

@@ -6,7 +6,7 @@ import random
 import pickle
 from math import sqrt
 from brain_components_classes.states_history import StatesLimitedHistory
-from cython_tiled_wta import cy_compute_error_measures, cy_kmeans_do_learning, cy_tile_the_input, cy_tile_the_input_layer_N
+from cython_tiled_wta import cy_compute_error_measures, cy_kmeans_do_learning, cy_tile_the_input, cy_tile_the_input_layer_N, cy_kmeans_do_learning_per_tile_lr
 from offline_analyses.try_sparsify_3 import make_im
 
 from utils.one_time_messages import OneTimeMessages
@@ -140,6 +140,7 @@ class IterWTABRainLayerN(object):
 
         # reshape
         input_events_by_tile_r_c = concat_input_events.reshape(input_events.shape)
+        #print (np.nonzero(input_events_by_tile_r_c)[0])
 
         tiles_inputs = np.zeros((int(self.num_tiles_NxN * self.num_tiles_NxN), self.tile_input_state_dim), np.float32)
 
@@ -150,50 +151,72 @@ class IterWTABRainLayerN(object):
                                   self.tile_dim_NxN,
                                   self.num_tiles_NxN)
 
-        # tile_index = tile_r * num_tiles_NxN + tile_c
         input_states_tiles = tiles_inputs
-
-        # *** selection ***
-        best_rf_per_tile = None
-
-        errors_all_rfs = self._get_error_measures(rfs=self.weights, input_states_tiles=input_states_tiles)
-
-        assert errors_all_rfs['RF-norm-dot'].shape[0] == (self.num_tiles_NxN * self.num_tiles_NxN)
-        assert errors_all_rfs['RF-norm-dot'].shape[1] == self.num_rfs
-
-        best_rf_per_tile = np.argmin(errors_all_rfs['RF-norm-dot'], axis=1)
-
-        # to do later: error plots
-
-        # *** learning ***
-
-        lr = self.lr
-        cy_kmeans_do_learning(best_rf_per_tile, self.weights, input_states_tiles, np.float32(lr))
-
-        # *** time step ***
-        self.t += 1
-
-        # output_events: [self.num_tiles_NxN, self.num_tiles_NxN, self.num_rfs_per_tile]
-        #   !! also need to do for layer 0 class !!
-        #   use best_rf_per_tile- reshape must be correct! since that one is flat over all tiles
-        #       tile_index = tile_r * num_tiles_NxN + tile_c
-        #       so
-        #       tile_r = int(tile_index / num_tiles_NxN)
-        #       tile_c = int(tile_index % num_tiles_NxN)
 
         tile_r = (np.arange(self.num_tiles_NxN * self.num_tiles_NxN, dtype=np.int) / self.num_tiles_NxN).astype(np.int)
         tile_c = (np.arange(self.num_tiles_NxN * self.num_tiles_NxN, dtype=np.int) % self.num_tiles_NxN).astype(np.int)
 
         output_events = np.zeros((self.num_tiles_NxN, self.num_tiles_NxN, self.num_rfs), np.float32)
-        output_events[tile_r, tile_c, best_rf_per_tile] = 1
 
-        # how to set this: cython?
-        # self.last_weighted_inputs = np.zeros((self.num_tiles_NxN, self.num_tiles_NxN, self.tile_input_state_dim))
+        max_rfs_active = 6
 
         rf_offset = np.arange(self.num_tiles_NxN * self.num_tiles_NxN) * self.num_rfs
         self.rfs_raster_history[:, self.raster_t] = 0
 
-        self.rfs_raster_history[rf_offset + best_rf_per_tile, self.raster_t] = 1
+        for k in range(max_rfs_active):
+
+            assert self.weights.shape[0] == self.num_rfs
+            assert self.weights.shape[1] == self.tile_input_state_dim
+
+            assert input_states_tiles.shape[0] == (self.num_tiles_NxN * self.num_tiles_NxN)
+            assert input_states_tiles.shape[1] == self.tile_input_state_dim
+
+            #print('******')
+            #print(np.nonzero(input_states_tiles)[1], input_states_tiles[np.nonzero(input_states_tiles)])
+
+            rf_norm_dot = self._get_rf_norm_dot(rfs=self.weights, input_states_tiles=input_states_tiles)
+
+            assert rf_norm_dot.shape[0] == (self.num_tiles_NxN * self.num_tiles_NxN)
+            assert rf_norm_dot.shape[1] == self.num_rfs
+
+            # find best RF per tile
+            best_rf_per_tile = np.argmax(rf_norm_dot, axis=1)
+            #print(best_rf_per_tile, np.amax(rf_norm_dot))
+
+            # learn best RF per tile
+            # TODO REAL
+            #per_tile_lr = np.square(self.lr * np.amax(rf_norm_dot, axis=1))
+
+            # TODO control
+            per_tile_lr = np.ones(self.num_tiles_NxN * self.num_tiles_NxN, np.float32) * self.lr
+
+            cy_kmeans_do_learning_per_tile_lr(best_rf_per_tile, self.weights, input_states_tiles, per_tile_lr)
+
+            # if second: ONLY for tiles with rf norm dot over 0.5, set output event and subtract RF from input_state for that tile (<0 -> 0)
+
+            if 1:
+                # hack: with this and max_rfs_active == 1, it's what we had before (hard 1-wta)
+                good_indices = np.arange(self.num_tiles_NxN * self.num_tiles_NxN)
+            else:
+                # take subset of best_rf_per_tile
+                rf_norm_dot_best = np.amax(rf_norm_dot, axis=1)
+
+                good_indices = np.nonzero(rf_norm_dot_best > 0.5)[0]
+
+            output_events[tile_r[good_indices], tile_c[good_indices], best_rf_per_tile[good_indices]] = 1
+            self.rfs_raster_history[(rf_offset + best_rf_per_tile)[good_indices], self.raster_t] = 1
+
+            # subtract RF
+            subtract_RF_do = True
+
+            if subtract_RF_do:
+                tmp = input_states_tiles[good_indices, :]
+                tmp = tmp - self.weights[best_rf_per_tile[good_indices], :]
+                tmp[np.nonzero(tmp < 0)] = 0
+
+                input_states_tiles[good_indices, :] = tmp[:]
+
+        self.t += 1
 
         self.raster_t += 1
         if self.raster_t >= self.raster_steps:
@@ -222,22 +245,12 @@ class IterWTABRainLayerN(object):
 
         return sum_input_states
 
-    def _get_error_measures(self, rfs, input_states_tiles):
+    def _get_rf_norm_dot(self, rfs, input_states_tiles):
 
         assert input_states_tiles.shape[0] == (self.num_tiles_NxN * self.num_tiles_NxN)
         assert input_states_tiles.shape[1] == self.tile_input_state_dim
 
-        # this got a false positive:
-        # if rfs.shape[0] == self.tile_input_state_dim:
-        #     rfs = rfs[np.newaxis, :]
-
         assert rfs.shape[1] == input_states_tiles.shape[1]
-
-        # re-enable other errors later, have to modify for multiple tiles:
-        #L2 = np.sqrt(np.sum(np.square(rfs - input_arr), axis=1))
-        #L1 = np.sum(np.abs(rfs - input_arr), axis=1)
-        #input_norm_L1 = np.sum(np.abs(rfs - input_arr), axis=1) / np.sum(input_arr)
-        #input_norm_L2 = np.sqrt(np.sum(np.square(rfs - input_arr), axis=1)) / np.sum(np.square(input_arr))
 
         # why is this one negative? because it is actually a positive value: the larger, the better
         fix_offset = 1e-16
@@ -246,16 +259,9 @@ class IterWTABRainLayerN(object):
         # print('Layer N: rfs:', rfs.shape, ', input_states_tiles:', input_states_tiles.shape)
         cy_compute_error_measures(rfs, input_states_tiles, fix_offset, RF_norm_dot)
 
-        # re-enable other errors later: 'L2', 'L1', 'input-norm-L1', 'input-norm-L2',
-        errors = {
-            #'L2': L2,
-            #'L1': L1,
-            #'input-norm-L1': input_norm_L1,
-            #'input-norm-L2': input_norm_L2,
-            'RF-norm-dot': RF_norm_dot
-        }
+        RF_norm_dot = -RF_norm_dot  # undo negative in cython
 
-        return errors
+        return RF_norm_dot
 
 
 
