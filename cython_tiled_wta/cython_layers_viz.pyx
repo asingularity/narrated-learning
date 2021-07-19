@@ -59,6 +59,10 @@ def cy_weigh_in_with_out(np.ndarray[np.float32_t, ndim=3] input_events,
 
                     # TODO found the winning output RF for this output tile
 
+                    # TODO fix: should be zero if not weighed at all (ie no output winner !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+                    # TODO fix: should be zero if not weighed at all (ie no output winner !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+                    # TODO fix: should be zero if not weighed at all (ie no output winner !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
                     # TODO for every input tile:
                     for in_tile_r in range(in_tile_r_start, in_tile_r_start + output_tile_dim_NxN):
                         for in_tile_c in range(in_tile_c_start, in_tile_c_start + output_tile_dim_NxN):
@@ -67,6 +71,8 @@ def cy_weigh_in_with_out(np.ndarray[np.float32_t, ndim=3] input_events,
 
                                 if input_events[in_tile_r, in_tile_c, in_rf] == 1:
                                     # TODO found winner
+
+
                                     input_events[in_tile_r, in_tile_c, in_rf] = input_events[in_tile_r, in_tile_c, in_rf] * output_weights[out_rf, in_index]
 
                                 in_index = in_index + 1

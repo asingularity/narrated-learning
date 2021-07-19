@@ -74,7 +74,9 @@ class LayeredTiledRateControlWTA(object):
             'tile_im_dim': 8,
             'num_rfs': 400,  # per tile
             'lr': 1.0 / 1000,
-            'input_concat_timesteps': 1
+            'input_concat_timesteps': 1,
+            'do_conditional_lr': params['do_conditional_lr'],  # False
+            'skip_zero_inputs': params['skip_zero_inputs_to_layer_0']
         })
 
         # 1
@@ -153,10 +155,7 @@ class LayeredTiledRateControlWTA(object):
         layer_num = 0
         for layer_params in layer_params_list:
             # common params
-            layer_params['rel_lr_bg'] = 0.0
             layer_params['max_time'] = 5000000
-            layer_params['do_raster_plots_every_k_im'] = None
-            layer_params['network_type'] = 'seq-kmeans'
 
             if layer_num == 0:
                 self.layers.append(IterWTABRainLayer0(params=layer_params))
@@ -198,7 +197,33 @@ class LayeredTiledRateControlWTA(object):
         print()
 
     def get_final_errors_dict(self):
+        # TODO RETURN RF-NORM-DOT!!! from all layers! to plot/compare separately
+        #   average over all tiles
+        #   also return average over all layers
+        #   also return rf sum as below requires!
+
+        # TODO ALSO CONVERT LAYER 0 TO ITER!!! SAME PARAMS! THEN ADD TO PARAMS FOR LAYER 0 ABOVE LIKE FOR THE OTHERS!
+        #   basically matching what is in iter_wta.py (this is a prototype of layer 0 class basically but no tiling)
+
+        # TODO then finish run_sweeps_perception
+
+        # instead of net dot: will also record mean rf sum at the end as an "error" to plot
+
         d = {}
+
+        sum_rf_norm_dot = 0.0
+
+        for layer_n in self.num_layers:
+            err = self.layers[layer_n].get_final_errors_dict()
+
+            d['layer_' + str(layer_n) + '__rf-norm-dot__mean-by-t'] = err['rf-norm-dot__mean-by-t']
+            d['layer_' + str(layer_n) + '__mean-sum-rf'] = err['mean-sum-rf']
+
+            sum_rf_norm_dot += err['rf-norm-dot__mean-by-t']
+
+        d['average__rf-norm-dot__mean-by-t'] = sum_rf_norm_dot / self.num_layers
+        # net dot doesn't make sense to average over layers
+
         return d
 
     def set_plots_folder(self, folder):
@@ -240,8 +265,7 @@ class LayeredTiledRateControlWTA(object):
             self.output_event_histories[layer_n].process_new_states([output_events.flatten()])
 
     def do_plots(self):
-        # TODO skip layer 0 plots for now
-        for layer_num in range(1, self.num_layers):
+        for layer_num in range(0, self.num_layers):
             self.layers[layer_num].do_plots(extra_info=str(layer_num))
 
     def get_table_ims(self):

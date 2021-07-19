@@ -16,10 +16,9 @@ import matplotlib.pyplot as plt
 from sim_folder_manager import SimFolderManager
 from robot_sensor_classes.video_playback import VideoPlaybackSensor
 from robot_preprocess_classes.event_pre_processor import EventPreProcessor
-#from robot_brain_classes.rate_control_wta_heirarchy import RateControlWTABRain
 
 
-RF_IM_DIM = 8  # 8, 16, 32, 64
+RF_IM_DIM = 16  # 8, 16, 32, 64
 ROOT_DIR = '/srv'
 
 
@@ -79,7 +78,13 @@ def get_brain_params():  # override_params
     return brain_params
 
 
+
 def run_one_sim(sim_params):
+    from robot_brain_classes.layered_tiled_rate_control_wta import LayeredTiledRateControlWTA
+
+
+
+def run_one_sim_OLD(sim_params):
     from robot_brain_classes.rate_control_wta import RateControlWTABRain
 
     sim_params['brain_params']['max_time'] = sim_params['max_time']
