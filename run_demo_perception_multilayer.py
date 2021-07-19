@@ -90,7 +90,7 @@ def get_brain_params():
     brain_params = {
         'input_im_dim': RF_IM_DIM,
         'num_iters_per_frame': 6,
-        'do_conditional_lr': False,  # False
+        'do_conditional_lr': True,  # False
         'subtract_remainder': True,  # True
         'skip_zero_inputs_to_layer_0': True  # generally true but throws off error averages? should work with False but test first
     }

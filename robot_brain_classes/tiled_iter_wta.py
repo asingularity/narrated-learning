@@ -340,6 +340,8 @@ class IterWTABRainLayer0(object):
         self.raster_t = 0  # circular; draw vertical line on plot here
 
         input_state_dim = int(2 * self.input_im_dim_NxN * self.input_im_dim_NxN)
+        self.input_state_dim = input_state_dim
+
         self.input_raster_history = np.zeros((input_state_dim, self.raster_steps), np.uint8)
 
         self.rfs_raster_history = np.zeros((self.num_rfs * self.num_tiles_NxN * self.num_tiles_NxN, self.raster_steps), np.uint8)
@@ -453,6 +455,8 @@ class IterWTABRainLayer0(object):
         # ************************ prepare for iter ************************
 
         # TODO add in iters later to layer 0 !!!
+
+        self.rfs_raster_history[:, self.raster_t] = 0
 
         # ************************ do iter ************************
 
@@ -614,7 +618,6 @@ class IterWTABRainLayer0(object):
         # plot error over time (including over iterations within batches)
         # show RFs
 
-
     def do_plots(self, extra_info=''):
 
         max_tiles_to_plot = 8  # so we don't plot a million things
@@ -646,6 +649,18 @@ class IterWTABRainLayer0(object):
             self.fig_bar.savefig(self.plots_folder + "/time_averaged_mean_rf_norm_dot_" + extra_info + ".png", dpi=100)
         else:
             self.fig_bar.savefig(self.plots_folder + "/time_averaged_mean_rf_norm_dot.png", dpi=100)
+
+        self.ax_bar.cla()
+        raster_plot = np.transpose(np.multiply(self.input_raster_history, np.arange(self.input_state_dim)[:, np.newaxis]))
+        t = np.arange(raster_plot.shape[0])
+        self.ax_bar.plot(t, raster_plot, color='b', marker='.', linestyle='')
+        self.ax_bar.axvline(x=self.raster_t, color='g')
+        self.fig_bar.savefig(self.plots_folder + "/raster_inputs.png", dpi=100)
+
+        if len(extra_info) > 0:
+            self.fig_bar.savefig(self.plots_folder + "/raster_inputs_" + extra_info + ".png", dpi=100)
+        else:
+            self.fig_bar.savefig(self.plots_folder + "/raster_inputs.png", dpi=100)
 
     def do_plots_OLD(self):
 
