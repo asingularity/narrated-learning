@@ -111,7 +111,7 @@ class IterWTABRainLayerN(object):
 
     def do_plots(self, extra_info=''):
 
-        max_tiles_to_plot = 8  # so we don't plot a million things
+        max_tiles_to_plot = 16  # so we don't plot a million things
 
         #print('STARTING PLOTS')
         self.ax_bar.cla()
@@ -620,7 +620,7 @@ class IterWTABRainLayer0(object):
 
     def do_plots(self, extra_info=''):
 
-        max_tiles_to_plot = 8  # so we don't plot a million things
+        max_tiles_to_plot = 16  # so we don't plot a million things
 
         #print('STARTING PLOTS')
         self.ax_bar.cla()
