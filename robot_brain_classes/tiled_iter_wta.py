@@ -84,6 +84,9 @@ class IterWTABRainLayerN(object):
         self.rf_norm_dot_per_frame = np.zeros(self.max_time)
         self.mean_rf_norm_dot_per_frame = np.zeros(self.max_time)  # time average
 
+        self.rf_size_per_frame = np.zeros(self.max_time)
+        self.mean_rf_size_per_frame = np.zeros(self.max_time)  # time average
+
         # ******************************* init sim *******************************
 
         self.t = 0
@@ -140,6 +143,14 @@ class IterWTABRainLayerN(object):
             self.fig_bar.savefig(self.plots_folder + "/time_averaged_mean_rf_norm_dot_" + extra_info + ".png", dpi=100)
         else:
             self.fig_bar.savefig(self.plots_folder + "/time_averaged_mean_rf_norm_dot.png", dpi=100)
+
+        self.ax_bar.cla()
+        self.ax_bar.plot(self.mean_rf_size_per_frame[0:self.t], color='k', marker='.')
+
+        if len(extra_info) > 0:
+            self.fig_bar.savefig(self.plots_folder + "/time_averaged_mean_rf_size_" + extra_info + ".png", dpi=100)
+        else:
+            self.fig_bar.savefig(self.plots_folder + "/time_averaged_mean_rf_size.png", dpi=100)
 
 
     def process_input(self, input_events):
@@ -238,6 +249,9 @@ class IterWTABRainLayerN(object):
 
         self.rf_norm_dot_per_frame[self.t] = mean_rf_norm_dot
         self.mean_rf_norm_dot_per_frame[self.t] = np.mean(self.rf_norm_dot_per_frame[max(0, self.t - self.error_mean_time):self.t])
+
+        self.rf_size_per_frame[self.t] = np.mean(np.sum(self.weights, axis=1))
+        self.mean_rf_size_per_frame[self.t] = np.mean(self.rf_size_per_frame[max(0, self.t - self.error_mean_time):self.t])
 
         self.t += 1
 
