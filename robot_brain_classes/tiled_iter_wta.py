@@ -208,6 +208,8 @@ class IterWTABRainLayerN(object):
 
         # ************************ do iter ************************
 
+        input_states_tiles_orig = input_states_tiles.copy()
+
         for k in range(self.num_iters_per_frame):
 
             assert self.weights.shape[0] == self.num_rfs
@@ -230,7 +232,7 @@ class IterWTABRainLayerN(object):
 
             # learn best RF per tile
             if self.do_conditional_lr:
-                per_tile_lr = np.square(self.lr * np.amax(rf_norm_dot, axis=1))
+                per_tile_lr = self.lr * np.square(np.amax(rf_norm_dot, axis=1))
             else:
                 per_tile_lr = np.ones(self.num_tiles_NxN * self.num_tiles_NxN, np.float32) * self.lr
 
@@ -273,7 +275,11 @@ class IterWTABRainLayerN(object):
         # reconstruct error
 
         #tmp = np.mean(np.abs(tiles_inputs_reconstruction - input_states_tiles), axis=1)  # mean over inputs
-        tmp = np.divide(np.sum(np.abs(tiles_inputs_reconstruction - input_states_tiles), axis=1), np.sum(input_states_tiles, axis=1))
+
+        tiles_inputs_reconstruction[np.nonzero(tiles_inputs_reconstruction > 1)] = 1  # TODO ???
+
+        tmp = np.divide(np.sum(np.abs(tiles_inputs_reconstruction - input_states_tiles_orig), axis=1), np.sum(input_states_tiles_orig, axis=1))
+
         reconstruct_err = np.mean(tmp)  # mean over tiles
 
         self.reconstruct_err_per_frame[self.t] = reconstruct_err
@@ -504,6 +510,7 @@ class IterWTABRainLayer0(object):
         self.rfs_raster_history[:, self.raster_t] = 0
 
         # ************************ do iter ************************
+        input_states_tiles_orig = input_states_tiles.copy()
 
         rf_norm_dot = self._get_rf_norm_dot(rfs=self.weights, input_states_tiles=input_states_tiles)
 
@@ -513,7 +520,7 @@ class IterWTABRainLayer0(object):
         best_rf_per_tile = np.argmax(rf_norm_dot, axis=1)
 
         if self.do_conditional_lr:
-            per_tile_lr = np.square(self.lr * np.amax(rf_norm_dot, axis=1))
+            per_tile_lr = self.lr * np.square(np.amax(rf_norm_dot, axis=1))
         else:
             per_tile_lr = np.ones(self.num_tiles_NxN * self.num_tiles_NxN, np.float32) * self.lr
 
@@ -534,6 +541,7 @@ class IterWTABRainLayer0(object):
         # output_events = np.zeros((self.num_tiles_NxN, self.num_tiles_NxN, self.num_rfs), np.float32)
 
         tiles_inputs_reconstruction[:, :] = tiles_inputs_reconstruction[:, :] + self.weights[best_rf_per_tile, :]
+        tiles_inputs_reconstruction[np.nonzero(tiles_inputs_reconstruction > 1)] = 1  # TODO ???
 
         tile_r = (np.arange(self.num_tiles_NxN * self.num_tiles_NxN, dtype=np.int) / self.num_tiles_NxN).astype(np.int)
         tile_c = (np.arange(self.num_tiles_NxN * self.num_tiles_NxN, dtype=np.int) % self.num_tiles_NxN).astype(np.int)
@@ -555,10 +563,10 @@ class IterWTABRainLayer0(object):
 
         # reconstruct error
 
-        tmp_sum = np.sum(input_states_tiles, axis=1)
-        tmp = np.divide(np.sum(np.abs(tiles_inputs_reconstruction - input_states_tiles), axis=1), tmp_sum)  # mean over inputs
+        tmp_sum = np.sum(input_states_tiles_orig, axis=1)
+        tmp = np.divide(np.sum(np.abs(tiles_inputs_reconstruction - input_states_tiles_orig), axis=1), tmp_sum)  # mean over inputs
         tmp[np.nonzero(tmp_sum==0)] = 0
-        
+
         reconstruct_err = np.mean(tmp)  # mean over tiles
 
         self.reconstruct_err_per_frame[self.t] = reconstruct_err
