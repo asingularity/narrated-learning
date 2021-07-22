@@ -93,6 +93,7 @@ def get_brain_params():
         'do_conditional_lr': True,  # False
         'subtract_remainder': True,  # True
         'skip_zero_inputs_to_layer_0': True  # generally true but throws off error averages? should work with False but test first
+        # TODO add: normalize concat
     }
 
     return brain_params

@@ -212,16 +212,21 @@ class LayeredTiledRateControlWTA(object):
         d = {}
 
         sum_rf_norm_dot = 0.0
+        sum_reconstruct_err = 0.0
 
         for layer_n in self.num_layers:
             err = self.layers[layer_n].get_final_errors_dict()
 
+            d['layer_' + str(layer_n) + '__reconstruct-err'] = err['reconstruct-err']
             d['layer_' + str(layer_n) + '__rf-norm-dot__mean-by-t'] = err['rf-norm-dot__mean-by-t']
             d['layer_' + str(layer_n) + '__mean-sum-rf'] = err['mean-sum-rf']
 
             sum_rf_norm_dot += err['rf-norm-dot__mean-by-t']
+            sum_reconstruct_err += err['reconstruct-err']
 
         d['average__rf-norm-dot__mean-by-t'] = sum_rf_norm_dot / self.num_layers
+        d['average__reconstruct-err'] = sum_reconstruct_err / self.num_layers
+
         # net dot doesn't make sense to average over layers
 
         return d

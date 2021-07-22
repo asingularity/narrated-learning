@@ -42,7 +42,7 @@ class IterWTABRainLayerN(object):
         self.lr = params['lr']  # 1.0 / 1000
 
         self.input_concat_timesteps = params['input_concat_timesteps']
-        self.normalize_concat = False
+        self.normalize_concat = True  # TODO investigate if this can be false; rf norm dot can go over 1 then ...
 
         self.max_time = params['max_time']  # 5000000
 
@@ -86,6 +86,9 @@ class IterWTABRainLayerN(object):
 
         self.rf_size_per_frame = np.zeros(self.max_time)
         self.mean_rf_size_per_frame = np.zeros(self.max_time)  # time average
+
+        self.reconstruct_err_per_frame = np.zeros(self.max_time)
+        self.mean_reconstruct_err_per_frame = np.zeros(self.max_time)
 
         # ******************************* init sim *******************************
 
@@ -152,6 +155,14 @@ class IterWTABRainLayerN(object):
         else:
             self.fig_bar.savefig(self.plots_folder + "/time_averaged_mean_rf_size.png", dpi=100)
 
+        self.ax_bar.cla()
+        self.ax_bar.plot(self.mean_reconstruct_err_per_frame[0:self.t], color='k', marker='.')
+
+        if len(extra_info) > 0:
+            self.fig_bar.savefig(self.plots_folder + "/time_averaged_mean_reconstruct_err_" + extra_info + ".png", dpi=100)
+        else:
+            self.fig_bar.savefig(self.plots_folder + "/time_averaged_mean_reconstruct_err.png", dpi=100)
+
 
     def process_input(self, input_events):
 
@@ -169,6 +180,7 @@ class IterWTABRainLayerN(object):
         #print (np.nonzero(input_events_by_tile_r_c)[0])
 
         tiles_inputs = np.zeros((int(self.num_tiles_NxN * self.num_tiles_NxN), self.tile_input_state_dim), np.float32)
+        tiles_inputs_reconstruction = np.zeros((int(self.num_tiles_NxN * self.num_tiles_NxN), self.tile_input_state_dim), np.float32)
 
         cy_tile_the_input_layer_N(input_events_by_tile_r_c,
                                   self.input_num_tiles_NxN,
@@ -233,6 +245,8 @@ class IterWTABRainLayerN(object):
                 # if second: ONLY for tiles with rf norm dot over 0.5, set output event and subtract RF from input_state for that tile (<0 -> 0)
                 good_indices = np.nonzero(rf_norm_dot_best > 0.5)[0]
 
+            tiles_inputs_reconstruction[good_indices, :] = tiles_inputs_reconstruction[good_indices, :] + self.weights[best_rf_per_tile[good_indices], :]
+
             output_events[tile_r[good_indices], tile_c[good_indices], best_rf_per_tile[good_indices]] = 1
             self.rfs_raster_history[(rf_offset + best_rf_per_tile)[good_indices], self.raster_t] = 1
 
@@ -253,6 +267,14 @@ class IterWTABRainLayerN(object):
         self.rf_size_per_frame[self.t] = np.mean(np.sum(self.weights, axis=1))
         self.mean_rf_size_per_frame[self.t] = np.mean(self.rf_size_per_frame[max(0, self.t - self.error_mean_time):self.t])
 
+        # reconstruct error
+
+        tmp = np.mean(np.abs(tiles_inputs_reconstruction - tiles_inputs), axis=1)  # mean over inputs
+        reconstruct_err = np.mean(tmp)  # mean over tiles
+
+        self.reconstruct_err_per_frame[self.t] = reconstruct_err
+        self.mean_reconstruct_err_per_frame[self.t] = np.mean(self.reconstruct_err_per_frame[max(0, self.t - self.error_mean_time):self.t])
+
         self.t += 1
 
         self.raster_t += 1
@@ -265,6 +287,7 @@ class IterWTABRainLayerN(object):
 
         d = {}
 
+        d['reconstruct-err'] = self.mean_reconstruct_err_per_frame[self.t - 1]
         d['rf-norm-dot__mean-by-t'] = self.mean_rf_norm_dot_per_frame[self.t - 1]
         d['mean-sum-rf'] = np.mean(np.sum(self.weights, axis=1))
 
@@ -375,6 +398,9 @@ class IterWTABRainLayer0(object):
         self.rf_norm_dot_per_frame = np.zeros(self.max_time)
         self.mean_rf_norm_dot_per_frame = np.zeros(self.max_time)  # time average
 
+        self.reconstruct_err_per_frame = np.zeros(self.max_time)
+        self.mean_reconstruct_err_per_frame = np.zeros(self.max_time)
+
         # ******************************* profiling *******************************
 
         # profiling
@@ -457,6 +483,7 @@ class IterWTABRainLayer0(object):
         # input_state_all not used again this function
 
         input_states_tiles = np.zeros((int(self.num_tiles_NxN * self.num_tiles_NxN), self.tile_input_state_dim), np.float32)
+        tiles_inputs_reconstruction = np.zeros((int(self.num_tiles_NxN * self.num_tiles_NxN), self.tile_input_state_dim), np.float32)
 
         cy_tile_the_input(input_events_p, input_events_n,
                           event_coords_r, event_coords_c,
@@ -502,6 +529,8 @@ class IterWTABRainLayer0(object):
 
         # output_events = np.zeros((self.num_tiles_NxN, self.num_tiles_NxN, self.num_rfs), np.float32)
 
+        tiles_inputs_reconstruction[:, :] = tiles_inputs_reconstruction[:, :] + self.weights[best_rf_per_tile, :]
+
         tile_r = (np.arange(self.num_tiles_NxN * self.num_tiles_NxN, dtype=np.int) / self.num_tiles_NxN).astype(np.int)
         tile_c = (np.arange(self.num_tiles_NxN * self.num_tiles_NxN, dtype=np.int) % self.num_tiles_NxN).astype(np.int)
 
@@ -520,6 +549,14 @@ class IterWTABRainLayer0(object):
         self.rf_norm_dot_per_frame[self.t] = mean_rf_norm_dot
         self.mean_rf_norm_dot_per_frame[self.t] = np.mean(self.rf_norm_dot_per_frame[max(0, self.t - self.error_mean_time):self.t])
 
+        # reconstruct error
+
+        tmp = np.mean(np.abs(tiles_inputs_reconstruction - input_states_tiles), axis=1)  # mean over inputs
+        reconstruct_err = np.mean(tmp)  # mean over tiles
+
+        self.reconstruct_err_per_frame[self.t] = reconstruct_err
+        self.mean_reconstruct_err_per_frame[self.t] = np.mean(self.reconstruct_err_per_frame[max(0, self.t - self.error_mean_time):self.t])
+
         self.t += 1
 
         self.raster_t += 1
@@ -532,6 +569,7 @@ class IterWTABRainLayer0(object):
 
         d = {}
 
+        d['reconstruct-err'] = self.mean_reconstruct_err_per_frame[self.t - 1]
         d['rf-norm-dot__mean-by-t'] = self.mean_rf_norm_dot_per_frame[self.t - 1]
         d['mean-sum-rf'] = np.mean(np.sum(self.weights, axis=1))
 
@@ -675,6 +713,14 @@ class IterWTABRainLayer0(object):
             self.fig_bar.savefig(self.plots_folder + "/raster_inputs_" + extra_info + ".png", dpi=100)
         else:
             self.fig_bar.savefig(self.plots_folder + "/raster_inputs.png", dpi=100)
+
+        self.ax_bar.cla()
+        self.ax_bar.plot(self.mean_reconstruct_err_per_frame[0:self.t], color='k', marker='.')
+
+        if len(extra_info) > 0:
+            self.fig_bar.savefig(self.plots_folder + "/time_averaged_mean_reconstruct_err_" + extra_info + ".png", dpi=100)
+        else:
+            self.fig_bar.savefig(self.plots_folder + "/time_averaged_mean_reconstruct_err.png", dpi=100)
 
     def do_plots_OLD(self):
 
