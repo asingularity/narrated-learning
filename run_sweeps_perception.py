@@ -78,13 +78,7 @@ def get_brain_params():  # override_params
     return brain_params
 
 
-
 def run_one_sim(sim_params):
-    from robot_brain_classes.layered_tiled_rate_control_wta import LayeredTiledRateControlWTA
-
-
-
-def run_one_sim_OLD(sim_params):
     from robot_brain_classes.rate_control_wta import RateControlWTABRain
 
     sim_params['brain_params']['max_time'] = sim_params['max_time']
