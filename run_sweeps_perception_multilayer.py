@@ -69,6 +69,7 @@ def get_brain_params():  # override_params
         'skip_zero_inputs_to_layer_0': False  # generally true but throws off error averages? should work with False but test first
         # TODO add: normalize concat
         # TODO add power to use for conditional lr
+        # TODO break out num RFs
     }
 
     # for pname in override_params.keys():
@@ -136,7 +137,7 @@ def get_sweep_sims(param_set, sim_prefix):
         sim_params = {}
 
         # TODO move this elsewhere and should be longer!!!
-        sim_params['max_time'] = 10000  # 5000000
+        sim_params['max_time'] = 1000000  # 5000000
 
         sim_params['brain_params'] = get_brain_params()
         sim_params['sensor_params'] = get_sensors_params()
@@ -178,7 +179,8 @@ def run_several_sweeps():
     # param_sets = [('brain_params', 'num_rfs', [200, 400, 800, 1600, 3200]),
     #               ('brain_params', 'apply_rate_control', [True, False])]
 
-    param_sets = [('brain_params', 'num_iters_per_frame', [1, 3, 6])]
+    param_sets = [('brain_params', 'num_iters_per_frame', [1, 3, 6]),
+                  ('brain_params', 'do_conditional_lr', [True, False])]
 
     # each experiment is running a set of simulations for one of the param sets defined above
     # call them in order
