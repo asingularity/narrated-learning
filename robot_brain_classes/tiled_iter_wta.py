@@ -157,6 +157,9 @@ class IterWTABRainLayerN(object):
 
         self.ax_bar.cla()
         self.ax_bar.plot(self.mean_reconstruct_err_per_frame[0:self.t], color='k', marker='.')
+        self.ax_bar.ticklabel_format(useOffset=False)
+        self.ax_bar.get_xaxis().get_major_formatter().set_useOffset(False)
+        self.ax_bar.get_yaxis().get_major_formatter().set_useOffset(False)
 
         if len(extra_info) > 0:
             self.fig_bar.savefig(self.plots_folder + "/time_averaged_mean_reconstruct_err_" + extra_info + ".png", dpi=100)
@@ -269,7 +272,8 @@ class IterWTABRainLayerN(object):
 
         # reconstruct error
 
-        tmp = np.mean(np.abs(tiles_inputs_reconstruction - tiles_inputs), axis=1)  # mean over inputs
+        #tmp = np.mean(np.abs(tiles_inputs_reconstruction - input_states_tiles), axis=1)  # mean over inputs
+        tmp = np.divide(np.sum(np.abs(tiles_inputs_reconstruction - input_states_tiles), axis=1), np.sum(input_states_tiles, axis=1))
         reconstruct_err = np.mean(tmp)  # mean over tiles
 
         self.reconstruct_err_per_frame[self.t] = reconstruct_err
@@ -551,7 +555,10 @@ class IterWTABRainLayer0(object):
 
         # reconstruct error
 
-        tmp = np.mean(np.abs(tiles_inputs_reconstruction - input_states_tiles), axis=1)  # mean over inputs
+        tmp_sum = np.sum(input_states_tiles, axis=1)
+        tmp = np.divide(np.sum(np.abs(tiles_inputs_reconstruction - input_states_tiles), axis=1), tmp_sum)  # mean over inputs
+        tmp[np.nonzero(tmp_sum==0)] = 0
+        
         reconstruct_err = np.mean(tmp)  # mean over tiles
 
         self.reconstruct_err_per_frame[self.t] = reconstruct_err
@@ -716,6 +723,9 @@ class IterWTABRainLayer0(object):
 
         self.ax_bar.cla()
         self.ax_bar.plot(self.mean_reconstruct_err_per_frame[0:self.t], color='k', marker='.')
+        self.ax_bar.ticklabel_format(useOffset=False)
+        self.ax_bar.get_xaxis().get_major_formatter().set_useOffset(False)
+        self.ax_bar.get_yaxis().get_major_formatter().set_useOffset(False)
 
         if len(extra_info) > 0:
             self.fig_bar.savefig(self.plots_folder + "/time_averaged_mean_reconstruct_err_" + extra_info + ".png", dpi=100)
