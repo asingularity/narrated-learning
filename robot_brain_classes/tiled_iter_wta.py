@@ -279,7 +279,8 @@ class IterWTABRainLayerN(object):
         tiles_inputs_reconstruction[np.nonzero(tiles_inputs_reconstruction > 1)] = 1  # TODO ???
 
         #tmp = np.divide(np.sum(np.abs(tiles_inputs_reconstruction - input_states_tiles_orig), axis=1), np.sum(input_states_tiles_orig, axis=1))
-        tmp = np.sum(np.abs(tiles_inputs_reconstruction - input_states_tiles_orig), axis=1) * 1.0 / input_states_tiles_orig.shape[1]
+        #tmp = np.sum(np.abs(tiles_inputs_reconstruction - input_states_tiles_orig), axis=1) * 1.0 / input_states_tiles_orig.shape[1]
+        tmp = np.sum(input_states_tiles, axis=1) * 1.0 / input_states_tiles.shape[1]
 
         reconstruct_err = np.mean(tmp)  # mean over tiles
 
@@ -569,7 +570,11 @@ class IterWTABRainLayer0(object):
         #tmp = np.divide(np.sum(np.abs(tiles_inputs_reconstruction - input_states_tiles_orig), axis=1), tmp_sum)  # mean over inputs
         #tmp[np.nonzero(tmp_sum==0)] = 0
 
-        tmp = np.sum(np.abs(tiles_inputs_reconstruction - input_states_tiles_orig), axis=1) * 1.0 / input_states_tiles_orig.shape[1]
+        #tmp = np.sum(np.abs(tiles_inputs_reconstruction - input_states_tiles_orig), axis=1) * 1.0 / input_states_tiles_orig.shape[1]
+
+        tmp_inp = input_states_tiles - self.weights[best_rf_per_tile, :]
+        tmp_inp[tmp_inp < 0] = 0
+        tmp = np.sum(tmp_inp, axis=1) * 1.0 / input_states_tiles.shape[1]
 
         reconstruct_err = np.mean(tmp)  # mean over tiles
 
