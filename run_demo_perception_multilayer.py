@@ -89,6 +89,7 @@ def get_sim_folder_manager_params():
 def get_brain_params():
     brain_params = {
         'input_im_dim': RF_IM_DIM,
+        'learn_time_per_layer': 200000,
         'num_iters_per_frame': 3,
         'do_conditional_lr': False,  # False
         'subtract_remainder': True,  # True

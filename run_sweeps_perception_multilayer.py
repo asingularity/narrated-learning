@@ -63,6 +63,7 @@ def get_pre_proc_params():  # override_params
 def get_brain_params():  # override_params
     brain_params = {
         'input_im_dim': RF_IM_DIM,
+        'learn_time_per_layer': 100000,  # TODO LONGER
         'num_iters_per_frame': 3,
         'do_conditional_lr': False,  # False
         'subtract_remainder': True,  # True

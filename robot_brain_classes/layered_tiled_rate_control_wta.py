@@ -50,8 +50,10 @@ class LayeredTiledRateControlWTA(object):
 
         self._init_layers_hardcode(params=params)
 
-        self.do_raster_plots_every_k_im = 4
+        self.do_raster_plots_every_k_im = 10
         self.ims_since_raster = 0
+
+        self.t = 0
 
     def _init_layers_hardcode(self, params):
         '''
@@ -64,6 +66,8 @@ class LayeredTiledRateControlWTA(object):
 
         :return:
         '''
+
+        self.learn_time_per_layer = params['learn_time_per_layer']
 
         self.input_im_dim = params['input_im_dim']
         layer_params_list = []
@@ -152,6 +156,9 @@ class LayeredTiledRateControlWTA(object):
 
         self.output_event_histories = []
 
+        self.layer_learn_start_t = np.zeros(self.num_layers)
+        self.layer_learn_end_t = np.zeros(self.num_layers)
+
         layer_num = 0
         for layer_params in layer_params_list:
             # common params
@@ -167,6 +174,9 @@ class LayeredTiledRateControlWTA(object):
             self.output_event_histories.append(StatesLimitedHistory(params={'max_delay': 2,
                                                                             'states_dim_list': [state_dim_tmp],
                                                                             'store_extra_data': False}))
+
+            self.layer_learn_start_t[layer_num] = layer_num * self.learn_time_per_layer
+            self.layer_learn_end_t[layer_num] = (layer_num + 1) * self.learn_time_per_layer - 1
 
             layer_num += 1
 
@@ -193,7 +203,9 @@ class LayeredTiledRateControlWTA(object):
             print('    tile_dim_NxN:', wta_layer.get_tile_dim_NxN())
             print('    num_tiles_NxN:', wta_layer.get_num_tiles_NxN())
             print('    num_rfs_per_tile:', wta_layer.get_num_rfs_per_tile())
-
+            print()
+            print('    layer_learn_start_t:', self.layer_learn_start_t[layer_num])
+            print('    layer_learn_end_t:', self.layer_learn_end_t[layer_num])
         print()
 
     def get_final_errors_dict(self):
@@ -251,16 +263,34 @@ class LayeredTiledRateControlWTA(object):
 
         self.input_im_flat_history.process_new_states([original_input_image.flatten()])
 
+        a_prev_layer_learned = False
+
         for layer_n in range(self.num_layers):
+
+            extra_info = None
+            if layer_n == 2:
+                extra_info = 'layer_2'
+
+            do_learn = self.layer_learn_start_t[layer_n] < self.t < self.layer_learn_end_t[layer_n]
+            # TODO fix +/-1 data point bug where things run for 1 step because of the +1 step skipped in statement above
+
+            do_run_layer = not a_prev_layer_learned
+
+            # only run layer if: (learning wasn't on for any previous layer)
 
             if layer_n == 0:
                 output_events = self.layers[layer_n].process_input(input_events_p=input_events_p,
                                                                    input_events_n=input_events_n,
                                                                    event_coords_r=event_coords_r,
                                                                    event_coords_c=event_coords_c,
-                                                                   original_input_image=original_input_image)
+                                                                   original_input_image=original_input_image,
+                                                                   do_learn=do_learn,
+                                                                   do_run_layer=do_run_layer)
             else:
-                output_events = self.layers[layer_n].process_input(input_events)
+                output_events = self.layers[layer_n].process_input(input_events=input_events,
+                                                                   do_learn=do_learn,
+                                                                   extra_info=extra_info,
+                                                                   do_run_layer=do_run_layer)
 
             # print(layer_n, output_events.shape)
 
@@ -268,6 +298,10 @@ class LayeredTiledRateControlWTA(object):
             self.last_output_events.append(output_events.copy())
 
             self.output_event_histories[layer_n].process_new_states([output_events.flatten()])
+
+            a_prev_layer_learned = a_prev_layer_learned or do_learn
+
+        self.t += 1
 
     def do_plots(self):
         for layer_num in range(0, self.num_layers):

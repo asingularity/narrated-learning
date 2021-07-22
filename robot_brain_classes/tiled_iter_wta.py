@@ -167,131 +167,142 @@ class IterWTABRainLayerN(object):
             self.fig_bar.savefig(self.plots_folder + "/time_averaged_mean_reconstruct_err.png", dpi=100)
 
 
-    def process_input(self, input_events):
-
-        # ************************ tiled input and raster ************************
-
-        assert input_events.shape[0] == self.input_num_tiles_NxN
-        assert input_events.shape[1] == self.input_num_tiles_NxN
-        assert input_events.shape[2] == self.input_num_rfs_per_tile
-
-        # flatten
-        concat_input_events = self._get_input_with_concat(input_events=input_events.flatten(), normalize=self.normalize_concat)
-
-        # reshape
-        input_events_by_tile_r_c = concat_input_events.reshape(input_events.shape)
-        #print (np.nonzero(input_events_by_tile_r_c)[0])
-
-        tiles_inputs = np.zeros((int(self.num_tiles_NxN * self.num_tiles_NxN), self.tile_input_state_dim), np.float32)
-        tiles_inputs_reconstruction = np.zeros((int(self.num_tiles_NxN * self.num_tiles_NxN), self.tile_input_state_dim), np.float32)
-
-        cy_tile_the_input_layer_N(input_events_by_tile_r_c,
-                                  self.input_num_tiles_NxN,
-                                  self.input_num_rfs_per_tile,
-                                  tiles_inputs,
-                                  self.tile_dim_NxN,
-                                  self.num_tiles_NxN)
-
-        input_states_tiles = tiles_inputs
-
-        # ************************ prepare for iter ************************
-
-        tile_r = (np.arange(self.num_tiles_NxN * self.num_tiles_NxN, dtype=np.int) / self.num_tiles_NxN).astype(np.int)
-        tile_c = (np.arange(self.num_tiles_NxN * self.num_tiles_NxN, dtype=np.int) % self.num_tiles_NxN).astype(np.int)
+    def process_input(self, input_events, do_learn, do_run_layer, extra_info=None):
 
         output_events = np.zeros((self.num_tiles_NxN, self.num_tiles_NxN, self.num_rfs), np.float32)
 
-        rf_offset = np.arange(self.num_tiles_NxN * self.num_tiles_NxN) * self.num_rfs
-        self.rfs_raster_history[:, self.raster_t] = 0
+        if do_run_layer:
+            # ************************ tiled input and raster ************************
 
-        sum_rf_norm_dot = 0
+            assert input_events.shape[0] == self.input_num_tiles_NxN
+            assert input_events.shape[1] == self.input_num_tiles_NxN
+            assert input_events.shape[2] == self.input_num_rfs_per_tile
 
-        # ************************ do iter ************************
+            # flatten
+            concat_input_events = self._get_input_with_concat(input_events=input_events.flatten(), normalize=self.normalize_concat)
 
-        input_states_tiles_orig = input_states_tiles.copy()
+            # reshape
+            input_events_by_tile_r_c = concat_input_events.reshape(input_events.shape)
+            #print (np.nonzero(input_events_by_tile_r_c)[0])
 
-        for k in range(self.num_iters_per_frame):
+            tiles_inputs = np.zeros((int(self.num_tiles_NxN * self.num_tiles_NxN), self.tile_input_state_dim), np.float32)
+            tiles_inputs_reconstruction = np.zeros((int(self.num_tiles_NxN * self.num_tiles_NxN), self.tile_input_state_dim), np.float32)
 
-            assert self.weights.shape[0] == self.num_rfs
-            assert self.weights.shape[1] == self.tile_input_state_dim
+            cy_tile_the_input_layer_N(input_events_by_tile_r_c,
+                                      self.input_num_tiles_NxN,
+                                      self.input_num_rfs_per_tile,
+                                      tiles_inputs,
+                                      self.tile_dim_NxN,
+                                      self.num_tiles_NxN)
 
-            assert input_states_tiles.shape[0] == (self.num_tiles_NxN * self.num_tiles_NxN)
-            assert input_states_tiles.shape[1] == self.tile_input_state_dim
+            input_states_tiles = tiles_inputs
 
-            #print('******')
-            #print(np.nonzero(input_states_tiles)[1], input_states_tiles[np.nonzero(input_states_tiles)])
+            # ************************ prepare for iter ************************
 
-            rf_norm_dot = self._get_rf_norm_dot(rfs=self.weights, input_states_tiles=input_states_tiles)
+            tile_r = (np.arange(self.num_tiles_NxN * self.num_tiles_NxN, dtype=np.int) / self.num_tiles_NxN).astype(np.int)
+            tile_c = (np.arange(self.num_tiles_NxN * self.num_tiles_NxN, dtype=np.int) % self.num_tiles_NxN).astype(np.int)
 
-            assert rf_norm_dot.shape[0] == (self.num_tiles_NxN * self.num_tiles_NxN)
-            assert rf_norm_dot.shape[1] == self.num_rfs
+            rf_offset = np.arange(self.num_tiles_NxN * self.num_tiles_NxN) * self.num_rfs
+            self.rfs_raster_history[:, self.raster_t] = 0
 
-            # find best RF per tile
-            best_rf_per_tile = np.argmax(rf_norm_dot, axis=1)
-            #print(best_rf_per_tile, np.amax(rf_norm_dot))
+            sum_rf_norm_dot = 0
 
-            # learn best RF per tile
-            if self.do_conditional_lr:
-                per_tile_lr = self.lr * np.square(np.amax(rf_norm_dot, axis=1))
-            else:
-                per_tile_lr = np.ones(self.num_tiles_NxN * self.num_tiles_NxN, np.float32) * self.lr
+            # ************************ do iter ************************
 
-            cy_kmeans_do_learning_per_tile_lr(best_rf_per_tile, self.weights, input_states_tiles, per_tile_lr)
+            input_states_tiles_orig = input_states_tiles.copy()
 
-            # take subset of best_rf_per_tile
-            rf_norm_dot_best = np.amax(rf_norm_dot, axis=1)
+            for k in range(self.num_iters_per_frame):
 
-            sum_rf_norm_dot += np.sum(rf_norm_dot_best)
+                assert self.weights.shape[0] == self.num_rfs
+                assert self.weights.shape[1] == self.tile_input_state_dim
 
-            if self.force_all_frames_wta:
-                # hack: with this and max_rfs_active == 1, it's what we had before (hard 1-wta)
-                good_indices = np.arange(self.num_tiles_NxN * self.num_tiles_NxN)
-            else:
-                # if second: ONLY for tiles with rf norm dot over 0.5, set output event and subtract RF from input_state for that tile (<0 -> 0)
-                good_indices = np.nonzero(rf_norm_dot_best > 0.5)[0]
+                assert input_states_tiles.shape[0] == (self.num_tiles_NxN * self.num_tiles_NxN)
+                assert input_states_tiles.shape[1] == self.tile_input_state_dim
 
-            tiles_inputs_reconstruction[good_indices, :] = tiles_inputs_reconstruction[good_indices, :] + self.weights[best_rf_per_tile[good_indices], :]
+                #print('******')
+                #print(np.nonzero(input_states_tiles)[1], input_states_tiles[np.nonzero(input_states_tiles)])
 
-            output_events[tile_r[good_indices], tile_c[good_indices], best_rf_per_tile[good_indices]] = 1
-            self.rfs_raster_history[(rf_offset + best_rf_per_tile)[good_indices], self.raster_t] = 1
+                rf_norm_dot = self._get_rf_norm_dot(rfs=self.weights, input_states_tiles=input_states_tiles)
 
-            if self.subtract_remainder:
-                tmp = input_states_tiles[good_indices, :]
-                tmp = tmp - self.weights[best_rf_per_tile[good_indices], :]
-                tmp[np.nonzero(tmp < 0)] = 0
+                assert rf_norm_dot.shape[0] == (self.num_tiles_NxN * self.num_tiles_NxN)
+                assert rf_norm_dot.shape[1] == self.num_rfs
 
-                input_states_tiles[good_indices, :] = tmp[:]
+                # find best RF per tile
+                best_rf_per_tile = np.argmax(rf_norm_dot, axis=1)
+                #print(best_rf_per_tile, np.amax(rf_norm_dot))
 
-        # ************************ store history, update times ************************
+                # learn best RF per tile
+                if self.do_conditional_lr:
+                    per_tile_lr = self.lr * np.square(np.amax(rf_norm_dot, axis=1))
+                else:
+                    per_tile_lr = np.ones(self.num_tiles_NxN * self.num_tiles_NxN, np.float32) * self.lr
 
-        mean_rf_norm_dot = sum_rf_norm_dot / (self.num_tiles_NxN * self.num_tiles_NxN * self.num_iters_per_frame)
+                if do_learn:
+                    cy_kmeans_do_learning_per_tile_lr(best_rf_per_tile, self.weights, input_states_tiles, per_tile_lr)
 
-        self.rf_norm_dot_per_frame[self.t] = mean_rf_norm_dot
-        self.mean_rf_norm_dot_per_frame[self.t] = np.mean(self.rf_norm_dot_per_frame[max(0, self.t - self.error_mean_time):self.t])
+                # take subset of best_rf_per_tile
+                rf_norm_dot_best = np.amax(rf_norm_dot, axis=1)
 
-        self.rf_size_per_frame[self.t] = np.mean(np.sum(self.weights, axis=1))
-        self.mean_rf_size_per_frame[self.t] = np.mean(self.rf_size_per_frame[max(0, self.t - self.error_mean_time):self.t])
+                sum_rf_norm_dot += np.sum(rf_norm_dot_best)
 
-        # reconstruct error
+                if self.force_all_frames_wta:
+                    # hack: with this and max_rfs_active == 1, it's what we had before (hard 1-wta)
+                    good_indices = np.arange(self.num_tiles_NxN * self.num_tiles_NxN)
+                else:
+                    # if second: ONLY for tiles with rf norm dot over 0.5, set output event and subtract RF from input_state for that tile (<0 -> 0)
+                    good_indices = np.nonzero(rf_norm_dot_best > 0.5)[0]
 
-        #tmp = np.mean(np.abs(tiles_inputs_reconstruction - input_states_tiles), axis=1)  # mean over inputs
+                tiles_inputs_reconstruction[good_indices, :] = tiles_inputs_reconstruction[good_indices, :] + self.weights[best_rf_per_tile[good_indices], :]
 
-        tiles_inputs_reconstruction[np.nonzero(tiles_inputs_reconstruction > 1)] = 1  # TODO ???
+                output_events[tile_r[good_indices], tile_c[good_indices], best_rf_per_tile[good_indices]] = 1
+                self.rfs_raster_history[(rf_offset + best_rf_per_tile)[good_indices], self.raster_t] = 1
 
-        #tmp = np.divide(np.sum(np.abs(tiles_inputs_reconstruction - input_states_tiles_orig), axis=1), np.sum(input_states_tiles_orig, axis=1))
-        #tmp = np.sum(np.abs(tiles_inputs_reconstruction - input_states_tiles_orig), axis=1) * 1.0 / input_states_tiles_orig.shape[1]
-        tmp = np.sum(input_states_tiles, axis=1) * 1.0 / input_states_tiles.shape[1]
+                if self.subtract_remainder:
+                    tmp = input_states_tiles[good_indices, :]
+                    tmp = tmp - self.weights[best_rf_per_tile[good_indices], :]
+                    tmp[np.nonzero(tmp < 0)] = 0
 
-        reconstruct_err = np.mean(tmp)  # mean over tiles
+                    input_states_tiles[good_indices, :] = tmp[:]
 
-        self.reconstruct_err_per_frame[self.t] = reconstruct_err
-        self.mean_reconstruct_err_per_frame[self.t] = np.mean(self.reconstruct_err_per_frame[max(0, self.t - self.error_mean_time):self.t])
+            # ************************ store history, update times ************************
 
-        self.t += 1
+            mean_rf_norm_dot = sum_rf_norm_dot / (self.num_tiles_NxN * self.num_tiles_NxN * self.num_iters_per_frame)
 
-        self.raster_t += 1
-        if self.raster_t >= self.raster_steps:
-            self.raster_t = 0
+            self.rf_norm_dot_per_frame[self.t] = mean_rf_norm_dot
+            self.mean_rf_norm_dot_per_frame[self.t] = np.mean(self.rf_norm_dot_per_frame[max(0, self.t - self.error_mean_time):self.t])
+
+            self.rf_size_per_frame[self.t] = np.mean(np.sum(self.weights, axis=1))
+            self.mean_rf_size_per_frame[self.t] = np.mean(self.rf_size_per_frame[max(0, self.t - self.error_mean_time):self.t])
+
+            # reconstruct error
+
+            #tmp = np.mean(np.abs(tiles_inputs_reconstruction - input_states_tiles), axis=1)  # mean over inputs
+
+            tiles_inputs_reconstruction[np.nonzero(tiles_inputs_reconstruction > 1)] = 1  # TODO ???
+
+            #tmp = np.divide(np.sum(np.abs(tiles_inputs_reconstruction - input_states_tiles_orig), axis=1), np.sum(input_states_tiles_orig, axis=1))
+            #tmp = np.sum(np.abs(tiles_inputs_reconstruction - input_states_tiles_orig), axis=1) * 1.0 / input_states_tiles_orig.shape[1]
+
+            tmp = np.sum(input_states_tiles, axis=1) * 1.0 / input_states_tiles.shape[1]
+
+            # if extra_info is not None:
+            #     print()
+            #     print(extra_info)
+            #     print()
+            #     print(input_states_tiles)
+            #     print()
+            #     print(tmp)
+
+            reconstruct_err = np.mean(tmp)  # mean over tiles
+
+            self.reconstruct_err_per_frame[self.t] = reconstruct_err
+            self.mean_reconstruct_err_per_frame[self.t] = np.mean(self.reconstruct_err_per_frame[max(0, self.t - self.error_mean_time):self.t])
+
+            self.t += 1
+
+            self.raster_t += 1
+            if self.raster_t >= self.raster_steps:
+                self.raster_t = 0
 
         return output_events
 
@@ -468,7 +479,7 @@ class IterWTABRainLayer0(object):
         return RF_norm_dot
 
 
-    def process_input(self, input_events_p, input_events_n, event_coords_r, event_coords_c, original_input_image):
+    def process_input(self, input_events_p, input_events_n, event_coords_r, event_coords_c, original_input_image, do_learn, do_run_layer):
 
 
         # ************************ tiled input and raster ************************
@@ -526,7 +537,8 @@ class IterWTABRainLayer0(object):
         else:
             per_tile_lr = np.ones(self.num_tiles_NxN * self.num_tiles_NxN, np.float32) * self.lr
 
-        cy_kmeans_do_learning_per_tile_lr(best_rf_per_tile, self.weights, input_states_tiles, per_tile_lr)
+        if do_learn:
+            cy_kmeans_do_learning_per_tile_lr(best_rf_per_tile, self.weights, input_states_tiles, per_tile_lr)
 
         # store for making an image
         # TODO update for iter !!! if iter > 1
