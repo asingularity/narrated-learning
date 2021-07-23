@@ -63,7 +63,7 @@ def get_pre_proc_params():  # override_params
 def get_brain_params():  # override_params
     brain_params = {
         'input_im_dim': RF_IM_DIM,
-        'learn_time_per_layer': 100000,  # TODO LONGER
+        'learn_time_per_layer': 200000,  # TODO LONGER
         'num_iters_per_frame': 3,
         'do_conditional_lr': False,  # False
         'subtract_remainder': True,  # True
@@ -71,6 +71,7 @@ def get_brain_params():  # override_params
         # TODO add: normalize concat
         # TODO add power to use for conditional lr
         # TODO break out num RFs
+        # TODO break out learning rate
     }
 
     # for pname in override_params.keys():
@@ -180,7 +181,7 @@ def run_several_sweeps():
     # param_sets = [('brain_params', 'num_rfs', [200, 400, 800, 1600, 3200]),
     #               ('brain_params', 'apply_rate_control', [True, False])]
 
-    param_sets = [('brain_params', 'num_iters_per_frame', [1, 3, 6]),
+    param_sets = [('brain_params', 'num_iters_per_frame', [1, 3]),
                   ('brain_params', 'do_conditional_lr', [True, False])]
 
     # each experiment is running a set of simulations for one of the param sets defined above

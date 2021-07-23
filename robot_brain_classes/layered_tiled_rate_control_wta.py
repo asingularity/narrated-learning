@@ -226,7 +226,7 @@ class LayeredTiledRateControlWTA(object):
         sum_rf_norm_dot = 0.0
         sum_reconstruct_err = 0.0
 
-        for layer_n in self.num_layers:
+        for layer_n in range(self.num_layers):
             err = self.layers[layer_n].get_final_errors_dict()
 
             d['layer_' + str(layer_n) + '__reconstruct-err'] = err['reconstruct-err']
