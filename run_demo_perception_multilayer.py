@@ -29,7 +29,7 @@ from robot_preprocess_classes.event_pre_processor import EventPreProcessor
 
 
 DISABLE_BRAIN = False  # for testing input by itself; also starts slow display
-RF_IM_DIM = 16  # 8, 16, 32, 64, 128
+RF_IM_DIM = 128  # 8, 16, 32, 64, 128
 
 ROOT_DIR = '/srv'
 # ROOT_DIR = '/home/csaba'
@@ -89,8 +89,8 @@ def get_sim_folder_manager_params():
 def get_brain_params():
     brain_params = {
         'input_im_dim': RF_IM_DIM,
-        'learn_time_per_layer': 200000,
-        'num_iters_per_frame': 3,
+        'learn_time_per_layer': 100000,
+        'num_iters_per_frame': 1,
         'do_conditional_lr': False,  # False
         'subtract_remainder': True,  # True
         'skip_zero_inputs_to_layer_0': False  # generally true but throws off error averages? should work with False but test first

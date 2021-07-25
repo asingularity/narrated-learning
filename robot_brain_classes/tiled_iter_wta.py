@@ -738,17 +738,18 @@ class IterWTABRainLayer0(object):
         else:
             self.fig_bar.savefig(self.plots_folder + "/time_averaged_mean_rf_norm_dot.png", dpi=100)
 
-        self.ax_bar.cla()
-        raster_plot = np.transpose(np.multiply(self.input_raster_history, np.arange(self.input_state_dim)[:, np.newaxis]))
-        t = np.arange(raster_plot.shape[0])
-        self.ax_bar.plot(t, raster_plot, color='b', marker='.', linestyle='')
-        self.ax_bar.axvline(x=self.raster_t, color='g')
-        self.fig_bar.savefig(self.plots_folder + "/raster_inputs.png", dpi=100)
+        skip_input_raster = True  # very slow!
+        if not skip_input_raster:
+            self.ax_bar.cla()
+            raster_plot = np.transpose(np.multiply(self.input_raster_history, np.arange(self.input_state_dim)[:, np.newaxis]))
+            t = np.arange(raster_plot.shape[0])
+            self.ax_bar.plot(t, raster_plot, color='b', marker='.', linestyle='')
+            self.ax_bar.axvline(x=self.raster_t, color='g')
 
-        if len(extra_info) > 0:
-            self.fig_bar.savefig(self.plots_folder + "/raster_inputs_" + extra_info + ".png", dpi=100)
-        else:
-            self.fig_bar.savefig(self.plots_folder + "/raster_inputs.png", dpi=100)
+            if len(extra_info) > 0:
+                self.fig_bar.savefig(self.plots_folder + "/raster_inputs_" + extra_info + ".png", dpi=100)
+            else:
+                self.fig_bar.savefig(self.plots_folder + "/raster_inputs.png", dpi=100)
 
         self.ax_bar.cla()
         self.ax_bar.plot(self.mean_reconstruct_err_per_frame[0:self.t], color='k', marker='.')

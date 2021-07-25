@@ -50,7 +50,7 @@ class LayeredTiledRateControlWTA(object):
 
         self._init_layers_hardcode(params=params)
 
-        self.do_raster_plots_every_k_im = 10
+        self.do_raster_plots_every_k_im = 20
         self.ims_since_raster = 0
 
         self.t = 0
@@ -86,7 +86,7 @@ class LayeredTiledRateControlWTA(object):
         # 1
         # TODO we need to manually update input params here based on what we set above !!! specifically "input_num_tiles_NxN"
         layer_params_list.append({
-            'input_num_tiles_NxN': 2,  # previous layer (num_tiles X num_tiles)
+            'input_num_tiles_NxN': 16,  # previous layer (num_tiles X num_tiles)
             'input_num_rfs_per_tile': layer_params_list[-1]['num_rfs'],  # previous layer num rfs
             'tile_dim_NxN': 1,  # relative to previous layer, how many tiles (NxN) to combine to make a tile in this layer
             'num_rfs': 80,  # per tile
@@ -99,7 +99,7 @@ class LayeredTiledRateControlWTA(object):
 
         # 2
         layer_params_list.append({
-            'input_num_tiles_NxN': 2,  # previous layer (num_tiles X num_tiles)
+            'input_num_tiles_NxN': 16,  # previous layer (num_tiles X num_tiles)
             'input_num_rfs_per_tile': layer_params_list[-1]['num_rfs'],  # previous layer num rfs
             'tile_dim_NxN': 2,
             'num_rfs': 400,  # per tile
@@ -112,6 +112,32 @@ class LayeredTiledRateControlWTA(object):
 
         # 3
         layer_params_list.append({
+            'input_num_tiles_NxN': 8,  # previous layer (num_tiles X num_tiles)
+            'input_num_rfs_per_tile': layer_params_list[-1]['num_rfs'],  # previous layer num rfs
+            'tile_dim_NxN': 1,
+            'num_rfs': 80,  # per tile
+            'lr': 1.0 / 1000,
+            'input_concat_timesteps': 4,
+            'num_iters_per_frame': params['num_iters_per_frame'],  # 6
+            'do_conditional_lr': params['do_conditional_lr'],  # False
+            'subtract_remainder': params['subtract_remainder'],  # True
+        })
+
+        # 4
+        layer_params_list.append({
+            'input_num_tiles_NxN': 8,  # previous layer (num_tiles X num_tiles)
+            'input_num_rfs_per_tile': layer_params_list[-1]['num_rfs'],  # previous layer num rfs
+            'tile_dim_NxN': 8,
+            'num_rfs': 400,  # per tile
+            'lr': 1.0 / 1000,
+            'input_concat_timesteps': 1,
+            'num_iters_per_frame': params['num_iters_per_frame'],  # 6
+            'do_conditional_lr': params['do_conditional_lr'],  # False
+            'subtract_remainder': params['subtract_remainder'],  # True
+        })
+
+        # 5
+        layer_params_list.append({
             'input_num_tiles_NxN': 1,  # previous layer (num_tiles X num_tiles)
             'input_num_rfs_per_tile': layer_params_list[-1]['num_rfs'],  # previous layer num rfs
             'tile_dim_NxN': 1,
@@ -122,26 +148,6 @@ class LayeredTiledRateControlWTA(object):
             'do_conditional_lr': params['do_conditional_lr'],  # False
             'subtract_remainder': params['subtract_remainder'],  # True
         })
-        #
-        # # 4
-        # layer_params_list.append({
-        #     'input_num_tiles_NxN': 8,  # previous layer (num_tiles X num_tiles)
-        #     'input_num_rfs_per_tile': layer_params_list[-1]['num_rfs'],  # previous layer num rfs
-        #     'tile_dim_NxN': 8,
-        #     'num_rfs': 800,  # per tile
-        #     'lr': 1.0 / 1000,
-        #     'input_concat_timesteps': 1
-        # })
-        #
-        # # 5
-        # layer_params_list.append({
-        #     'input_num_tiles_NxN': 1,  # previous layer (num_tiles X num_tiles)
-        #     'input_num_rfs_per_tile': layer_params_list[-1]['num_rfs'],  # previous layer num rfs
-        #     'tile_dim_NxN': 1,
-        #     'num_rfs': 800,  # per tile
-        #     'lr': 1.0 / 1000,
-        #     'input_concat_timesteps': 4
-        # })
 
         self.num_layers = len(layer_params_list)
 
