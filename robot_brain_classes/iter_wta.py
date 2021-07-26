@@ -59,7 +59,48 @@ class IterWTABrain(object):
         self.ax_bar.get_xaxis().get_major_formatter().set_scientific(False)
         self.ax_bar.get_yaxis().get_major_formatter().set_scientific(False)
 
+        self.error_mean_time = 50000
+
+        self.rf_norm_dot_per_frame = np.zeros(self.max_time)
+        self.mean_rf_norm_dot_per_frame = np.zeros(self.max_time)  # time average
+
         self.t = 0
+
+    def process_input(self, input_events_p, input_events_n, event_coords_r, event_coords_c, original_input_image):
+
+        if self.t >= self.max_time:
+            return
+
+        input_state = np.concatenate((input_events_p, input_events_n))
+
+        self.input_raster_history[:, self.raster_t] = input_state[:]
+
+        if input_state is None:
+            return
+
+        if np.count_nonzero(input_state) == 0:
+            return
+
+        fix_offset = 1e-16
+
+        self.rfs_raster_history[:, self.raster_t] = 0
+
+        RF_norm_dot = np.divide(np.sum(np.multiply(self.weights, input_state), axis=1), np.sum(self.weights, axis=1) + fix_offset)
+
+        best_rf = np.argmax(RF_norm_dot)
+
+        self.rf_norm_dot_per_frame[self.t] = RF_norm_dot[best_rf]
+        self.mean_rf_norm_dot_per_frame[self.t] = np.mean(self.rf_norm_dot_per_frame[max(0, self.t - self.error_mean_time):self.t])
+
+        self.rfs_raster_history[best_rf, self.raster_t] = 1
+
+        lr = self.lr
+        self.weights[best_rf, :] = lr * input_state + (1.0 - lr) * self.weights[best_rf, :]
+
+        self.t += 1
+        self.raster_t += 1
+        if self.raster_t >= self.raster_steps:
+            self.raster_t = 0
 
     def get_final_errors_dict(self):
         d = {}
@@ -70,6 +111,66 @@ class IterWTABrain(object):
         print()
         print('setting plots folder: ', self.plots_folder)
         print()
+
+
+    def old_code(self):
+        return
+        #self.bias = self.bias + 0.01 * self.lr * 0.1
+        self.bias[rf_out_events] = self.bias[rf_out_events] - 2 * self.lr * 0.1
+
+        self.bias[self.bias < 0] = 0
+        self.bias[self.bias > 1] = 1
+
+        # instead of bias, sort in order of RF norm dot and subtract form input?
+
+    def get_table_ims(self):
+
+        if self.do_raster_plots_every_k_im is not None:
+            self.ims_since_raster += 1
+            if self.ims_since_raster > self.do_raster_plots_every_k_im:
+                self.do_plots()
+                self.ims_since_raster = 0
+
+        ims_list = []
+        ims_names_list = []
+
+        rfs_im, rf_ims_dict = make_im(self.weights, num_bins_per_pixel=1,
+                                                    input_im_dim=self.input_im_dim,
+                                                    im_final_dim=int(200 * 3000 / 400),  # /800 for two-im per rf display
+                                                    mod_for_disp=int(sqrt(self.num_rfs)),
+                                                    normalize_weights=True)
+
+        ims_list.append(rfs_im)
+        ims_names_list.append('rfs_im')
+
+        return ims_list, ims_names_list
+
+
+    def do_plots(self):
+
+        self.ax_bar.cla()
+        num_rf = self.rfs_raster_history.shape[0]
+        raster_plot = np.transpose(np.multiply(self.rfs_raster_history, np.arange(num_rf)[:, np.newaxis]))
+        t = np.arange(raster_plot.shape[0])
+        self.ax_bar.plot(t, raster_plot, color='b', marker='.', linestyle='')
+        self.ax_bar.axvline(x=self.raster_t, color='g')
+        self.fig_bar.savefig(self.plots_folder + "/raster_rfs.png", dpi=100)
+
+        self.ax_bar.cla()
+        self.ax_bar.plot(self.mean_rf_norm_dot_per_frame[0:self.t], color='k', marker='.')
+        self.fig_bar.savefig(self.plots_folder + "/time_averaged_mean_rf_norm_dot.png", dpi=100)
+
+        skip_input_raster = True
+        if not skip_input_raster:
+            self.ax_bar.cla()
+            num_rf = self.input_raster_history.shape[0]
+            raster_plot = np.transpose(np.multiply(self.input_raster_history, np.arange(self.input_state_dim)[:, np.newaxis]))
+            t = np.arange(raster_plot.shape[0])
+            self.ax_bar.plot(t, raster_plot, color='b', marker='.', linestyle='')
+            self.ax_bar.axvline(x=self.raster_t, color='g')
+            self.fig_bar.savefig(self.plots_folder + "/raster_inputs.png", dpi=100)
+
+
 
     def process_input_EXPERIMENT(self, input_events_p, input_events_n, event_coords_r, event_coords_c, original_input_image):
         if self.t >= self.max_time:
@@ -102,7 +203,7 @@ class IterWTABrain(object):
             self.raster_t = 0
 
 
-    def process_input(self, input_events_p, input_events_n, event_coords_r, event_coords_c, original_input_image):
+    def process_input_ITER(self, input_events_p, input_events_n, event_coords_r, event_coords_c, original_input_image):
         if self.t >= self.max_time:
             return
 
@@ -169,54 +270,3 @@ class IterWTABrain(object):
         self.raster_t += 1
         if self.raster_t >= self.raster_steps:
             self.raster_t = 0
-
-    def old_code(self):
-        return
-        #self.bias = self.bias + 0.01 * self.lr * 0.1
-        self.bias[rf_out_events] = self.bias[rf_out_events] - 2 * self.lr * 0.1
-
-        self.bias[self.bias < 0] = 0
-        self.bias[self.bias > 1] = 1
-
-        # instead of bias, sort in order of RF norm dot and subtract form input?
-
-    def get_table_ims(self):
-
-        if self.do_raster_plots_every_k_im is not None:
-            self.ims_since_raster += 1
-            if self.ims_since_raster > self.do_raster_plots_every_k_im:
-                self.do_plots()
-                self.ims_since_raster = 0
-
-        ims_list = []
-        ims_names_list = []
-
-        rfs_im, rf_ims_dict = make_im(self.weights, num_bins_per_pixel=1,
-                                                    input_im_dim=self.input_im_dim,
-                                                    im_final_dim=int(200 * 3000 / 400),  # /800 for two-im per rf display
-                                                    mod_for_disp=int(sqrt(self.num_rfs)),
-                                                    normalize_weights=True)
-
-        ims_list.append(rfs_im)
-        ims_names_list.append('rfs_im')
-
-        return ims_list, ims_names_list
-
-
-    def do_plots(self):
-
-        self.ax_bar.cla()
-        num_rf = self.rfs_raster_history.shape[0]
-        raster_plot = np.transpose(np.multiply(self.rfs_raster_history, np.arange(num_rf)[:, np.newaxis]))
-        t = np.arange(raster_plot.shape[0])
-        self.ax_bar.plot(t, raster_plot, color='b', marker='.', linestyle='')
-        self.ax_bar.axvline(x=self.raster_t, color='g')
-        self.fig_bar.savefig(self.plots_folder + "/raster_rfs.png", dpi=100)
-
-        self.ax_bar.cla()
-        num_rf = self.input_raster_history.shape[0]
-        raster_plot = np.transpose(np.multiply(self.input_raster_history, np.arange(self.input_state_dim)[:, np.newaxis]))
-        t = np.arange(raster_plot.shape[0])
-        self.ax_bar.plot(t, raster_plot, color='b', marker='.', linestyle='')
-        self.ax_bar.axvline(x=self.raster_t, color='g')
-        self.fig_bar.savefig(self.plots_folder + "/raster_inputs.png", dpi=100)
