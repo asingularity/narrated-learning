@@ -197,10 +197,34 @@ def demo():
     run_demo(demo_components)
 
 
+
+
+
+def try_nl_functions():
+    import matplotlib
+    matplotlib.use('Agg')
+    matplotlib.rcParams['agg.path.chunksize'] = 10000
+    import matplotlib.pyplot as plt
+
+    fig_bar = plt.figure(figsize=(40, 20))
+    ax_bar = fig_bar.add_subplot(1, 1, 1)
+    ax_bar.cla()
+    ax_bar.get_xaxis().get_major_formatter().set_scientific(False)
+    ax_bar.get_yaxis().get_major_formatter().set_scientific(False)
+
+    x = np.linspace(start=0.0, stop=1.0, num=200, endpoint=True)
+    y = np.power(x, 100)
+
+    ax_bar.cla()
+    ax_bar.plot(x, y, color='k', marker='.')
+    #fig_bar.show()
+
+    fig_bar.savefig("temp_plot.png", dpi=100)
+
+
 if __name__ == '__main__':
     demo()
-
-
+    #try_nl_functions()
 
 
 
