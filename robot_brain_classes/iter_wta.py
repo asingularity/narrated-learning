@@ -66,7 +66,22 @@ class IterWTABrain(object):
 
         self.t = 0
 
+        self.weights_eff = None
+
+    def _get_weights_eff(self, w):
+
+        # weights -> weights eff via transform to bimoda
+        w_eff = w
+
+        return w_eff
+
     def process_input(self, input_events_p, input_events_n, event_coords_r, event_coords_c, original_input_image):
+
+        if self.weights_eff is None:
+            # this is an init done once
+            self.weights_eff = np.zeros_like(self.weights)
+            for k in range(self.num_rfs):
+                self.weights_eff[k, :] = self._get_weights_eff(w=self.weights[k, :])
 
         if self.t >= self.max_time:
             return
@@ -85,7 +100,7 @@ class IterWTABrain(object):
 
         self.rfs_raster_history[:, self.raster_t] = 0
 
-        RF_norm_dot = np.divide(np.sum(np.multiply(self.weights, input_state), axis=1), np.sum(self.weights, axis=1) + fix_offset)
+        RF_norm_dot = np.divide(np.sum(np.multiply(self.weights_eff, input_state), axis=1), np.sum(self.weights, axis=1) + fix_offset)
 
         best_rf = np.argmax(RF_norm_dot)
 
@@ -96,6 +111,8 @@ class IterWTABrain(object):
 
         lr = self.lr
         self.weights[best_rf, :] = lr * input_state + (1.0 - lr) * self.weights[best_rf, :]
+
+        self.weights_eff[best_rf, :] = self._get_weights_eff(w=self.weights[best_rf, :])
 
         self.t += 1
         self.raster_t += 1
@@ -136,12 +153,21 @@ class IterWTABrain(object):
 
         rfs_im, rf_ims_dict = make_im(self.weights, num_bins_per_pixel=1,
                                                     input_im_dim=self.input_im_dim,
-                                                    im_final_dim=int(200 * 3000 / 400),  # /800 for two-im per rf display
+                                                    im_final_dim=int(200 * 3000 / 800),  # /800 for two-im per rf display
                                                     mod_for_disp=int(sqrt(self.num_rfs)),
                                                     normalize_weights=True)
 
         ims_list.append(rfs_im)
         ims_names_list.append('rfs_im')
+
+        rfs_im, rf_ims_dict = make_im(self.weights_eff, num_bins_per_pixel=1,
+                                                    input_im_dim=self.input_im_dim,
+                                                    im_final_dim=int(200 * 3000 / 800),  # /800 for two-im per rf display
+                                                    mod_for_disp=int(sqrt(self.num_rfs)),
+                                                    normalize_weights=True)
+
+        ims_list.append(rfs_im)
+        ims_names_list.append('eff_rfs_im')
 
         return ims_list, ims_names_list
 
