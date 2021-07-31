@@ -64,6 +64,9 @@ class IterWTABrain(object):
         self.rf_norm_dot_per_frame = np.zeros(self.max_time)
         self.mean_rf_norm_dot_per_frame = np.zeros(self.max_time)  # time average
 
+        self.net_predicted_per_frame = np.zeros(self.max_time)
+        self.mean_net_predicted_per_frame = np.zeros(self.max_time)
+
         self.t = 0
 
         self.weights_eff = None
@@ -71,9 +74,71 @@ class IterWTABrain(object):
     def _get_weights_eff(self, w):
 
         # weights -> weights eff via transform to bimoda
-        w_eff = w
+        # w_eff = w
+
+        w_eff = w.copy()
+
+        max_w = np.amax(w)
+
+        # this boosts to 0.5
+        cutoff = max_w / 2
+
+        # this boosts to 0.9 BUT tiny rfs
+        #cutoff = 3 * max_w / 4
+
+        #w_eff[w_eff < cutoff] = 0
+        #w_eff[w_eff >= cutoff] = 1
+
+        # this boosts rf norm dot to 0.5:
+
+        # w_eff = np.power(w, 2)
+
+        # does nothing:
+        # w_eff = w_eff * 1.0 / max_w
 
         return w_eff
+
+    def process_input_PROB(self, input_events_p, input_events_n, event_coords_r, event_coords_c, original_input_image):
+        self.weights_eff = self.weights
+
+        if self.t >= self.max_time:
+            return
+
+        input_state = np.concatenate((input_events_p, input_events_n))
+
+        self.input_raster_history[:, self.raster_t] = input_state[:]
+
+        if input_state is None:
+            return
+
+        if np.count_nonzero(input_state) == 0:
+            return
+
+        fix_offset = 1e-16
+
+        self.rfs_raster_history[:, self.raster_t] = 0
+
+        RF_norm_dot = np.divide(np.sum(np.multiply(self.weights, input_state), axis=1), np.sum(self.weights, axis=1) + fix_offset)
+
+        best_rf = np.argmax(RF_norm_dot)
+
+        self.rf_norm_dot_per_frame[self.t] = RF_norm_dot[best_rf]
+        self.mean_rf_norm_dot_per_frame[self.t] = np.mean(self.rf_norm_dot_per_frame[max(0, self.t - self.error_mean_time):self.t])
+
+        self.rfs_raster_history[best_rf, self.raster_t] = 1
+
+        lr = self.lr
+        self.weights[best_rf, :] = lr * input_state + (1.0 - lr) * self.weights[best_rf, :]
+
+        lr = self.lr / 10
+        also_learn_this_frame = np.nonzero(np.random.random(self.num_rfs) < np.power(RF_norm_dot, 10))
+        self.weights[also_learn_this_frame, :] = lr * input_state + (1.0 - lr) * self.weights[also_learn_this_frame, :]
+
+        self.t += 1
+        self.raster_t += 1
+        if self.raster_t >= self.raster_steps:
+            self.raster_t = 0
+
 
     def process_input(self, input_events_p, input_events_n, event_coords_r, event_coords_c, original_input_image):
 
@@ -100,12 +165,24 @@ class IterWTABrain(object):
 
         self.rfs_raster_history[:, self.raster_t] = 0
 
-        RF_norm_dot = np.divide(np.sum(np.multiply(self.weights_eff, input_state), axis=1), np.sum(self.weights, axis=1) + fix_offset)
+        RF_norm_dot = np.divide(np.sum(np.multiply(self.weights_eff, input_state), axis=1), np.sum(self.weights_eff, axis=1) + fix_offset)
 
         best_rf = np.argmax(RF_norm_dot)
 
+        sum_input = np.sum(input_state)
+        sum_rf = np.sum(self.weights_eff[best_rf, :])
+        sum_dot = np.sum(np.multiply(input_state, self.weights_eff[best_rf, :]))
+
+        fp = sum_rf - sum_dot
+        fn = sum_input - sum_dot
+
+        net_predicted = sum_dot - fp
+
         self.rf_norm_dot_per_frame[self.t] = RF_norm_dot[best_rf]
         self.mean_rf_norm_dot_per_frame[self.t] = np.mean(self.rf_norm_dot_per_frame[max(0, self.t - self.error_mean_time):self.t])
+
+        self.net_predicted_per_frame[self.t] = net_predicted
+        self.mean_net_predicted_per_frame[self.t] = np.mean(self.net_predicted_per_frame[max(0, self.t - self.error_mean_time):self.t])
 
         self.rfs_raster_history[best_rf, self.raster_t] = 1
 
@@ -139,6 +216,24 @@ class IterWTABrain(object):
         self.bias[self.bias > 1] = 1
 
         # instead of bias, sort in order of RF norm dot and subtract form input?
+
+
+
+        if False:  # self.t > 5000:
+
+            # net predicted negative: means on this frame we made more incorrect predictions than correct ones
+
+            print()
+            print('*****************************************')
+            print('sum input: ', sum_input)
+            print('sum rf: ', sum_rf)
+            print('sum rf*input: ', sum_dot)
+            print('fp', fp)
+            print('fn', fn)
+
+            print()
+
+
 
     def get_table_ims(self):
 
@@ -185,6 +280,10 @@ class IterWTABrain(object):
         self.ax_bar.cla()
         self.ax_bar.plot(self.mean_rf_norm_dot_per_frame[0:self.t], color='k', marker='.')
         self.fig_bar.savefig(self.plots_folder + "/time_averaged_mean_rf_norm_dot.png", dpi=100)
+
+        self.ax_bar.cla()
+        self.ax_bar.plot(self.mean_net_predicted_per_frame[0:self.t], color='k', marker='.')
+        self.fig_bar.savefig(self.plots_folder + "/time_averaged_mean_net_predict.png", dpi=100)
 
         skip_input_raster = True
         if not skip_input_raster:
