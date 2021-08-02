@@ -86,8 +86,8 @@ class IterWTABrain(object):
         # this boosts to 0.9 BUT tiny rfs
         #cutoff = 3 * max_w / 4
 
-        #w_eff[w_eff < cutoff] = 0
-        #w_eff[w_eff >= cutoff] = 1
+        # w_eff[w_eff < cutoff] = 0
+        # w_eff[w_eff >= cutoff] = 1
 
         # this boosts rf norm dot to 0.5:
 
@@ -166,6 +166,11 @@ class IterWTABrain(object):
         self.rfs_raster_history[:, self.raster_t] = 0
 
         RF_norm_dot = np.divide(np.sum(np.multiply(self.weights_eff, input_state), axis=1), np.sum(self.weights_eff, axis=1) + fix_offset)
+
+        #sum_dot_all = np.sum(np.multiply(self.weights_eff, input_state), axis=1)
+        #sum_rf_all = np.sum(self.weights_eff, axis=1)
+        #fp_all = sum_rf_all - sum_dot_all
+        #RF_norm_dot = sum_dot_all - fp_all
 
         best_rf = np.argmax(RF_norm_dot)
 
