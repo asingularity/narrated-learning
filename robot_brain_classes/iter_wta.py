@@ -37,8 +37,11 @@ class IterWTABrain(object):
 
         self.input_state_dim = 2 * self.input_im_dim * self.input_im_dim  # why 2? + and - changes
 
-        self.weights = np.random.random((self.num_rfs, self.input_state_dim)) * 1e-2  # 1e-12
-        self.weights = self.weights.astype(np.float32)
+        self.prob_weights = np.random.random((self.num_rfs, self.input_state_dim)) * 1e-2  # 1e-12
+        self.prob_weights = self.prob_weights.astype(np.float32)
+
+        self.i_weights = self.prob_weights.copy()
+        self.o_weights = self.prob_weights.copy()
 
         self.bias = np.ones(self.num_rfs) * 1e-3
 
@@ -70,7 +73,7 @@ class IterWTABrain(object):
         self.lr_factor = self.lr # * 0.1
         self.factor_per_rf = np.ones(self.num_rfs)
 
-        self.last_weights_eff = self.weights.copy()
+        self.last_weights_eff = self.i_weights.copy()
 
         self.num_per_rf = np.zeros(self.num_rfs)
 
@@ -93,23 +96,23 @@ class IterWTABrain(object):
 
         self.rfs_raster_history[:, self.raster_t] = 0
 
-        weights_eff = np.power(self.weights, self.factor_per_rf[:, np.newaxis])
+        #   separate i_weights, predict_weights;
+        #   see if norm dot with predict weights (output only no select on this) gets better with/without i-learning conditional rule
 
-        self.last_weights_eff = weights_eff
+        # this was the working firing rate rule part (1)
+        # weights_eff = np.power(self.io_weights, self.factor_per_rf[:, np.newaxis])
+        # self.last_weights_eff = weights_eff
 
-        RF_norm_dot = np.divide(np.sum(np.multiply(weights_eff, input_state), axis=1), np.sum(weights_eff, axis=1) + fix_offset)
+        RF_norm_dot_i = np.divide(np.sum(np.multiply(self.i_weights, input_state), axis=1), np.sum(self.i_weights, axis=1) + fix_offset)
+        RF_norm_dot_o = np.divide(np.sum(np.multiply(self.o_weights, input_state), axis=1), np.sum(self.o_weights, axis=1) + fix_offset)
 
-        best_rf = np.argmax(RF_norm_dot)
+        best_rf = np.argmax(RF_norm_dot_i)
 
-        self.rf_norm_dot_per_frame[self.t] = RF_norm_dot[best_rf]
+        self.rf_norm_dot_per_frame[self.t] = RF_norm_dot_o[best_rf]
         self.mean_rf_norm_dot_per_frame[self.t] = np.mean(self.rf_norm_dot_per_frame[max(0, self.t - self.error_mean_time):self.t])
 
-        # target_rf_norm_dot = 0.9
-        # if RF_norm_dot[best_rf] < target_rf_norm_dot:
-        #     self.factor_per_rf[best_rf] *= (1.0 + self.lr_factor)
-        # else:
-        #     self.factor_per_rf[best_rf] *= (1.0 - self.lr_factor)
-        learn_factor = True
+        # this was the working firing rate rule part (2)
+        learn_factor = False
         if learn_factor:
             self.factor_per_rf *= (1.0 + self.lr_factor * (1.0 / self.num_rfs))
             self.factor_per_rf[best_rf] *= (1.0 - self.lr_factor)
@@ -117,7 +120,25 @@ class IterWTABrain(object):
         self.rfs_raster_history[best_rf, self.raster_t] = 1
 
         lr = self.lr
-        self.weights[best_rf, :] = lr * input_state + (1.0 - lr) * self.weights[best_rf, :]
+        self.prob_weights[best_rf, :] = lr * input_state + (1.0 - lr) * self.prob_weights[best_rf, :]
+
+        best_rf_prob_weights = self.prob_weights[best_rf, :]
+        max_prob_index = np.argmax(best_rf_prob_weights)
+
+        new_max_prob_weight = lr * 1.0 + (1.0 - lr) * self.i_weights[best_rf, max_prob_index]
+
+        if input_state[max_prob_index] == 1:
+            self.i_weights[best_rf, :] = lr * input_state + (1.0 - lr) * self.i_weights[best_rf, :]
+        self.i_weights[best_rf, max_prob_index] = new_max_prob_weight
+
+        # TODO THIS TURNS OFF SPECIFIC MAX-BASED WAY TO BUILD THE INPUT RF ABOVE
+        # TODO THIS SHOULD MAKE BIG DIFFERENCE ON UPPER LAYERS HOPEFULLY: TEST OUT
+        #   without the above, upper layer RFS may never have any input rf (no prob above 0.5) ???
+        # self.i_weights = self.prob_weights.copy()
+
+        self.o_weights = self.i_weights.copy()
+        self.o_weights[self.o_weights < 0.5] = 0
+        self.o_weights[self.o_weights >= 0.5] = 1
 
         self.num_per_rf[best_rf] += 1
 
@@ -147,23 +168,32 @@ class IterWTABrain(object):
         ims_list = []
         ims_names_list = []
 
-        rfs_im, rf_ims_dict = make_im(self.weights, num_bins_per_pixel=1,
+        rfs_im, rf_ims_dict = make_im(self.i_weights, num_bins_per_pixel=1,
                                                     input_im_dim=self.input_im_dim,
-                                                    im_final_dim=int(200 * 3000 / 400),  # /800 for two-im per rf display
+                                                    im_final_dim=int(200 * 3000 / 800),  # /800 for two-im per rf display
                                                     mod_for_disp=int(sqrt(self.num_rfs)),
                                                     normalize_weights=True)
 
         ims_list.append(rfs_im)
-        ims_names_list.append('rfs_im')
+        ims_names_list.append('i_weights')
 
-        rfs_im, rf_ims_dict = make_im(self.last_weights_eff, num_bins_per_pixel=1,
+        rfs_im, rf_ims_dict = make_im(self.o_weights, num_bins_per_pixel=1,
                                                     input_im_dim=self.input_im_dim,
-                                                    im_final_dim=int(200 * 3000 / 400),  # /800 for two-im per rf display
+                                                    im_final_dim=int(200 * 3000 / 800),  # /800 for two-im per rf display
                                                     mod_for_disp=int(sqrt(self.num_rfs)),
                                                     normalize_weights=True)
 
         ims_list.append(rfs_im)
-        ims_names_list.append('rfs_eff_im')
+        ims_names_list.append('o_weights')
+
+        rfs_im, rf_ims_dict = make_im(self.prob_weights, num_bins_per_pixel=1,
+                                                    input_im_dim=self.input_im_dim,
+                                                    im_final_dim=int(200 * 3000 / 800),  # /800 for two-im per rf display
+                                                    mod_for_disp=int(sqrt(self.num_rfs)),
+                                                    normalize_weights=True)
+
+        ims_list.append(rfs_im)
+        ims_names_list.append('prob_weights')
 
         return ims_list, ims_names_list
 
@@ -185,6 +215,14 @@ class IterWTABrain(object):
         self.ax_bar.cla()
         self.ax_bar.bar(np.arange(self.num_rfs), self.factor_per_rf)
         self.fig_bar.savefig(self.plots_folder + '/factor_per_rf.png', dpi=100)
+
+        self.ax_bar.cla()
+        self.ax_bar.bar(np.arange(self.num_rfs), np.amax(self.i_weights, axis=1))
+        self.fig_bar.savefig(self.plots_folder + '/max_i_weight_per_rf.png', dpi=100)
+
+        self.ax_bar.cla()
+        self.ax_bar.bar(np.arange(self.num_rfs), np.sum(self.o_weights, axis=1))
+        self.fig_bar.savefig(self.plots_folder + '/sum_o_weight_per_rf.png', dpi=100)
 
         skip_input_raster = True
         if not skip_input_raster:
