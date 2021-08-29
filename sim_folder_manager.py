@@ -16,8 +16,12 @@ class SimFolderManager(object):
 
         # TODO fix this again or just use git commit id
         file_list = ['run_demo_perception.py',
+                     'run_demo_perception_multilayer.py',
                      'run_sweeps_perception.py',
-                     'robot_brain_classes/rate_control_wta.py',
+                     'run_sweeps_perception_multilayer.py',
+                     'robot_brain_classes/iter_wta.py',
+                     'robot_brain_classes/tiled_iter_wta.py',
+                     'robot_brain_classes/layered_tiled_rate_control_wta.py',
                      'offline_analyses/try_sparsify_3.py',  # plot make image
                      'robot_sensor_classes/video_playback.py',
                      'robot_preprocess_classes/event_pre_processor.py']

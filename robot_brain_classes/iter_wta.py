@@ -77,6 +77,15 @@ class IterWTABrain(object):
 
         self.num_per_rf = np.zeros(self.num_rfs)
 
+        # new fp, fn, total errors and over time
+        self.sum_input_per_frame = np.zeros(self.max_time)
+        self.sum_fp_per_frame = np.zeros(self.max_time)
+        self.sum_fn_per_frame = np.zeros(self.max_time)
+        self.sum_err_per_frame = np.zeros(self.max_time)
+        self.mean_fp_per_input_event = np.zeros(self.max_time)
+        self.mean_fn_per_input_event = np.zeros(self.max_time)
+        self.mean_err_per_input_event = np.zeros(self.max_time)
+
     def process_input(self, input_events_p, input_events_n, event_coords_r, event_coords_c, original_input_image):
 
         if self.t >= self.max_time:
@@ -108,10 +117,32 @@ class IterWTABrain(object):
 
         best_rf = np.argmax(RF_norm_dot_i)
 
+        # record errors
+
         self.rf_norm_dot_per_frame[self.t] = RF_norm_dot_o[best_rf]
         self.mean_rf_norm_dot_per_frame[self.t] = np.mean(self.rf_norm_dot_per_frame[max(0, self.t - self.error_mean_time):self.t])
 
+        self.sum_input_per_frame[self.t] = np.sum(input_state)
+
+        fp = self.o_weights[best_rf, :] - input_state
+        fp[fp < 0] = 0
+        fn = input_state - self.o_weights[best_rf, :]
+        fn[fn < 0] = 0
+        self.sum_fp_per_frame[self.t] = np.sum(fp)
+        self.sum_fn_per_frame[self.t] = np.sum(fn)
+        self.sum_err_per_frame[self.t] = self.sum_fp_per_frame[self.t] + self.sum_fn_per_frame[self.t]
+
+        t_sum_input = np.sum(self.sum_input_per_frame[max(0, self.t - self.error_mean_time):self.t])
+        t_sum_fp = np.sum(self.sum_fp_per_frame[max(0, self.t - self.error_mean_time):self.t])
+        t_sum_fn = np.sum(self.sum_fn_per_frame[max(0, self.t - self.error_mean_time):self.t])
+        t_sum_err = np.sum(self.sum_err_per_frame[max(0, self.t - self.error_mean_time):self.t])
+
+        self.mean_fp_per_input_event[self.t] = t_sum_fp / t_sum_input
+        self.mean_fn_per_input_event[self.t] = t_sum_fn / t_sum_input
+        self.mean_err_per_input_event[self.t] = t_sum_err / t_sum_input
+
         # this was the working firing rate rule part (2)
+
         learn_factor = False
         if learn_factor:
             self.factor_per_rf *= (1.0 + self.lr_factor * (1.0 / self.num_rfs))
@@ -200,6 +231,8 @@ class IterWTABrain(object):
 
     def do_plots(self):
 
+        # time plots:
+
         self.ax_bar.cla()
         num_rf = self.rfs_raster_history.shape[0]
         raster_plot = np.transpose(np.multiply(self.rfs_raster_history, np.arange(num_rf)[:, np.newaxis]))
@@ -209,8 +242,22 @@ class IterWTABrain(object):
         self.fig_bar.savefig(self.plots_folder + "/raster_rfs.png", dpi=100)
 
         self.ax_bar.cla()
+        self.ax_bar.plot(self.mean_fp_per_input_event[0:self.t], color='k', marker='.')
+        self.fig_bar.savefig(self.plots_folder + "/mean_fp_per_input_event.png", dpi=100)
+
+        self.ax_bar.cla()
+        self.ax_bar.plot(self.mean_fn_per_input_event[0:self.t], color='k', marker='.')
+        self.fig_bar.savefig(self.plots_folder + "/mean_fn_per_input_event.png", dpi=100)
+
+        self.ax_bar.cla()
+        self.ax_bar.plot(self.mean_err_per_input_event[0:self.t], color='k', marker='.')
+        self.fig_bar.savefig(self.plots_folder + "/mean_err_per_input_event.png", dpi=100)
+
+        self.ax_bar.cla()
         self.ax_bar.plot(self.mean_rf_norm_dot_per_frame[0:self.t], color='k', marker='.')
         self.fig_bar.savefig(self.plots_folder + "/time_averaged_mean_rf_norm_dot.png", dpi=100)
+
+        # per rf plots:
 
         self.ax_bar.cla()
         self.ax_bar.bar(np.arange(self.num_rfs), self.factor_per_rf)
