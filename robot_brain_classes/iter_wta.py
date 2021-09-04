@@ -115,7 +115,16 @@ class IterWTABrain(object):
         i_weights_eff = np.power(self.i_weights, self.factor_per_rf[:, np.newaxis])
 
         RF_norm_dot_i = np.divide(np.sum(np.multiply(i_weights_eff, input_state), axis=1), np.sum(i_weights_eff, axis=1) + fix_offset)
-        best_rf = np.argmax(RF_norm_dot_i)
+
+        fp_all = self.o_weights - input_state
+        fp_all[fp_all < 0] = 0
+        fn_all = input_state - self.o_weights
+        fn_all[fn_all < 0] = 0
+
+        all_err = np.sum(fp_all, axis=1) + np.sum(fn_all, axis=1)
+
+        best_rf = np.argmin(all_err)
+        #best_rf = np.argmax(RF_norm_dot_i)
 
         RF_norm_dot_o = np.divide(np.sum(np.multiply(self.o_weights, input_state), axis=1), np.sum(self.o_weights, axis=1) + fix_offset)
 
