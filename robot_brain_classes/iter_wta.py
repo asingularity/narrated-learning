@@ -112,10 +112,12 @@ class IterWTABrain(object):
         # weights_eff = np.power(self.io_weights, self.factor_per_rf[:, np.newaxis])
         # self.last_weights_eff = weights_eff
 
-        RF_norm_dot_i = np.divide(np.sum(np.multiply(self.i_weights, input_state), axis=1), np.sum(self.i_weights, axis=1) + fix_offset)
-        RF_norm_dot_o = np.divide(np.sum(np.multiply(self.o_weights, input_state), axis=1), np.sum(self.o_weights, axis=1) + fix_offset)
+        i_weights_eff = np.power(self.i_weights, self.factor_per_rf[:, np.newaxis])
 
+        RF_norm_dot_i = np.divide(np.sum(np.multiply(i_weights_eff, input_state), axis=1), np.sum(i_weights_eff, axis=1) + fix_offset)
         best_rf = np.argmax(RF_norm_dot_i)
+
+        RF_norm_dot_o = np.divide(np.sum(np.multiply(self.o_weights, input_state), axis=1), np.sum(self.o_weights, axis=1) + fix_offset)
 
         # record errors
 
@@ -143,7 +145,7 @@ class IterWTABrain(object):
 
         # this was the working firing rate rule part (2)
 
-        learn_factor = False
+        learn_factor = True
         if learn_factor:
             self.factor_per_rf *= (1.0 + self.lr_factor * (1.0 / self.num_rfs))
             self.factor_per_rf[best_rf] *= (1.0 - self.lr_factor)
@@ -165,9 +167,10 @@ class IterWTABrain(object):
         # TODO THIS TURNS OFF SPECIFIC MAX-BASED WAY TO BUILD THE INPUT RF ABOVE
         # TODO THIS SHOULD MAKE BIG DIFFERENCE ON UPPER LAYERS HOPEFULLY: TEST OUT
         #   without the above, upper layer RFS may never have any input rf (no prob above 0.5) ???
-        # self.i_weights = self.prob_weights.copy()
+        self.i_weights = self.prob_weights.copy()
 
-        self.o_weights = self.i_weights.copy()
+        #self.o_weights = self.i_weights.copy()
+        self.o_weights = i_weights_eff.copy()
         self.o_weights[self.o_weights < 0.5] = 0
         self.o_weights[self.o_weights >= 0.5] = 1
 
