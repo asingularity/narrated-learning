@@ -38,6 +38,7 @@ class IterWTABrain(object):
         self.input_state_dim = 2 * self.input_im_dim * self.input_im_dim  # why 2? + and - changes
 
         self.prob_weights = np.random.random((self.num_rfs, self.input_state_dim)) * 1e-2  # 1e-12
+        #self.prob_weights = np.zeros((self.num_rfs, self.input_state_dim))
         self.prob_weights = self.prob_weights.astype(np.float32)
 
         self.i_weights = self.prob_weights.copy()
@@ -116,15 +117,15 @@ class IterWTABrain(object):
 
         RF_norm_dot_i = np.divide(np.sum(np.multiply(i_weights_eff, input_state), axis=1), np.sum(i_weights_eff, axis=1) + fix_offset)
 
-        fp_all = self.o_weights - input_state
-        fp_all[fp_all < 0] = 0
-        fn_all = input_state - self.o_weights
-        fn_all[fn_all < 0] = 0
+        # fp_all = self.o_weights - input_state
+        # fp_all[fp_all < 0] = 0
+        # fn_all = input_state - self.o_weights
+        # fn_all[fn_all < 0] = 0
+        #
+        # all_err = np.sum(fp_all, axis=1) + np.sum(fn_all, axis=1)
+        #best_rf = np.argmin(all_err)
 
-        all_err = np.sum(fp_all, axis=1) + np.sum(fn_all, axis=1)
-
-        best_rf = np.argmin(all_err)
-        #best_rf = np.argmax(RF_norm_dot_i)
+        best_rf = np.argmax(RF_norm_dot_i)
 
         RF_norm_dot_o = np.divide(np.sum(np.multiply(self.o_weights, input_state), axis=1), np.sum(self.o_weights, axis=1) + fix_offset)
 
@@ -158,6 +159,7 @@ class IterWTABrain(object):
         if learn_factor:
             self.factor_per_rf *= (1.0 + self.lr_factor * (1.0 / self.num_rfs))
             self.factor_per_rf[best_rf] *= (1.0 - self.lr_factor)
+            self.factor_per_rf[self.factor_per_rf > 2.5] = 2.5
 
         self.rfs_raster_history[best_rf, self.raster_t] = 1
 
