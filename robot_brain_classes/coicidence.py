@@ -69,27 +69,32 @@ class CBrain(object):
 
     def _calculate_measure(self, w, input_state):
 
-        fix_offset = 1e-16
-        rf_norm_dot = np.divide(np.sum(np.multiply(w, input_state), axis=1), np.sum(w, axis=1) + fix_offset)
+        if 0:
+            fix_offset = 1e-16
+            rf_norm_dot = np.divide(np.sum(np.multiply(w, input_state), axis=1), np.sum(w, axis=1) + fix_offset)
+            total_err = - rf_norm_dot
+            return total_err
+        else:
+            fp = w - input_state
+            fp[fp < 0] = 0
+            fn = input_state - w
+            fn[fn < 0] = 0
 
-        total_err = - rf_norm_dot
-        return total_err
+            tp = np.sum(np.multiply(w, input_state), axis=1)
 
-        fp = w - input_state
-        fp[fp < 0] = 0
-        fn = input_state - w
-        fn[fn < 0] = 0
+            # print(fp.shape, fn.shape)  # (400, 128)
+            #print('fp+fn')
+            #print(np.sum(fp + fn, axis=1) )
+            #print('tp')
+            #print(tp)
 
-        tp = np.sum(np.multiply(w, input_state), axis=1)
-
-        # print(fp.shape, fn.shape)  # (400, 128)
-        print('fp+fn')
-        print(np.sum(fp + fn, axis=1) )
-        print('tp')
-        print(tp)
-        total_err = np.sum(fp + fn, axis=1) - tp
-
-        return total_err
+            #total_err = np.sum(fp + fn, axis=1) - tp
+            fp_sum = np.sum(fp, axis=1)
+            #print('tp', tp)
+            #print('fp_sum', fp_sum)
+            total_err = fp_sum - tp
+            #print('total_err', total_err)
+            return total_err
 
     def process_input(self, input_events_p, input_events_n, event_coords_r, event_coords_c, original_input_image):
 
