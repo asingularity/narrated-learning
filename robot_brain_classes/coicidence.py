@@ -114,11 +114,34 @@ class CBrain(object):
         self.rfs_raster_history[:, self.raster_t] = 0
 
         # calculate measure
+        measure_per_rf_BEFORE_WTA = self._calculate_measure(w=self.prob_weights, input_state=input_state)
+
+        activated_rf = np.argmin(measure_per_rf_BEFORE_WTA)
+
+        # TODO this greatly increases the types of RFS (first pic on phone today 10/14, vs. second pic is with this commented out):
+        input_state = input_state - self.prob_weights[activated_rf, :]
+        input_state[input_state < 0] = 0
+
         measure_per_rf = self._calculate_measure(w=self.prob_weights, input_state=input_state)
 
         # learn
         m_hist = self.measure_history.get_state_sequence(delay_long=self.m_len, delay_short=0)
         # print(m_hist.shape)  # (1001, 400)
+
+        # if self.t > self.m_len:
+        #    print(measure_per_rf)
+
+        # compute activations
+
+        # on_rfs = np.nonzero(measure_per_rf < -0.2)[0]
+
+        # compute remainder
+        # sum_on_rfs = np.sum(self.prob_weights[on_rfs, :], axis=0)
+        # input_state = input_state - sum_on_rfs
+        # input_state[input_state < 0] = 0
+
+        # learn on remainder input state
+
         if self.t > self.m_len:
             #print('t', self.t)
             #print('m_hist')
@@ -132,6 +155,8 @@ class CBrain(object):
                 self.prob_weights[learn_now, :] = lr * input_state + (1.0 - lr) * self.prob_weights[learn_now, :]
 
         self.measure_history.process_new_states(newest_states_list=[measure_per_rf])
+
+        self.rfs_raster_history[activated_rf, self.raster_t] = 1
 
         self.t += 1
         self.raster_t += 1
