@@ -27,12 +27,14 @@ np.random.seed(6)
 
 #from robot_brain_classes.tiled_rate_control_wta import RateControlWTABRainLayer0
 #from robot_brain_classes.iter_wta import IterWTABrain
-from robot_brain_classes.coicidence import CBrain
 #from robot_brain_classes.rate_control_wta import RateControlWTABRain
-# TODO rename to avoid confusion! class
 #from robot_brain_classes.rate_control_wta_heirarchy import RateControlWTABRain
-
 #from robot_brain_classes.rate_control_som_wta import RateControlSomWtaBrain
+#from robot_brain_classes.coicidence import CBrain
+#from robot_brain_classes.quad_optim_brain import QuadOptimBrain
+from robot_brain_classes.quad_optim_brain import QuadOptimBrain
+
+
 from visualizer_classes.segment_visualizer import SegmentVisualizer
 from sim_folder_manager import SimFolderManager
 from robot_sensor_classes.video_playback import VideoPlaybackSensor
@@ -116,7 +118,7 @@ def get_brain_params():
     # NoWTA
     brain_params = {
         'input_im_dim': RF_IM_DIM,
-        'num_rfs': 400,
+        'num_rfs': 4,
         'lr': 1.0 / 100,  # 1000
         'max_time': 5000000,
         'do_raster_plots_every_k_im': 4,  # or None
@@ -142,12 +144,7 @@ def get_visualizer_params():
 
 def init_demo():
     return {
-        #'robot_brain': MultiLayerSeqNNBrain(get_brain_params()),
-        #'robot_brain': SeqNNSeqKMeansBrain(get_brain_params()),
-        #'robot_brain': BatchIterWTABrain(get_brain_params()),
-        #'robot_brain': RateControlWTABRainLayer0(get_brain_params()),  # ****
-        'robot_brain': CBrain(get_brain_params()),
-        #'robot_brain': RateControlSomWtaBrain(get_brain_params()),
+        'robot_brain': QuadOptimBrain(get_brain_params()),
         'robot_sensors': VideoPlaybackSensor(get_sensors_params()),
         'visualizer': SegmentVisualizer(get_visualizer_params()),
         'sim_folder_manager': SimFolderManager(get_sim_folder_manager_params())
