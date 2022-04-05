@@ -118,7 +118,7 @@ def get_brain_params():
     # NoWTA
     brain_params = {
         'input_im_dim': RF_IM_DIM,
-        'num_rfs': 4,
+        'num_rfs': 16,
         'lr': 1.0 / 100,  # 1000
         'max_time': 5000000,
         'do_raster_plots_every_k_im': 4,  # or None

@@ -65,11 +65,15 @@ class QuadOptimBrain(object):
 
         self.rf_weights = np.random.random((self.num_rfs, self.input_state_dim)) * 1e-2  # 1e-12
 
-        self.optim_time_steps = 1000
-        self.cardinality_K = 40
+        self.optim_time_steps = 8000
         self.optim_every_k_steps = self.optim_time_steps
 
-        self.Q_size = self.optim_time_steps
+        # TODO use: int(self.input_state_dim / self.num_rfs), but check for not even divide
+        # TODO this is only true without activation for the remainder!
+        self.cardinality_K = int(self.input_state_dim / self.num_rfs)
+
+
+        self.Q_size = self.input_state_dim  # self.optim_time_steps
         self.Q = np.zeros((self.Q_size, self.Q_size))
 
         self.input_history_for_Q = StatesLimitedHistory(params={'max_delay': self.optim_time_steps,
@@ -79,6 +83,102 @@ class QuadOptimBrain(object):
         self.t = 0
 
     def optim_rf(self, input_history, explained):
+        state_seq = self.input_history_for_Q.get_state_sequence(delay_long=self.optim_time_steps - 1, delay_short=0)
+
+        L = self.input_state_dim
+        M = self.optim_every_k_steps
+
+        # print(state_seq.shape)  # (10000, 128): (M, L)
+
+        # TODO explained here should be 2D, over all frames
+        state_seq_remainder = state_seq - explained
+        state_seq_remainder[state_seq_remainder < 0] = 0
+
+        assert self.Q_size == L
+
+        S = state_seq_remainder
+        S_sh = state_seq_remainder.copy()
+
+        ind = np.arange(L)
+        ind_sh = np.arange(L)
+
+        for k in range(L - 1):
+            S_sh = np.roll(S_sh, 1, axis=1)
+            ind_sh = np.roll(ind_sh, 1)
+
+            # ORIGINAL:
+            #array([[0, 1, 2, 3, 4],
+            #       [5, 6, 7, 8, 9]])
+            # ROLLED:
+            # array([[4, 0, 1, 2, 3],
+            #        [9, 5, 6, 7, 8]])
+
+            # shift, multiply, sum columnwise
+            # (shifted and not shifted)
+
+            overlaps = np.sum(np.multiply(S, S_sh), axis=0)
+            assert overlaps.shape[0] == L
+
+            self.Q[ind, ind_sh] = overlaps[:]
+
+        V = np.zeros(self.Q_size)
+
+        new_rf_weights = np.zeros(self.input_state_dim)
+        new_explained = explained.copy()
+
+        m = GEKKO(remote=False)
+        m.options.MAX_MEMORY = 5
+        # m.options.SOLVER = 2  # 2
+
+        num_vars = V.shape[0]
+        x_lower = 0
+        x_upper = 1
+
+        x_select = [m.Var(value=0, lb=x_lower, ub=x_upper, integer=False) for i in range(num_vars)]
+
+        # TODO replace the cardinality constraint with something more meaningful!!!
+
+        # cardinality constraint
+        enable_cardinality_constraint = True
+        if enable_cardinality_constraint:
+            print('initializing cardinality equation...')
+            # compare Type 2 vs. Type 3 constraints: solution speed and value
+            m.Equation((m.sum([x_select[i] for i in range(num_vars)])) == self.cardinality_K)
+
+        print('    initializing q objective...')
+        _ = m.qobj(b=V, A=self.Q, x=x_select, otype='max')
+
+        print('    NONZERO Q', np.count_nonzero(self.Q))
+
+        print('    solving...')
+
+        try:
+            m.solve(disp=True)
+            print('finished solving.')
+
+            x_arr = np.zeros(num_vars)
+            for i in range(num_vars):
+                select_val = x_select[i].value[0]
+                x_arr[i] = select_val  # x_value[i].value[0]
+
+            count_nnz = np.count_nonzero(x_arr)
+            print('nnz x_arr:', count_nnz)
+            if count_nnz > 0:
+
+                new_rf_weights[:] = x_arr[:]
+
+                # TODO explained should be set via activation, over all frames!
+                new_explained = new_explained + new_rf_weights
+                new_explained[new_explained > 1] = 1
+            else:
+                print('ERROR: zero chosen!!!')
+        except:
+            print('not solved')
+            raise
+
+        return new_rf_weights, new_explained
+
+    def optim_rf_kinda_works(self, input_history, explained):
         state_seq = self.input_history_for_Q.get_state_sequence(delay_long=self.optim_time_steps - 1, delay_short=0)
         # print(state_seq.shape)  # (10000, 128): (M, L)
 
@@ -182,7 +282,6 @@ class QuadOptimBrain(object):
             raise
 
         return new_rf_weights, new_explained
-
 
     def optim_rf_no_work(self, input_history, explained):
         # build Q matrix
