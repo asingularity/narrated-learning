@@ -382,6 +382,18 @@ class QuadOptimBrain(object):
 
         # TODO for prediction, Don't skip zeros!!!
 
+        self.input_history.process_new_states(newest_states_list=[input_state])
+
+        if self.t < self.input_concat_timesteps:
+            self.t += 1
+            return
+
+        state_seq = self.input_history.get_state_sequence(delay_long=self.input_concat_timesteps - 1, delay_short=0)
+        # print(state_seq.shape)  # (10000, 128): (M, L)
+
+        input_state = np.sum(state_seq, axis=0)
+        input_state[input_state > 1] = 1
+
         self.input_history_for_Q.process_new_states(newest_states_list=[input_state])
 
         self.rfs_raster_history[:, self.raster_t] = 0
