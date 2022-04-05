@@ -33,6 +33,7 @@ np.random.seed(0)
 
 class QuadOptimBrain(object):
     def __init__(self, params):
+
         self.input_im_dim = params['input_im_dim']
         self.num_rfs = params['num_rfs']
         self.lr = params['lr']
@@ -65,6 +66,7 @@ class QuadOptimBrain(object):
         self.rf_weights = np.random.random((self.num_rfs, self.input_state_dim)) * 1e-2  # 1e-12
 
         self.optim_time_steps = 1000
+        self.cardinality_K = 40
         self.optim_every_k_steps = self.optim_time_steps
 
         self.Q_size = self.optim_time_steps
@@ -83,10 +85,14 @@ class QuadOptimBrain(object):
         M = self.optim_time_steps
         L = self.input_state_dim
 
+        # TODO
+        #   THIS ISNT RIGHT!!!
+        #   TODO should apply thresholding!!! Based on activation!
         state_seq_remainder = state_seq - explained
         state_seq_remainder[state_seq_remainder < 0] = 0
 
-        #state_seq_remainder[state_seq_remainder == 0] = -1
+        # TODO apply this if zeroing out -1*-1 below!
+        # state_seq_remainder[state_seq_remainder == 0] = -1
 
         # compute all dot products
 
@@ -95,9 +101,17 @@ class QuadOptimBrain(object):
         # this is already the quadtratic matrix, but need to zero out the diagonal:
         all_dot_products[np.arange(M), np.arange(M)] = 0
 
+        # TODO
+        #   need to zero out wherever it was (-1) * (-1)
+
+        # tmp = state_seq_remainder.copy()
+        # tmp[tmp > 0] = 0
+        # neg_dot_products = np.matmul(tmp, np.transpose(tmp))
+        # neg_dot_products[np.arange(M), np.arange(M)] = 0
+
+        # all_dot_products = all_dot_products - neg_dot_products
 
         # all_dot_products = all_dot_products * 1.0 / (abs(np.amax(all_dot_products)))
-
 
         print('min', np.amin(all_dot_products), 'max', np.amax(all_dot_products))
         print(all_dot_products)
@@ -127,7 +141,7 @@ class QuadOptimBrain(object):
         if enable_cardinality_constraint:
             print('initializing cardinality equation...')
             # compare Type 2 vs. Type 3 constraints: solution speed and value
-            m.Equation((m.sum([x_select[i] for i in range(num_vars)])) == 40)
+            m.Equation((m.sum([x_select[i] for i in range(num_vars)])) == self.cardinality_K)
 
         print('    initializing q objective...')
         _ = m.qobj(b=V, A=self.Q, x=x_select, otype='max')
@@ -147,14 +161,22 @@ class QuadOptimBrain(object):
 
             count_nnz = np.count_nonzero(x_arr)
             print('nnz x_arr:', count_nnz)
+            if count_nnz > 0:
+                nnz = np.nonzero(x_arr)[0]
+                new_rf_weights[:] = np.mean(state_seq_remainder[nnz, :], axis=0)
 
-            nnz = np.nonzero(x_arr)[0]
-            new_rf_weights[:] = np.mean(state_seq_remainder[nnz, :], axis=0)
+                # TODO re-enable after applying thresholding to activation!!!
+                #new_rf_weights[new_rf_weights >= 0.5] = 1
+                #new_rf_weights[new_rf_weights < 0.5] = 0
 
-            # new_rf_weights[:] = x_arr[0:L]
-            new_explained = new_explained + new_rf_weights
-            new_explained[new_explained > 1] = 1
+                # new_rf_weights[:] = x_arr[0:L]
 
+                # TODO explained is per frame, not overall; need to apply it per frame based on activation!
+
+                new_explained = new_explained + new_rf_weights
+                new_explained[new_explained > 1] = 1
+            else:
+                print('ERROR: zero chosen!!!')
         except:
             print('not solved')
             raise
@@ -309,7 +331,7 @@ class QuadOptimBrain(object):
         rfs_im, rf_ims_dict = make_im(self.rf_weights,
                                       num_bins_per_pixel=1,
                                       input_im_dim=self.input_im_dim,
-                                      im_final_dim=int(200 * 3000 / 800),  # /800 for two-im per rf display
+                                      im_final_dim=int(50 * 3000 / 800),  # /800 for two-im per rf display
                                       mod_for_disp=int(sqrt(self.num_rfs)),
                                       normalize_weights=True)
 

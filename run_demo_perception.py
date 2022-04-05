@@ -44,8 +44,8 @@ from robot_preprocess_classes.event_pre_processor import EventPreProcessor
 DISABLE_BRAIN = False  # for testing input by itself; also starts slow display
 RF_IM_DIM = 8  # 8, 16, 32, 64, 128
 
-ROOT_DIR = '/srv'
-# ROOT_DIR = '/home/csaba'
+# ROOT_DIR = '/srv'
+ROOT_DIR = '/home/csaba'
 
 
 def get_sensors_params():
@@ -118,7 +118,7 @@ def get_brain_params():
     # NoWTA
     brain_params = {
         'input_im_dim': RF_IM_DIM,
-        'num_rfs': 8,
+        'num_rfs': 4,
         'lr': 1.0 / 100,  # 1000
         'max_time': 5000000,
         'do_raster_plots_every_k_im': 4,  # or None
