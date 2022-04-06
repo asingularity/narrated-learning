@@ -70,7 +70,7 @@ class QuadOptimBrain(object):
 
         # TODO use: int(self.input_state_dim / self.num_rfs), but check for not even divide
         # TODO this is only true without activation for the remainder!
-        self.cardinality_K = int(self.input_state_dim / self.num_rfs)
+        self.cardinality_K = 8  # int(self.input_state_dim / self.num_rfs)
 
 
         self.Q_size = self.input_state_dim  # self.optim_time_steps
@@ -90,7 +90,6 @@ class QuadOptimBrain(object):
 
         # print(state_seq.shape)  # (10000, 128): (M, L)
 
-        # TODO explained here should be 2D, over all frames
         state_seq_remainder = state_seq - explained
         state_seq_remainder[state_seq_remainder < 0] = 0
 
@@ -117,7 +116,13 @@ class QuadOptimBrain(object):
             # (shifted and not shifted)
 
             overlaps = np.sum(np.multiply(S, S_sh), axis=0)
+
+            overlaps = np.divide(overlaps, np.sum(S+S_sh, axis=0))
+
             assert overlaps.shape[0] == L
+
+            # TODO: subtract out count when they don't co-occur? i.e. when they each occur independently?
+            # how if they are not 0, 1 values?
 
             self.Q[ind, ind_sh] = overlaps[:]
 
@@ -132,7 +137,7 @@ class QuadOptimBrain(object):
 
         num_vars = V.shape[0]
         x_lower = 0
-        x_upper = 1
+        x_upper = 0.1
 
         x_select = [m.Var(value=0, lb=x_lower, ub=x_upper, integer=False) for i in range(num_vars)]
 
@@ -167,8 +172,14 @@ class QuadOptimBrain(object):
 
                 new_rf_weights[:] = x_arr[:]
 
-                # TODO explained should be set via activation, over all frames!
-                new_explained = new_explained + new_rf_weights
+                rf_norm_dot = np.dot(state_seq_remainder, new_rf_weights[:, np.newaxis]).flatten() * 1.0 / np.sum(new_rf_weights)
+                # print(np.amax(rf_norm_dot), np.amin(rf_norm_dot), np.mean(rf_norm_dot))
+
+                # TODO this is a sensitive parameter
+                thresh = 0.1
+                over_thresh_rfs = np.nonzero(rf_norm_dot > thresh)[0]
+
+                new_explained[over_thresh_rfs, :] = new_explained[over_thresh_rfs, :] + new_rf_weights
                 new_explained[new_explained > 1] = 1
             else:
                 print('ERROR: zero chosen!!!')
@@ -403,7 +414,7 @@ class QuadOptimBrain(object):
             print('Doing full optimization!')
             print()
 
-            explained = np.zeros_like(input_state)
+            explained = np.zeros((self.optim_every_k_steps, self.input_state_dim))
 
             for rf in range(self.num_rfs):
                 print()
