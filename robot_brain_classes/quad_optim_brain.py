@@ -70,10 +70,9 @@ class QuadOptimBrain(object):
 
         # TODO use: int(self.input_state_dim / self.num_rfs), but check for not even divide
         # TODO this is only true without activation for the remainder!
-        self.cardinality_K = 8  # int(self.input_state_dim / self.num_rfs)
+        self.cardinality_K = 4  # int(self.input_state_dim / self.num_rfs)
 
-
-        self.Q_size = self.input_state_dim  # self.optim_time_steps
+        self.Q_size = self.input_state_dim  # * 2  # self.optim_time_steps
         self.Q = np.zeros((self.Q_size, self.Q_size))
 
         self.input_history_for_Q = StatesLimitedHistory(params={'max_delay': self.optim_time_steps,
@@ -82,53 +81,39 @@ class QuadOptimBrain(object):
 
         self.t = 0
 
-    def optim_rf(self, input_history, explained):
+    def optim_rf_in_prog(self, input_history, explained):
         state_seq = self.input_history_for_Q.get_state_sequence(delay_long=self.optim_time_steps - 1, delay_short=0)
-
-        L = self.input_state_dim
-        M = self.optim_every_k_steps
-
         # print(state_seq.shape)  # (10000, 128): (M, L)
 
-        state_seq_remainder = state_seq - explained
-        state_seq_remainder[state_seq_remainder < 0] = 0
+        M = self.optim_time_steps
+        L = self.input_state_dim
 
-        assert self.Q_size == L
+        X_remainder = state_seq - explained
+        X_remainder[X_remainder < 0] = 0
 
-        S = state_seq_remainder
-        S_sh = state_seq_remainder.copy()
+        Y_remainder = X_remainder.copy()
+        Y_remainder[Y_remainder == 0] = -1
 
-        ind = np.arange(L)
-        ind_sh = np.arange(L)
+        Y_rem_sh = Y_remainder.copy()
+
+        assert self.Q_size == 2 * L
+
+        ind_X = np.arange(L)  # static
+        ind_Y = np.arange(L)  # will be shifted
 
         for k in range(L - 1):
-            S_sh = np.roll(S_sh, 1, axis=1)
-            ind_sh = np.roll(ind_sh, 1)
+            Y_rem_sh = np.roll(Y_rem_sh, 1, axis=1)
+            ind_Y = np.roll(ind_Y, 1)
 
-            # ORIGINAL:
-            #array([[0, 1, 2, 3, 4],
-            #       [5, 6, 7, 8, 9]])
-            # ROLLED:
-            # array([[4, 0, 1, 2, 3],
-            #        [9, 5, 6, 7, 8]])
+            X_Y_prod_sum = np.sum(np.multiply(X_remainder, Y_rem_sh), axis=0)
 
-            # shift, multiply, sum columnwise
-            # (shifted and not shifted)
-
-            overlaps = np.sum(np.multiply(S, S_sh), axis=0)
-
-            overlaps = np.divide(overlaps, np.sum(S+S_sh, axis=0))
-
-            assert overlaps.shape[0] == L
-
-            # TODO: subtract out count when they don't co-occur? i.e. when they each occur independently?
-            # how if they are not 0, 1 values?
-
-            self.Q[ind, ind_sh] = overlaps[:]
+            self.Q[ind_X, L+ind_Y] = X_Y_prod_sum[:]
+            self.Q[L+ind_X, ind_Y] = X_Y_prod_sum[:]
 
         V = np.zeros(self.Q_size)
 
-        new_rf_weights = np.zeros(self.input_state_dim)
+        new_rf_weights_X = np.zeros(self.input_state_dim)
+        new_rf_weights_Y = np.zeros(self.input_state_dim)
         new_explained = explained.copy()
 
         m = GEKKO(remote=False)
@@ -137,14 +122,14 @@ class QuadOptimBrain(object):
 
         num_vars = V.shape[0]
         x_lower = 0
-        x_upper = 0.1
+        x_upper = 1.0
 
-        x_select = [m.Var(value=0, lb=x_lower, ub=x_upper, integer=False) for i in range(num_vars)]
-
-        # TODO replace the cardinality constraint with something more meaningful!!!
+        # TODO if integer not True, rest is not well defined!!!
+        # TODO set value as different maybe!
+        x_select = [m.Var(value=0, lb=x_lower, ub=x_upper, integer=True) for i in range(num_vars)]
 
         # cardinality constraint
-        enable_cardinality_constraint = True
+        enable_cardinality_constraint = False
         if enable_cardinality_constraint:
             print('initializing cardinality equation...')
             # compare Type 2 vs. Type 3 constraints: solution speed and value
@@ -170,17 +155,133 @@ class QuadOptimBrain(object):
             print('nnz x_arr:', count_nnz)
             if count_nnz > 0:
 
-                new_rf_weights[:] = x_arr[:]
+                new_rf_weights_X[:] = x_arr[0:L]
+                new_rf_weights_Y[:] = x_arr[L:2 * L]
 
-                rf_norm_dot = np.dot(state_seq_remainder, new_rf_weights[:, np.newaxis]).flatten() * 1.0 / np.sum(new_rf_weights)
+                # rf_norm_dot = np.dot(state_seq_remainder, new_rf_weights[:, np.newaxis]).flatten() * 1.0 / np.sum(new_rf_weights)
                 # print(np.amax(rf_norm_dot), np.amin(rf_norm_dot), np.mean(rf_norm_dot))
 
                 # TODO this is a sensitive parameter
-                thresh = 0.1
-                over_thresh_rfs = np.nonzero(rf_norm_dot > thresh)[0]
+                # thresh = 0.0
+                # over_thresh_rfs = np.nonzero(rf_norm_dot > thresh)[0]
 
                 new_explained[over_thresh_rfs, :] = new_explained[over_thresh_rfs, :] + new_rf_weights
                 new_explained[new_explained > 1] = 1
+            else:
+                print('ERROR: zero chosen!!!')
+        except:
+            print('not solved')
+            raise
+
+        return new_rf_weights_X, new_rf_weights_Y, new_explained
+
+
+    def optim_rf(self, input_history, explained):
+        state_seq = self.input_history_for_Q.get_state_sequence(delay_long=self.optim_time_steps - 1, delay_short=0)
+
+        state_seq[state_seq == 0] = -1
+
+        L = self.input_state_dim
+        M = self.optim_every_k_steps
+
+        # print(state_seq.shape)  # (10000, 128): (M, L)
+
+        state_seq_remainder = state_seq - explained
+        state_seq_remainder[state_seq_remainder < -1] = -1
+
+        assert self.Q_size == L
+
+        S = state_seq_remainder
+        S_sh = state_seq_remainder.copy()
+
+        ind = np.arange(L)
+        ind_sh = np.arange(L)
+
+        for k in range(L - 1):
+            S_sh = np.roll(S_sh, 1, axis=1)
+            ind_sh = np.roll(ind_sh, 1)
+
+            # ORIGINAL:
+            #array([[0, 1, 2, 3, 4],
+            #       [5, 6, 7, 8, 9]])
+            # ROLLED:
+            # array([[4, 0, 1, 2, 3],
+            #        [9, 5, 6, 7, 8]])
+
+            # shift, multiply, sum columnwise
+            # (shifted and not shifted)
+
+            overlaps = np.sum(np.multiply(S, S_sh), axis=0)
+
+            # overlaps = np.divide(overlaps, np.sum(S+S_sh, axis=0))
+
+            assert overlaps.shape[0] == L
+
+            self.Q[ind, ind_sh] = overlaps[:]
+            self.Q[ind_sh, ind] = overlaps[:]
+
+        V = np.zeros(self.Q_size)
+
+        new_rf_weights = np.zeros(self.input_state_dim)
+        new_explained = explained.copy()
+
+        m = GEKKO(remote=False)
+        m.options.MAX_MEMORY = 5
+        # m.options.SOLVER = 2  # 2
+
+        num_vars = V.shape[0]
+        x_lower = 0
+        x_upper = 0.4
+
+        x_select = [m.Var(value=0.5, lb=x_lower, ub=x_upper, integer=False) for i in range(num_vars)]
+
+        # TODO replace the cardinality constraint with something more meaningful!!!
+
+        # cardinality constraint
+        enable_cardinality_constraint = True
+        if enable_cardinality_constraint:
+            print('initializing cardinality equation...')
+            # compare Type 2 vs. Type 3 constraints: solution speed and value
+            self.cardinality_K = 0
+            m.Equation((m.sum([x_select[i] for i in range(num_vars)])) > self.cardinality_K)
+
+        print('    initializing q objective...')
+        _ = m.qobj(b=V, A=self.Q, x=x_select, otype='max')
+
+        print('    NONZERO Q', np.count_nonzero(self.Q))
+
+        print('    solving...')
+
+        try:
+            m.solve(disp=True)
+            print('finished solving.')
+
+            x_arr = np.zeros(num_vars)
+            for i in range(num_vars):
+                select_val = x_select[i].value[0]
+                x_arr[i] = select_val  # x_value[i].value[0]
+
+            count_nnz = np.count_nonzero(x_arr)
+            print('nnz x_arr:', count_nnz)
+            if count_nnz > 0:
+
+                new_rf_weights[:] = x_arr[:]
+
+                rf_dot = np.dot(state_seq_remainder, new_rf_weights[:, np.newaxis]).flatten() #* 1.0 / np.sum(new_rf_weights)
+                # print(np.amax(rf_norm_dot), np.amin(rf_norm_dot), np.mean(rf_norm_dot))
+
+                # TODO this is a sensitive parameter
+                #thresh = 0.0
+                #over_thresh_rfs = np.nonzero(rf_norm_dot > thresh)[0]
+
+                print('rf_dot.shape', rf_dot.shape)  # 8000
+                print('new_rf_weights.shape', new_rf_weights.shape)  # 128
+                print('new_explained.shape', new_explained.shape)  # 8000,128
+
+                new_explained = new_explained + new_rf_weights * rf_dot[:, np.newaxis]
+                new_explained[new_explained > 1] = 1
+                new_explained[new_explained < -1] = -1
+
             else:
                 print('ERROR: zero chosen!!!')
         except:
