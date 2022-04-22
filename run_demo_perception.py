@@ -32,7 +32,8 @@ np.random.seed(6)
 #from robot_brain_classes.rate_control_som_wta import RateControlSomWtaBrain
 #from robot_brain_classes.coicidence import CBrain
 #from robot_brain_classes.quad_optim_brain import QuadOptimBrain
-from robot_brain_classes.quad_optim_brain import QuadOptimBrain
+#from robot_brain_classes.quad_optim_brain import QuadOptimBrain
+from robot_brain_classes.dynamic_coincidence import DynamicCoincidenceBrain
 
 
 from visualizer_classes.segment_visualizer import SegmentVisualizer
@@ -93,7 +94,7 @@ def get_sim_folder_manager_params():
 
     params = {
         'sim_prefix': sim_prefix,
-        'sim_folders_path': ROOT_DIR + '/projects/NL-sim2/',
+        'sim_folders_path': ROOT_DIR + '/projects/NL-sim-venv/',
         'scripts_folder_path': ROOT_DIR + '/projects/NL/'
     }
     return params
@@ -144,7 +145,7 @@ def get_visualizer_params():
 
 def init_demo():
     return {
-        'robot_brain': QuadOptimBrain(get_brain_params()),
+        'robot_brain': DynamicCoincidenceBrain(get_brain_params()),
         'robot_sensors': VideoPlaybackSensor(get_sensors_params()),
         'visualizer': SegmentVisualizer(get_visualizer_params()),
         'sim_folder_manager': SimFolderManager(get_sim_folder_manager_params())
