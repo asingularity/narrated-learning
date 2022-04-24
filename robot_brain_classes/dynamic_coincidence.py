@@ -52,9 +52,12 @@ class DynamicCoincidenceBrain(object):
         self.rfs_raster_history = np.zeros((self.num_rfs, self.raster_steps), np.uint8)
 
         self.fig_bar = plt.figure(figsize=(40, 20))
+
         self.ax_bar_list = []
-        for k in range(self.num_rfs):
-            subpl = self.fig_bar.add_subplot(self.num_rfs, 1, k + 1)
+        self.rfs_to_plot = 8  # self.num_rfs
+
+        for k in range(self.rfs_to_plot):
+            subpl = self.fig_bar.add_subplot(self.rfs_to_plot, 1, k + 1)
             subpl.cla()
             subpl.get_xaxis().get_major_formatter().set_scientific(False)
             subpl.get_yaxis().get_major_formatter().set_scientific(False)
@@ -120,7 +123,7 @@ class DynamicCoincidenceBrain(object):
             print('max_match', self.max_match)
             print('starting plot...')
 
-            for k in range(self.num_rfs):
+            for k in range(self.rfs_to_plot):
                 #print('    rf:', k)
                 subpl = self.ax_bar_list[k]
                 subpl.cla()
@@ -195,6 +198,9 @@ class DynamicCoincidenceBrain(object):
 
         # adjust threshold: set to right below match for spikes
         #   then, decay over time
+        self.thresholds = self.thresholds * 0.999
+        spike_rfs = np.nonzero(spikes)[0]
+        self.thresholds[spike_rfs] = match[spike_rfs] * 0.99
 
         self.thresh_history.process_new_states(newest_states_list=[self.thresholds])
         self.match_history.process_new_states(newest_states_list=[match])
