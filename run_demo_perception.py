@@ -43,7 +43,7 @@ from robot_preprocess_classes.event_pre_processor import EventPreProcessor
 
 
 DISABLE_BRAIN = False  # for testing input by itself; also starts slow display
-RF_IM_DIM = 8  # 8, 16, 32, 64, 128
+RF_IM_DIM = 16  # 8, 16, 32, 64, 128
 
 # ROOT_DIR = '/srv'
 ROOT_DIR = '/home/csaba'
@@ -119,10 +119,10 @@ def get_brain_params():
     # NoWTA
     brain_params = {
         'input_im_dim': RF_IM_DIM,
-        'num_rfs': 32,
-        'lr': 1.0 / 100,  # 1000
+        'num_rfs': 16,
+        'lr': 1.0 / 1000,  # 1000
         'max_time': 5000000,
-        'do_raster_plots_every_k_im': 4,  # or None
+        'do_plots_every_k_sec': 3,  # or None
     }
 
     return brain_params
@@ -132,7 +132,7 @@ def get_visualizer_params():
     params = {
         'color_enabled': False,
         'fps_display_interval': 6,
-        'image_display_secs_fast': 3,  # 8+ for good speed
+        'image_display_secs_fast': 0.1,  # 8+ for good speed
         'waitKey_time_fast': 1,  # 1, 100, 5000
         'image_display_secs_slow': 0.0, # 0.01  # 2,  # 0: every frame
         'waitKey_time_slow': 1,  # 1, 100, 5000
