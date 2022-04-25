@@ -64,7 +64,6 @@ class DynamicCoincidenceBrain(object):
             self.ax_bar_list.append(subpl)
 
         self.rf_decaying = np.zeros((self.num_rfs, self.input_state_dim))
-        self.rf_decay_alpha = 0.99
 
         self.rf_weights = np.random.random((self.num_rfs, self.input_state_dim)) * 1e-2  # 1e-12
 
@@ -188,19 +187,62 @@ class DynamicCoincidenceBrain(object):
         input_state[input_state > 1] = 1
         nnz_input = np.nonzero(input_state)[0]
 
-        #self.rf_decaying = self.rf_decaying * self.rf_decay_alpha
+        self.rf_decaying = self.rf_decaying * 0.9
+        self.thresholds = self.thresholds * 0.999
 
         match = np.divide(np.sum(np.multiply(self.rf_weights, input_state), axis=1), np.sum(self.rf_weights, axis=1))
 
         self.max_match = max(self.max_match, np.amax(match))
 
-        spikes = np.greater(match, self.thresholds).astype(np.int)
+        # ******************* first spike rule *******************
+        # no WTA:
+        # spikes = np.greater(match, self.thresholds).astype(np.int)
+
+        # ******************* second spike rule *******************
+
+        # if more than one spike, now we do a (k?-) WTA
+        # this rule, often, nobody spikes because best match is only one below its threshold for example
+        # BUT its a good rule
+        # however: instead, should be which is most above its threshold?
+
+        # spikes = np.zeros(self.num_rfs)
+        # max_rf = np.argmax(match)
+        # max_match_val = match[max_rf]
+        # if max_match_val > self.thresholds[max_rf]:
+        #     spikes[max_rf] = 1
+
+        # ******************* third spike rule *******************
+
+        spikes = np.zeros(self.num_rfs)
+
+        prop_match_thresh = np.divide(match, self.thresholds)
+
+        max_rf = np.argmax(prop_match_thresh)
+        max_match_val = match[max_rf]
+        if max_match_val > self.thresholds[max_rf]:
+            spikes[max_rf] = 1
 
         # adjust threshold: set to right below match for spikes
         #   then, decay over time
-        self.thresholds = self.thresholds * 0.999
+
         spike_rfs = np.nonzero(spikes)[0]
         self.thresholds[spike_rfs] = match[spike_rfs] * 0.99
+
+        # adjust weights
+        # increase for 1-input: proportional to coincidence
+        # decrease for 0-input
+
+        enable_learning = True
+        if enable_learning:
+            # original, old not good rule:
+            #self.rf_weights[spike_rfs, :] = self.lr * input_state + (1.0 - self.lr) * self.rf_weights[spike_rfs, :]
+
+            if len(spike_rfs) > 0:
+                lr_all = self.lr * np.multiply(self.rf_decaying[spike_rfs, :], self.rf_weights[spike_rfs, :])
+                #print(np.amin(lr_all), np.amax(lr_all))
+                self.rf_weights[spike_rfs, :] = np.multiply(lr_all, input_state) + np.multiply((1.0 - lr_all), self.rf_weights[spike_rfs, :])
+
+        self.rf_decaying[spike_rfs, :] = 1.0
 
         self.thresh_history.process_new_states(newest_states_list=[self.thresholds])
         self.match_history.process_new_states(newest_states_list=[match])
@@ -215,6 +257,7 @@ class DynamicCoincidenceBrain(object):
                 self.do_plots()
                 self.last_plot_time = time.time()
 
+        # WTA stuff
         enable_learning = False
         if enable_learning:
             best_rf = np.argmax(match)

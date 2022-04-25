@@ -120,9 +120,9 @@ def get_brain_params():
     brain_params = {
         'input_im_dim': RF_IM_DIM,
         'num_rfs': 32,
-        'lr': 1.0 / 1000,  # 1000
+        'lr': 1.0 / 100,  # 1000
         'max_time': 5000000,
-        'do_plots_every_k_sec': 3,  # or None
+        'do_plots_every_k_sec': 10,  # or None
     }
 
     return brain_params
