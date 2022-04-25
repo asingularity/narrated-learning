@@ -195,8 +195,7 @@ class DynamicCoincidenceBrain(object):
         self.rf_decaying = self.rf_decaying * 0.9
         self.thresholds = self.thresholds * 0.999
 
-        rf_weights_for_match = np.power(self.rf_weights, 10)
-        match = np.divide(np.sum(np.multiply(rf_weights_for_match, input_state), axis=1), np.sum(rf_weights_for_match, axis=1))
+        match = np.divide(np.sum(np.multiply(self.rf_weights, input_state), axis=1), np.sum(self.rf_weights, axis=1))
 
         self.max_match = max(self.max_match, np.amax(match))
         self.sum_match += np.amax(match)  # for average best match
