@@ -83,6 +83,8 @@ class DynamicCoincidenceBrain(object):
                                                           'store_extra_data': False})
 
         self.max_match = 0.0
+        self.sum_match = 0.0
+        self.num_match = 0
 
     def get_final_errors_dict(self):
         d = {}
@@ -120,6 +122,7 @@ class DynamicCoincidenceBrain(object):
         if self.t > self.match_history_len:
             print()
             print('max_match', self.max_match)
+            print('mean best match:', self.sum_match / self.num_match)
             print('starting plot...')
 
             for k in range(self.rfs_to_plot):
@@ -138,6 +141,8 @@ class DynamicCoincidenceBrain(object):
 
             print('done plot.')
             self.max_match = 0.0
+            self.sum_match = 0.0
+            self.num_match = 0
 
         if False: #self.t > self.match_history_len:
             # time plots:
@@ -193,6 +198,8 @@ class DynamicCoincidenceBrain(object):
         match = np.divide(np.sum(np.multiply(self.rf_weights, input_state), axis=1), np.sum(self.rf_weights, axis=1))
 
         self.max_match = max(self.max_match, np.amax(match))
+        self.sum_match += np.amax(match)  # for average best match
+        self.num_match += 1  # for average best match
 
         # ******************* first spike rule *******************
         # no WTA:
