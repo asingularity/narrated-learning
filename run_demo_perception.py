@@ -64,7 +64,7 @@ def get_sensors_params():
         'returned_im_dtype': np.float32,  # only np.float32 supported
         'returned_im_use_color': False,  # only False supported for now
         'video_dir': ROOT_DIR + '/projects/video-downloads',
-        #'video_filename': 'sea-turtles-yLuEx-XH3Uc.mp4'
+        #'video_filename': 'sea-turtles-yLuEx-XH3Uc.mp4'  # not on laptop
         #'video_filename': 'seattle-driving-fkps18H3SXY.mp4'
         'video_filename': 'sea-turtles-11hr-spxtEt6RaS4.mp4'
     }
@@ -119,7 +119,7 @@ def get_brain_params():
     # NoWTA
     brain_params = {
         'input_im_dim': RF_IM_DIM,
-        'num_rfs': 32,
+        'num_rfs': 64,
         'lr': 1.0 / 100,  # 1000
         'max_time': 5000000,
         'do_plots_every_k_sec': 10,  # or None

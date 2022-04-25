@@ -205,22 +205,24 @@ class DynamicCoincidenceBrain(object):
         # BUT its a good rule
         # however: instead, should be which is most above its threshold?
 
+        spikes = np.zeros(self.num_rfs)
+        max_rf = np.argmax(match)
+        max_match_val = match[max_rf]
+        if max_match_val > self.thresholds[max_rf]:
+            spikes[max_rf] = 1
+
+        # ******************* third spike rule *******************
+
         # spikes = np.zeros(self.num_rfs)
-        # max_rf = np.argmax(match)
+        #
+        # prop_match_thresh = np.divide(match, self.thresholds)
+        #
+        # max_rf = np.argmax(prop_match_thresh)
         # max_match_val = match[max_rf]
         # if max_match_val > self.thresholds[max_rf]:
         #     spikes[max_rf] = 1
 
-        # ******************* third spike rule *******************
-
-        spikes = np.zeros(self.num_rfs)
-
-        prop_match_thresh = np.divide(match, self.thresholds)
-
-        max_rf = np.argmax(prop_match_thresh)
-        max_match_val = match[max_rf]
-        if max_match_val > self.thresholds[max_rf]:
-            spikes[max_rf] = 1
+        # *** next part ***
 
         # adjust threshold: set to right below match for spikes
         #   then, decay over time
@@ -238,9 +240,13 @@ class DynamicCoincidenceBrain(object):
             #self.rf_weights[spike_rfs, :] = self.lr * input_state + (1.0 - self.lr) * self.rf_weights[spike_rfs, :]
 
             if len(spike_rfs) > 0:
-                lr_all = self.lr * np.multiply(self.rf_decaying[spike_rfs, :], self.rf_weights[spike_rfs, :])
+                #lr_all = self.lr * np.multiply(input_state, self.rf_weights[spike_rfs, :])
+                #lr_all = self.lr * self.rf_weights[spike_rfs, :]
                 #print(np.amin(lr_all), np.amax(lr_all))
-                self.rf_weights[spike_rfs, :] = np.multiply(lr_all, input_state) + np.multiply((1.0 - lr_all), self.rf_weights[spike_rfs, :])
+                #self.rf_weights[spike_rfs, :] = np.multiply(lr_all, input_state) + np.multiply((1.0 - lr_all), self.rf_weights[spike_rfs, :])
+
+                self.rf_weights[spike_rfs, :] = self.lr * input_state + (1 - self.lr) * self.rf_weights[spike_rfs, :]
+
 
         self.rf_decaying[spike_rfs, :] = 1.0
 
