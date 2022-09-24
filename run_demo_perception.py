@@ -33,8 +33,8 @@ np.random.seed(6)
 #from robot_brain_classes.coicidence import CBrain
 #from robot_brain_classes.quad_optim_brain import QuadOptimBrain
 #from robot_brain_classes.quad_optim_brain import QuadOptimBrain
-from robot_brain_classes.dynamic_coincidence import DynamicCoincidenceBrain
-
+#from robot_brain_classes.dynamic_coincidence import DynamicCoincidenceBrain
+from robot_brain_classes.indirect import IndirectRFBrain
 
 from visualizer_classes.segment_visualizer import SegmentVisualizer
 from sim_folder_manager import SimFolderManager
@@ -122,7 +122,7 @@ def get_brain_params():
         'num_rfs': 32,  # 64
         'lr': 1.0 / 100,  # 1000
         'max_time': 5000000,
-        'do_plots_every_k_sec': 10,  # or None
+        'do_plots_every_k_sec': 5,  # or None
     }
 
     return brain_params
@@ -145,7 +145,7 @@ def get_visualizer_params():
 
 def init_demo():
     return {
-        'robot_brain': DynamicCoincidenceBrain(get_brain_params()),
+        'robot_brain': IndirectRFBrain(get_brain_params()),
         'robot_sensors': VideoPlaybackSensor(get_sensors_params()),
         'visualizer': SegmentVisualizer(get_visualizer_params()),
         'sim_folder_manager': SimFolderManager(get_sim_folder_manager_params())
