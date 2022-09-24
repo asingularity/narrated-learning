@@ -51,10 +51,10 @@ class DynamicCoincidenceBrain(object):
         self.input_raster_history = np.zeros((self.input_state_dim, self.raster_steps), np.uint8)
         self.rfs_raster_history = np.zeros((self.num_rfs, self.raster_steps), np.uint8)
 
-        self.fig_bar = plt.figure(figsize=(40, 20))
+        self.fig_bar = plt.figure(figsize=(40, 40))
 
         self.ax_bar_list = []
-        self.rfs_to_plot = 8  # self.num_rfs
+        self.rfs_to_plot = 16  # 8 or self.num_rfs
 
         for k in range(self.rfs_to_plot):
             subpl = self.fig_bar.add_subplot(self.rfs_to_plot, 1, k + 1)
@@ -66,6 +66,7 @@ class DynamicCoincidenceBrain(object):
         self.rf_decaying = np.zeros((self.num_rfs, self.input_state_dim))
 
         self.rf_weights = np.random.random((self.num_rfs, self.input_state_dim)) * 1e-2  # 1e-12
+        self.inh_weights = np.random.random((self.num_rfs, self.num_rfs)) * 1e-2  # 1e-12
 
         self.thresholds = 0.5 * np.ones(self.num_rfs)
 
@@ -98,7 +99,7 @@ class DynamicCoincidenceBrain(object):
         rfs_im, rf_ims_dict = make_im(self.rf_weights,
                                       num_bins_per_pixel=1,
                                       input_im_dim=self.input_im_dim,
-                                      im_final_dim=int(50 * 3000 / 400),  # /800 for two-im per rf display
+                                      im_final_dim=int(50 * 3000 / 800),  # /800 for two-im per rf display
                                       mod_for_disp=int(sqrt(self.num_rfs)),
                                       normalize_weights=True)
 
@@ -162,6 +163,63 @@ class DynamicCoincidenceBrain(object):
             # self.ax_bar.axvline(x=self.raster_t, color='g')
             # self.fig_bar.savefig(self.plots_folder + "/raster_rfs.png", dpi=100)
 
+
+    def process_input_NEW(self, input_events_p, input_events_n, event_coords_r, event_coords_c, original_input_image):
+
+        if self.t >= self.max_time:
+            return
+
+        input_state = np.concatenate((input_events_p, input_events_n))
+
+        self.input_raster_history[:, self.raster_t] = input_state[:]
+
+        if input_state is None:
+            return
+
+        if np.count_nonzero(input_state) == 0:
+            return
+
+        # TODO for prediction, Don't skip zeros!!!
+
+        self.input_history.process_new_states(newest_states_list=[input_state])
+
+        if self.t < self.input_concat_timesteps:
+            self.t += 1
+            return
+
+        state_seq = self.input_history.get_state_sequence(delay_long=self.input_concat_timesteps - 1, delay_short=0)
+        # print(state_seq.shape)  # (10000, 128): (M, L)
+
+        input_state = np.sum(state_seq, axis=0)
+        input_state[input_state > 1] = 1
+
+        self.thresholds = self.thresholds * 0.9999
+
+        rf_weights_for_match = self.rf_weights
+        inh_weights_for_match = self.inh_weights
+
+        p_match = np.divide(np.sum(np.multiply(rf_weights_for_match, input_state), axis=1), np.sum(rf_weights_for_match, axis=1))
+
+        prev_activity = np.sum(self.spikes_history.get_state_sequence(delay_long=1, delay_short=0), axis=0)
+        prev_activity[prev_activity > 1] = 1
+
+        n_match = np.divide(np.sum(np.multiply(inh_weights_for_match, prev_activity), axis=1), np.sum(inh_weights_for_match, axis=1))
+
+        match = p_match - n_match
+
+        spikes = np.greater(match, self.thresholds).astype(np.int)
+
+        # TODO spike times
+
+        spike_rfs = np.nonzero(spikes)[0]
+        self.thresholds[spike_rfs] = match[spike_rfs] * 0.99
+
+        if len(spike_rfs) > 0:
+
+            self.rf_weights[spike_rfs, :] = self.lr * input_state + (1 - self.lr) * self.rf_weights[spike_rfs, :]
+            self.inh_weights[spike_rfs, :] = (1 * self.lr) * prev_activity + (1 - (1 * self.lr)) * self.inh_weights[
+                                                                                                   spike_rfs, :]
+
     def process_input(self, input_events_p, input_events_n, event_coords_r, event_coords_c, original_input_image):
 
         if self.t >= self.max_time:
@@ -193,9 +251,21 @@ class DynamicCoincidenceBrain(object):
         nnz_input = np.nonzero(input_state)[0]
 
         self.rf_decaying = self.rf_decaying * 0.9
-        self.thresholds = self.thresholds * 0.999
+        self.thresholds = self.thresholds * 0.9999  # 0.999
 
-        match = np.divide(np.sum(np.multiply(self.rf_weights, input_state), axis=1), np.sum(self.rf_weights, axis=1))
+        #rf_weights_for_match = np.power(self.rf_weights, 4)
+        rf_weights_for_match = self.rf_weights
+        #inh_weights_for_match = np.power(self.inh_weights, 4)
+        inh_weights_for_match = self.inh_weights
+
+        p_match = np.divide(np.sum(np.multiply(rf_weights_for_match, input_state), axis=1), np.sum(rf_weights_for_match, axis=1))
+
+        prev_activity = np.sum(self.spikes_history.get_state_sequence(delay_long=10, delay_short=0), axis=0)
+        prev_activity[prev_activity > 1] = 1
+
+        n_match = np.divide(np.sum(np.multiply(inh_weights_for_match, prev_activity), axis=1), np.sum(inh_weights_for_match, axis=1))
+
+        match = p_match - n_match
 
         self.max_match = max(self.max_match, np.amax(match))
         self.sum_match += np.amax(match)  # for average best match
@@ -203,7 +273,7 @@ class DynamicCoincidenceBrain(object):
 
         # ******************* first spike rule *******************
         # no WTA:
-        # spikes = np.greater(match, self.thresholds).astype(np.int)
+        spikes = np.greater(match, self.thresholds).astype(np.int)
 
         # ******************* second spike rule *******************
 
@@ -212,11 +282,14 @@ class DynamicCoincidenceBrain(object):
         # BUT its a good rule
         # however: instead, should be which is most above its threshold?
 
-        spikes = np.zeros(self.num_rfs)
-        max_rf = np.argmax(match)
-        max_match_val = match[max_rf]
-        if max_match_val > self.thresholds[max_rf]:
-            spikes[max_rf] = 1
+        # TODO bug: one might be way above its threshold and yet no spike at all from any
+        #   because the max match RF is not above its threshold
+
+        # spikes = np.zeros(self.num_rfs)
+        # max_rf = np.argmax(match)
+        # max_match_val = match[max_rf]
+        # if max_match_val > self.thresholds[max_rf]:
+        #     spikes[max_rf] = 1
 
         # ******************* third spike rule *******************
 
@@ -241,6 +314,8 @@ class DynamicCoincidenceBrain(object):
         # increase for 1-input: proportional to coincidence
         # decrease for 0-input
 
+        best_match_RF = np.argmax(match)
+
         enable_learning = True
         if enable_learning:
             # original, old not good rule:
@@ -253,6 +328,12 @@ class DynamicCoincidenceBrain(object):
                 #self.rf_weights[spike_rfs, :] = np.multiply(lr_all, input_state) + np.multiply((1.0 - lr_all), self.rf_weights[spike_rfs, :])
 
                 self.rf_weights[spike_rfs, :] = self.lr * input_state + (1 - self.lr) * self.rf_weights[spike_rfs, :]
+
+                spikes_to = spikes.copy()
+                spikes_to[best_match_RF] = 0
+                spike_rfs_to = np.nonzero(spikes_to)[0]
+
+                self.inh_weights[spike_rfs_to, :] = (1 * self.lr) * prev_activity + (1 - (1 * self.lr)) * self.inh_weights[spike_rfs_to, :]
 
 
         self.rf_decaying[spike_rfs, :] = 1.0
